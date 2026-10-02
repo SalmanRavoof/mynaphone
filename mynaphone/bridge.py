@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 
@@ -136,6 +137,20 @@ class Bridge:
         self.connected = False
         self._server = None
         self._on_status = on_status
+        self._detail_errors: set[tuple[str, str]] = set()
+
+    def _details(self, info, kind: str, uri: str) -> dict | None:
+        """The bridge's album or track details, or None. A failed lookup is logged once per item, never stored."""
+        if not isinstance(info, dict) or not info:
+            return None
+        if info.get("error"):
+            if (kind, uri) not in self._detail_errors:
+                self._detail_errors.add((kind, uri))
+                text = re.sub(r"[\x00-\x1f\x7f]+", " ", str(info["error"]))[:300]
+                log.info("Spotify could not give %s details for %s: %s", kind, uri, text)
+            return None
+        log.debug("%s details for %s from Spotify's %s", kind, uri, info.get("source", "bridge"))
+        return info
 
     def _status(self, connected: bool) -> None:
         self.connected = connected
@@ -194,8 +209,8 @@ class Bridge:
                     playback_id=msg.get("playbackId", "") or "",
                     metadata=msg.get("metadata") or {},
                     next_items=msg.get("next") or [],
-                    album_info=msg.get("albumInfo"),
-                    track_info=msg.get("trackInfo"),
+                    album_info=self._details(msg.get("albumInfo"), "album", (msg.get("album") or {}).get("uri", "")),
+                    track_info=self._details(msg.get("trackInfo"), "track", msg.get("uri", "")),
                     volume=(float(msg["volume"]) if msg.get("volume") is not None else None),
                     received_at=time.monotonic(),
                     client_ts=int(msg.get("ts") or 0),

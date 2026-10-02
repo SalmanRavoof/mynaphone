@@ -35,40 +35,133 @@
     } catch (e) { lyricsCache.set(uri, { none: true }); return lyricsCache.get(uri); }
   }
   const lyricsSent = new Set();
-  async function trackInfo(uri) {
-    if (!uri || !uri.startsWith("spotify:track:")) return null;
-    if (trackCache.has(uri)) return trackCache.get(uri);
-    trackCache.set(uri, null);
-    try {
-      const id = uri.split(":")[2];
-      const t = await Spicetify.CosmosAsync.get("https://api.spotify.com/v1/tracks/" + id);
-      const info = t ? {
-        isrc: t.external_ids && t.external_ids.isrc, explicit: t.explicit, popularity: t.popularity,
-        track_number: t.track_number, disc_number: t.disc_number, duration_ms: t.duration_ms,
-        track_total: t.album && t.album.total_tracks,
-      } : null;
-      trackCache.set(uri, info);
-      if (trackCache.size > 300) trackCache.delete(trackCache.keys().next().value);
-      return info;
-    } catch (e) { return null; }
+
+  // Track and album details come from Spotify's internal metadata service first (the same kind of
+  // endpoint as the lyrics), then for albums from the album page's GraphQL query, and last from the
+  // public web API, which often refuses the client's own token.
+  // Only answers are cached; a failure is reported to the app and retried after RETRY_MS.
+  const RETRY_MS = 10 * 60 * 1000;
+  const failed = new Map();     // uri -> { error, until }
+  const inFlight = new Map();   // uri -> promise
+  const B62 = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  function idToHex(id) {
+    let n = 0n;
+    for (const c of id) n = n * 62n + BigInt(B62.indexOf(c));
+    return n.toString(16).padStart(32, "0");
   }
-  async function albumInfo(uri) {
-    if (!uri || !uri.startsWith("spotify:album:")) return null;
-    if (albumCache.has(uri)) return albumCache.get(uri);
-    albumCache.set(uri, null);
-    try {
+  // readable, one-line text for a failed request or a thrown error, without binary from the reply
+  function clean(text) {
+    return String(text).replace(/[^\x20-\x7e]/g, "?").replace(/\s+/g, " ").trim().slice(0, 160);
+  }
+  function errorText(r) {
+    if (!r) return "empty reply";
+    const e = r.error;
+    return clean(typeof e === "object" ? (e.status || "") + " " + (e.message || "") : e);
+  }
+  function describe(e) {
+    if (e === undefined || e === null || e === "") return "no error text";
+    if (typeof e !== "object") return clean(e);
+    const parts = [e.name, e.status, e.code, e.message].filter(x => x !== undefined && x !== null && x !== "");
+    if (!parts.length) {
+      try { parts.push(JSON.stringify(e)); } catch (x) { parts.push(Object.prototype.toString.call(e)); }
+    }
+    return clean(parts.join(" "));
+  }
+  const JSON_HEADERS = { Accept: "application/json" };
+  function isoDate(d) {
+    if (!d || !d.year) return { date: "", precision: "" };
+    const p2 = n => String(n).padStart(2, "0");
+    if (!d.month) return { date: String(d.year), precision: "year" };
+    if (!d.day) return { date: d.year + "-" + p2(d.month), precision: "month" };
+    return { date: d.year + "-" + p2(d.month) + "-" + p2(d.day), precision: "day" };
+  }
+  async function trackFromSpclient(id) {
+    const t = await Spicetify.CosmosAsync.get(
+      "https://spclient.wg.spotify.com/metadata/4/track/" + idToHex(id) + "?market=from_token", undefined,
+      JSON_HEADERS);
+    if (!t || t.error || !t.name) throw new Error("metadata service: " + errorText(t));
+    const isrc = (t.external_id || []).find(x => (x.type || "").toLowerCase() === "isrc");
+    return {
+      isrc: isrc ? isrc.id : undefined, explicit: t.explicit, popularity: t.popularity,
+      track_number: t.number, disc_number: t.disc_number, duration_ms: t.duration, source: "spclient",
+    };
+  }
+  async function trackFromWebApi(id) {
+    const t = await Spicetify.CosmosAsync.get("https://api.spotify.com/v1/tracks/" + id);
+    if (!t || t.error || !t.id) throw new Error("web API: " + errorText(t));
+    return {
+      isrc: t.external_ids && t.external_ids.isrc, explicit: t.explicit, popularity: t.popularity,
+      track_number: t.track_number, disc_number: t.disc_number, duration_ms: t.duration_ms,
+      track_total: t.album && t.album.total_tracks, source: "web API",
+    };
+  }
+  async function albumFromSpclient(id) {
+    const a = await Spicetify.CosmosAsync.get(
+      "https://spclient.wg.spotify.com/metadata/4/album/" + idToHex(id) + "?market=from_token", undefined,
+      JSON_HEADERS);
+    if (!a || a.error || !a.name) throw new Error("metadata service: " + errorText(a));
+    const d = isoDate(a.date);
+    return {
+      release_date: d.date, release_date_precision: d.precision,
+      album_type: (a.type || "").toLowerCase(), label: a.label,
+      total_tracks: (a.disc || []).reduce((n, disc) => n + (disc.track || []).length, 0) || undefined,
+      copyrights: (a.copyright || []).map(c => c.text).filter(Boolean).slice(0, 2),
+      artists: (a.artist || []).map(x => x.name), source: "spclient",
+    };
+  }
+  // the album page's own query; field names have changed between Spotify versions, so both are read
+  async function albumFromGraphql(id) {
+    const q = Spicetify.GraphQL && Spicetify.GraphQL.Definitions && Spicetify.GraphQL.Definitions.getAlbum;
+    if (!q) throw new Error("GraphQL: no getAlbum query in this Spotify version");
+    let locale = "";
+    try { locale = Spicetify.Locale.getLocale(); } catch (e) {}
+    const r = await Spicetify.GraphQL.Request(q, { uri: "spotify:album:" + id, locale: locale, offset: 0, limit: 50 });
+    const a = r && r.data && r.data.albumUnion;
+    if (!a || !a.name) throw new Error("GraphQL: " + clean(JSON.stringify((r && r.errors) || r || {})));
+    const iso = (a.date && a.date.isoString) || "";
+    const precision = ((a.date && a.date.precision) || "").toLowerCase();
+    const tracks = a.tracksV2 || a.tracks || {};
+    return {
+      release_date: iso.slice(0, precision === "year" ? 4 : precision === "month" ? 7 : 10),
+      release_date_precision: precision, album_type: (a.type || "").toLowerCase(), label: a.label,
+      total_tracks: tracks.totalCount,
+      copyrights: ((a.copyright && a.copyright.items) || []).map(c => c.text).slice(0, 2),
+      artists: ((a.artists && a.artists.items) || []).map(x => x.profile && x.profile.name).filter(Boolean),
+      source: "GraphQL",
+    };
+  }
+  async function albumFromWebApi(id) {
+    const a = await Spicetify.CosmosAsync.get("https://api.spotify.com/v1/albums/" + id);
+    if (!a || a.error || !a.id) throw new Error("web API: " + errorText(a));
+    return {
+      release_date: a.release_date, release_date_precision: a.release_date_precision,
+      album_type: a.album_type, total_tracks: a.total_tracks, label: a.label,
+      copyrights: (a.copyrights || []).map(c => c.text).slice(0, 2),
+      artists: (a.artists || []).map(x => x.name), source: "web API",
+    };
+  }
+  // the details for a uri, or { error } after both sources failed; null while a lookup is running
+  function details(uri, cache, sources) {
+    if (cache.has(uri)) return cache.get(uri);
+    const f = failed.get(uri);
+    if (f && Date.now() < f.until) return { error: f.error };
+    if (!inFlight.has(uri)) {
       const id = uri.split(":")[2];
-      const a = await Spicetify.CosmosAsync.get("https://api.spotify.com/v1/albums/" + id);
-      const info = a ? {
-        release_date: a.release_date, release_date_precision: a.release_date_precision,
-        album_type: a.album_type, total_tracks: a.total_tracks, label: a.label,
-        copyrights: (a.copyrights || []).map(c => c.text).slice(0, 2),
-        artists: (a.artists || []).map(x => x.name),
-      } : null;
-      albumCache.set(uri, info);
-      if (albumCache.size > 200) albumCache.delete(albumCache.keys().next().value);
-      return info;
-    } catch (e) { return null; }
+      inFlight.set(uri, (async () => {
+        const errors = [];
+        for (const source of sources) {
+          try {
+            const info = await source(id);
+            cache.set(uri, info);
+            if (cache.size > 300) cache.delete(cache.keys().next().value);
+            failed.delete(uri);
+            return;
+          } catch (e) { errors.push(describe(e)); }
+        }
+        failed.set(uri, { error: errors.join("; "), until: Date.now() + RETRY_MS });
+      })().finally(() => { inFlight.delete(uri); send(true); }));
+    }
+    return null;
   }
 
   function snapshot() {
@@ -117,15 +210,11 @@
     const s = snapshot();
     if (!s) return;
     const albumUri = s.album && s.album.uri;
-    if (albumUri && albumCache.has(albumUri)) {
-      s.albumInfo = albumCache.get(albumUri);
-    } else if (albumUri) {
-      albumInfo(albumUri).then(() => send(true));
+    if (albumUri && albumUri.startsWith("spotify:album:")) {
+      s.albumInfo = details(albumUri, albumCache, [albumFromSpclient, albumFromGraphql, albumFromWebApi]);
     }
-    if (s.uri && trackCache.has(s.uri)) {
-      s.trackInfo = trackCache.get(s.uri);
-    } else if (s.uri) {
-      trackInfo(s.uri).then(() => send(true));
+    if (s.uri && s.uri.startsWith("spotify:track:")) {
+      s.trackInfo = details(s.uri, trackCache, [trackFromSpclient, trackFromWebApi]);
     }
     // lyrics travel once per track, as their own message, since they are large
     if (s.uri && !lyricsSent.has(s.uri)) {
