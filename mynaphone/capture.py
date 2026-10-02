@@ -14,11 +14,14 @@ requested start time onward is prepended so a late track-change event loses noth
 """
 from __future__ import annotations
 
+import ctypes
+import functools
 import logging
 import subprocess
 import threading
 import time
 from collections import deque
+from ctypes import wintypes
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -114,22 +117,73 @@ class _RingCapture:
 
 # ----------------------------------------------------------------------------- per-process
 
+class _ProcessEntry(ctypes.Structure):
+    """PROCESSENTRY32W from tlhelp32.h."""
+    _fields_ = [
+        ("dwSize", wintypes.DWORD),
+        ("cntUsage", wintypes.DWORD),
+        ("th32ProcessID", wintypes.DWORD),
+        ("th32DefaultHeapID", ctypes.c_size_t),
+        ("th32ModuleID", wintypes.DWORD),
+        ("cntThreads", wintypes.DWORD),
+        ("th32ParentProcessID", wintypes.DWORD),
+        ("pcPriClassBase", wintypes.LONG),
+        ("dwFlags", wintypes.DWORD),
+        ("szExeFile", wintypes.WCHAR * wintypes.MAX_PATH),
+    ]
+
+
+TH32CS_SNAPPROCESS = 0x2
+INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+
+
+@functools.cache
+def _kernel32():
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
+    k32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    for fn in (k32.Process32FirstW, k32.Process32NextW):
+        fn.argtypes = (wintypes.HANDLE, ctypes.POINTER(_ProcessEntry))
+        fn.restype = wintypes.BOOL
+    k32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    k32.CloseHandle.restype = wintypes.BOOL
+    return k32
+
+
+def process_table() -> list[tuple[int, int, str]]:
+    """(pid, parent pid, image name) of every running process, from one Toolhelp snapshot.
+
+    Not psutil.process_iter(["name", "ppid"]): on its first run it takes a snapshot of the whole system
+    for every process, holding the GIL throughout. With a few hundred processes that is seconds per call;
+    with one capture per source app starting together, the window stopped responding for 10-20 s each
+    time the recorder started. ctypes releases the GIL during each call.
+    """
+    k32 = _kernel32()
+    snap = k32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
+    if snap is None or snap == INVALID_HANDLE_VALUE:
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:
+        entry = _ProcessEntry()
+        entry.dwSize = ctypes.sizeof(_ProcessEntry)
+        table = []
+        more = k32.Process32FirstW(snap, ctypes.byref(entry))
+        while more:
+            table.append((entry.th32ProcessID, entry.th32ParentProcessID, entry.szExeFile))
+            more = k32.Process32NextW(snap, ctypes.byref(entry))
+        return table
+    finally:
+        k32.CloseHandle(snap)
+
+
 def root_pid(process_name: str) -> int | None:
     """Pid of the top-most process with this image name (the one whose parent is not the same app)."""
-    import psutil
     name = process_name.lower()
-    procs = []
-    for p in psutil.process_iter(["name", "ppid"]):
-        try:
-            if (p.info["name"] or "").lower() == name:
-                procs.append(p)
-        except Exception:
-            continue
+    procs = sorted((pid, ppid) for pid, ppid, exe in process_table() if exe.lower() == name)
     if not procs:
         return None
-    pids = {p.pid for p in procs}
-    roots = [p for p in procs if p.info["ppid"] not in pids]
-    return (roots or procs)[0].pid
+    pids = {pid for pid, _ in procs}
+    roots = [pid for pid, ppid in procs if ppid not in pids]
+    return (roots or [procs[0][0]])[0]
 
 
 class ProcessCapture(_RingCapture):

@@ -1,12 +1,15 @@
 # Copyright (C) 2026 Salman Ravoof
 # SPDX-License-Identifier: GPL-3.0-or-later
 import asyncio
+import os
+import threading
+import time
 
 import numpy as np
 
 from mynaphone import export
 from mynaphone.bridge import Bridge, SpotifyState
-from mynaphone.capture import _RingCapture
+from mynaphone.capture import _RingCapture, process_table, root_pid
 from mynaphone.sessions import ForeignAudioMonitor, ForeignReport, ForeignSound
 
 
@@ -54,6 +57,35 @@ def test_ring_capture_reaches_back_in_time(monkeypatch):
     done = r.end_take()
     assert done is take and done.t_end == now[0] and not r.recording
     assert done.audio()[-1, 0] == 99.0
+
+
+def test_root_pid_picks_the_top_process(monkeypatch):
+    import mynaphone.capture as cap
+    monkeypatch.setattr(cap, "process_table", lambda: [
+        (4, 0, "System"), (900, 600, "explorer.exe"),
+        (2236, 900, "chrome.exe"), (2232, 2236, "chrome.exe"), (5120, 2236, "chrome.exe"),
+        (27520, 900, "Spotify.exe"), (27600, 27520, "Spotify.exe")])
+    assert cap.root_pid("chrome.exe") == 2236       # the browser, not its lower-numbered child
+    assert cap.root_pid("spotify.exe") == 27520
+    assert cap.root_pid("msedge.exe") is None
+
+
+def test_process_table_lists_this_process():
+    import psutil
+    table = {pid: (ppid, name) for pid, ppid, name in process_table()}
+    assert table[os.getpid()] == (os.getppid(), psutil.Process().name())
+
+
+def test_source_app_lookups_are_quick_when_captures_start_together():
+    """Each source app's capture looks up its process as the recorder starts. Through psutil.process_iter
+    those lookups held the GIL for 10-20 s and the window stopped responding."""
+    threads = [threading.Thread(target=root_pid, args=(name,)) for name in ("Spotify.exe", "chrome.exe", "x.exe")]
+    t0 = time.perf_counter()
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert time.perf_counter() - t0 < 2.0
 
 
 def test_foreign_monitor_source_matching_and_report():
