@@ -3,14 +3,31 @@
 """Main window, tray icon and settings UI."""
 from __future__ import annotations
 
+import ctypes
 import json
+import logging
 import os
 import sys
 import time
 import winreg
+from ctypes import wintypes
 from pathlib import Path
 
-from PySide6.QtCore import QEasingCurve, QEvent, QObject, QPropertyAnimation, QRect, QRectF, QSize, Qt, QTimer, Slot
+from PySide6.QtCore import (
+    QEasingCurve,
+    QEvent,
+    QObject,
+    QPoint,
+    QPropertyAnimation,
+    QRect,
+    QRectF,
+    QSize,
+    Qt,
+    QTimer,
+    QtMsgType,
+    Slot,
+    qInstallMessageHandler,
+)
 from PySide6.QtGui import QAction, QBrush, QColor, QPainter, QPainterPath, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -55,9 +72,23 @@ from .library_page import LibraryPage
 from .setup_page import SetupPage as FirstRunPage
 from .worker import RecorderWorker
 
+log = logging.getLogger("mynaphone.gui")
+
+# Win32 calls for MainWindow._check_painted, on a private handle so their signatures stay local
+_user32 = ctypes.WinDLL("user32")
+_user32.WindowFromPoint.argtypes = [wintypes.POINT]
+_user32.WindowFromPoint.restype = wintypes.HWND
+_user32.GetAncestor.argtypes = [wintypes.HWND, wintypes.UINT]
+_user32.GetAncestor.restype = wintypes.HWND
+_user32.GetForegroundWindow.restype = wintypes.HWND
+_user32.IsWindowVisible.argtypes = [wintypes.HWND]
+_user32.IsIconic.argtypes = [wintypes.HWND]
+GA_ROOT = 2
+
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_NAME = "Mynaphone"
 COVER = 96
+COVER_MARK = 80   # the mark in a cover tile with no art: the bird spans about three-quarters of the tile
 
 # (label, format, kbps). The first entry is the recommended default.
 FORMAT_CHOICES = [
@@ -456,7 +487,7 @@ class StatusPage(QWidget):
             if pm.loadFromData(data):
                 self.cover.setPixmap(_rounded(pm, COVER))
                 return
-        self.cover.setPixmap(app_icon(state).pixmap(56, 56))
+        self.cover.setPixmap(app_icon(state).pixmap(COVER_MARK, COVER_MARK))
 
     def set_recent(self, rows: list[tuple[str, str, str]]) -> None:
         self.recent.setRowCount(0)
@@ -929,7 +960,7 @@ class MainWindow(QMainWindow):
         root.setSpacing(0)
 
         # sidebar
-        side = QWidget()
+        side = self.sidebar = QWidget()
         side.setObjectName("sidebar")
         side.setFixedWidth(208)
         sl = QVBoxLayout(side)
@@ -1016,10 +1047,12 @@ class MainWindow(QMainWindow):
             self.nav.setCurrentRow(5)
         if self.cfg.app.autostart_recording and not first_run:
             QTimer.singleShot(300, self.start_recorder)
+        self._blank_heals = 0
         if start_minimized and not first_run:
             QTimer.singleShot(0, self.hide)
         else:
             self.show()
+            QTimer.singleShot(600, self._check_painted)
 
     def _set_page_head(self, i: int) -> None:
         title, sub = self._page_heads.get(i, ("", ""))
@@ -1421,9 +1454,66 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def show_from_tray(self) -> None:
+        self._blank_heals = 0
+        self._show_and_check()
+
+    def _show_and_check(self) -> None:
         self.showNormal()
         self.raise_()
         self.activateWindow()
+        QTimer.singleShot(600, self._check_painted)
+
+    def _check_painted(self) -> None:
+        """Now and then the window comes back from the tray as a blank white frame, and minimizing and restoring
+        it brings the pages back. When the sidebar isn't on screen, this does that once and logs what it saw."""
+        if not self.isVisible() or self.isMinimized():
+            return
+        seen = self._sidebar_on_screen()
+        if seen is None:                 # another window covers the spot
+            return
+        if any(c.lightness() < 128 for c in seen):      # the sidebar is near-black, so the pages are there
+            if self._blank_heals:
+                log.info("the window filled in after minimizing and restoring it")
+            return
+        if self._blank_heals:
+            log.warning("the window is still blank after minimizing and restoring it (%s)", self._window_facts(seen))
+            return
+        log.warning("the window came up blank, minimizing and restoring it (%s)", self._window_facts(seen))
+        self._blank_heals += 1
+        self.showMinimized()
+        QTimer.singleShot(300, self._show_and_check)
+
+    def _sidebar_on_screen(self) -> list[QColor] | None:
+        """Three spots down the sidebar's left edge as the screen shows them, or None when another window is
+        in front of any of them."""
+        hwnd = int(self.winId())
+        seen = []
+        for frac in (0.25, 0.5, 0.75):
+            p = self.sidebar.mapToGlobal(QPoint(4, round(self.sidebar.height() * frac)))
+            screen = QApplication.screenAt(p)
+            if screen is None:
+                return None
+            g, dpr = screen.geometry(), screen.devicePixelRatio()
+            # Qt keeps each screen's top-left corner in physical pixels and scales from there
+            phys = wintypes.POINT(round(g.x() + (p.x() - g.x()) * dpr), round(g.y() + (p.y() - g.y()) * dpr))
+            hit = _user32.WindowFromPoint(phys)
+            if not hit or _user32.GetAncestor(hit, GA_ROOT) != hwnd:
+                return None
+            img = screen.grabWindow(0, p.x() - g.x(), p.y() - g.y(), 1, 1).toImage()
+            if img.isNull():
+                return None
+            seen.append(img.pixelColor(0, 0))
+        return seen
+
+    def _window_facts(self, seen: list[QColor]) -> str:
+        hwnd = int(self.winId())
+        scr = self.screen()
+        handle = self.windowHandle()
+        return (f"sidebar shows {' '.join(c.name() for c in seen)}; on {_screen_facts(scr)} of "
+                f"{len(QApplication.screens())} screens; window {self.geometry().getRect()}, "
+                f"{self.windowState()}, exposed {handle.isExposed() if handle else None}; Windows says visible "
+                f"{bool(_user32.IsWindowVisible(hwnd))}, minimized {bool(_user32.IsIconic(hwnd))}, "
+                f"in front {_user32.GetForegroundWindow() == hwnd}")
 
     @Slot()
     def hide_to_tray(self) -> None:
@@ -1455,6 +1545,26 @@ class MainWindow(QMainWindow):
             QApplication.instance().quit()
 
 
+def _screen_facts(screen) -> str:
+    g = screen.geometry()
+    return f"{screen.name()} at {g.x()},{g.y()} {g.width()}x{g.height()} {screen.devicePixelRatio():g}x"
+
+
+def _log_qt_messages() -> None:
+    """Sends Qt's own warnings to the app's log, so a window that misbehaves leaves a trace."""
+    qt_log = logging.getLogger("mynaphone.qt")
+    levels = {QtMsgType.QtDebugMsg: logging.DEBUG, QtMsgType.QtInfoMsg: logging.INFO,
+              QtMsgType.QtWarningMsg: logging.WARNING, QtMsgType.QtCriticalMsg: logging.ERROR,
+              QtMsgType.QtFatalMsg: logging.CRITICAL}
+
+    def handler(kind, context, message) -> None:
+        cat = context.category if context.category not in (None, "", "default") else ""
+        qt_log.log(levels.get(kind, logging.WARNING), "%s%s", f"{cat}: " if cat else "", message)
+
+    _log_qt_messages.handler = handler          # keep a reference for as long as Qt may call it
+    qInstallMessageHandler(handler)
+
+
 INSTANCE_NAME = f"mynaphone-{os.environ.get('USERNAME', 'user')}"
 
 
@@ -1476,6 +1586,10 @@ def run_gui(config_path: Path, minimized: bool = False) -> int:
     app.setApplicationName("Mynaphone")
     app.setApplicationDisplayName("Mynaphone")
     app.setQuitOnLastWindowClosed(False)
+    _log_qt_messages()
+    # a screen that sleeps, wakes or is unplugged leaves a line, for when the window comes up blank
+    app.screenAdded.connect(lambda s: log.info("screen added: %s", _screen_facts(s)))
+    app.screenRemoved.connect(lambda s: log.info("screen removed: %s", s.name()))
     app.setWindowIcon(app_icon("stopped", tile=True))
     theme.apply_theme(app)
     # one copy at a time: a second launch just brings the first one's window back

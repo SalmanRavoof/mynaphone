@@ -60,6 +60,8 @@ All notable changes to Mynaphone are listed here. The format follows
 - The designed mark, a myna in profile whose eye turns red while a song records, replaces the
   placeholder drawn in code. The window, the tray and the browser extension use the designer's
   exports, and the README opens with the wordmark.
+- The mark on the Status card, shown when a song has no cover art, is bigger. The bird now spans
+  about three-quarters of its tile.
 
 ### Fixed
 - Installing the package now pulls in everything the app imports. PySide6, ytmusicapi, psutil,
@@ -80,3 +82,7 @@ All notable changes to Mynaphone are listed here. The format follows
   the app retried it forever. Errors in a MusicBrainz reply no longer hold a song back.
 - The album's track and disc counts from Spotify's player are used when its web API answers with
   an error.
+- The window sometimes came back from the tray as a blank white frame until you minimized and
+  restored it. It now looks for its sidebar on screen after it opens, and minimizes and restores
+  itself once when the sidebar isn't there. The log gets a line each time, along with Qt's own
+  warnings and every screen that is added or removed.

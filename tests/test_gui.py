@@ -268,8 +268,50 @@ def test_previous_songs_verdict_leaves_the_new_recording_on_screen(window):
 
 
 def test_cover_placeholder_eye_turns_red_while_recording(window):
+    from mynaphone.gui.app import COVER_MARK
     st = window.status
     window.on_event({"kind": "recording", "artist": "A", "title": "Two", "expected_ms": 200_000})
     shown = st.cover.pixmap().toImage()
-    assert shown == icons.app_icon("recording").pixmap(56, 56).toImage()
-    assert shown != icons.app_icon("idle").pixmap(56, 56).toImage()
+    assert shown == icons.app_icon("recording").pixmap(COVER_MARK, COVER_MARK).toImage()
+    assert shown != icons.app_icon("idle").pixmap(COVER_MARK, COVER_MARK).toImage()
+
+
+# -- coming back from the tray --------------------------------------------------------------
+
+def test_blank_window_is_minimized_and_restored_once(window, monkeypatch, caplog):
+    """Windows now and then shows the window from the tray as a white frame; minimizing and restoring fixes it."""
+    import logging
+
+    from PySide6.QtGui import QColor
+    calls = []
+    monkeypatch.setattr(window, "_sidebar_on_screen", lambda: [QColor("#ffffff")] * 3)
+    monkeypatch.setattr(window, "showMinimized", lambda: calls.append("minimized"))
+    monkeypatch.setattr(window, "_show_and_check", lambda: calls.append("shown"))
+    window._blank_heals = 0
+    with caplog.at_level(logging.INFO, logger="mynaphone"):
+        window._check_painted()
+        window._check_painted()                 # still white after the restore: logged, not repeated
+        monkeypatch.setattr(window, "_sidebar_on_screen", lambda: [QColor("#1c1b19")] * 3)
+        window._check_painted()
+    assert calls == ["minimized"]
+    said = [r.getMessage() for r in caplog.records if r.name.startswith("mynaphone")]
+    assert len(said) == 3
+    assert said[0].startswith("the window came up blank") and "sidebar shows #ffffff" in said[0]
+    assert said[1].startswith("the window is still blank")
+    assert said[2] == "the window filled in after minimizing and restoring it"
+
+
+def test_painted_or_covered_window_is_left_alone(window, monkeypatch, caplog):
+    import logging
+
+    from PySide6.QtGui import QColor
+    calls = []
+    monkeypatch.setattr(window, "showMinimized", lambda: calls.append("minimized"))
+    window._blank_heals = 0
+    with caplog.at_level(logging.INFO, logger="mynaphone"):
+        assert window._sidebar_on_screen() is None      # offscreen: no real window to find on the desktop
+        window._check_painted()
+        monkeypatch.setattr(window, "_sidebar_on_screen", lambda: [QColor("#1c1b19"), QColor("#ffffff")] * 2)
+        window._check_painted()                 # one dark spot is enough: a tooltip may cover another
+    assert calls == []
+    assert not [r for r in caplog.records if r.name.startswith("mynaphone")]
