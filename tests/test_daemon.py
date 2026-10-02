@@ -138,7 +138,9 @@ def test_late_event_reaches_into_ring_buffer(recorder, clock):
     rec, loop = recorder
     run(loop, rec._handle(snap("One", pos_ms=2_000), "media", None))     # reported 2 s late
     assert rec.active.flags["start_position_ms"] == 0                      # covered by the 3 s ring
-    assert rec.active.flags["reported_start_ms"] == 2_000
+    # the position is extrapolated with the wall clock, so the call's own duration is added; on a
+    # cold start (no compiled files yet, as on CI) that is a few milliseconds
+    assert 2_000 <= rec.active.flags["reported_start_ms"] < 2_500
 
 
 def test_duplicate_is_skipped_and_harvest_skips_player(recorder, clock):
