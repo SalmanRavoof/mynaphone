@@ -20,6 +20,6 @@ CONTRIBUTING.md has the full list under "What will not be merged".
 
 <!-- The music app or service, the device you listen on, and how often this comes up for you. -->
 
-## What you've tried so far
+## Anything you've tried so far
 
 <!-- Settings, workarounds or other tools you've used for this, if any. -->

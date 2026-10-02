@@ -4,7 +4,7 @@
 
 ## How you tested it
 
-<!-- The tests you ran. If you tried the change in the app, say which music app and capture method you used. -->
+<!-- The tests you ran. If you tried it in the app, name the music app and capture method you used. -->
 
 ## Checklist
 

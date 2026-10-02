@@ -27,7 +27,7 @@ assignees: ""
 ## Log
 
 <!--
-Paste the lines from around the time it happened. The log is at D:\Music\mynaphone\logs\mynaphone.log,
+Paste the lines from around that time. The log is at D:\Music\mynaphone\logs\mynaphone.log,
 or in the folder set as log_dir in config.toml if you changed it. Remove any song titles or file names
 you'd rather not share.
 -->
