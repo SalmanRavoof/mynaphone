@@ -1,0 +1,63 @@
+[project]
+name = "mynaphone"
+dynamic = ["version"]
+description = "Keeps a private, tagged copy of the songs you play on your Windows PC, for listening offline."
+requires-python = ">=3.11"
+license = "GPL-3.0-or-later"
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md"]
+authors = [{ name = "Salman Ravoof" }]
+classifiers = [
+    "Environment :: Win32 (MS Windows)",
+    "Operating System :: Microsoft :: Windows :: Windows 10",
+    "Programming Language :: Python :: 3",
+    "Topic :: Multimedia :: Sound/Audio :: Capture/Recording",
+]
+dependencies = [
+    "PyAudioWPatch>=0.2.12",
+    "numpy>=1.26",
+    "soundfile>=0.12",
+    "mutagen>=1.47",
+    "websockets>=12",
+    "winrt-runtime>=3.0",
+    "winrt-Windows.Foundation>=3.0",
+    "winrt-Windows.Foundation.Collections>=3.0",
+    "winrt-Windows.Media.Control>=3.0",
+    "winrt-Windows.Storage.Streams>=3.0",
+    # the window needs only QtCore, QtGui, QtWidgets and QtNetwork, all in the Essentials wheel
+    "PySide6-Essentials>=6.8",
+    "psutil>=5.9",
+    "pycaw>=20240210",
+    "comtypes>=1.4",
+    # YouTube Music changes its responses now and then, and older releases stop parsing them
+    "ytmusicapi>=1.12",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "ruff~=0.16.0"]
+
+[project.scripts]
+mynaphone = "mynaphone.__main__:main"
+
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+version = { attr = "mynaphone.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["mynaphone*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.ruff.lint.isort]
+combine-as-imports = true

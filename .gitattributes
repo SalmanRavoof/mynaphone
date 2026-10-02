@@ -1,0 +1,3 @@
+# Text files use LF line endings in the repository and in every checkout, Windows included,
+# to match .editorconfig. Git detects binary files such as the icons and leaves them alone.
+* text=auto eol=lf

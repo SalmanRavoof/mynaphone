@@ -1,0 +1,13 @@
+# local environment and build clutter
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+*.log
+
+# private: holds the AcoustID key (see config.example.toml)
+config.toml
+
+# downloaded binaries (ffmpeg, Chromaprint) and the compiled capture helper
+tools/

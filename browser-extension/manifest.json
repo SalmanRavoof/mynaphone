@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "Mynaphone bridge",
+  "version": "0.1.0",
+  "description": "Tells the Mynaphone recorder on this PC which YouTube video is playing. Talks only to 127.0.0.1.",
+  "permissions": [],
+  "host_permissions": [],
+  "background": { "service_worker": "background.js" },
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*", "https://music.youtube.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icon-16.png",
+    "32": "icon-32.png",
+    "48": "icon-48.png",
+    "128": "icon-128.png"
+  }
+}

@@ -1,0 +1,48 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Tests (Python ${{ matrix.python-version }})
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+    env:
+      # The window tests draw off screen, so the runner needs no display.
+      QT_QPA_PLATFORM: offscreen
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Install
+        run: python -m pip install -e ".[dev]"
+      # The encoding tests skip themselves when the runner has no ffmpeg.
+      - name: Run the tests
+        run: python -m pytest -rs
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+      # Only Ruff is installed: the app's own dependencies are Windows-only.
+      # Keep the version in step with the dev extra in pyproject.toml.
+      - name: Install Ruff
+        run: python -m pip install "ruff~=0.16.0"
+      - name: Run Ruff
+        run: ruff check --output-format=github .

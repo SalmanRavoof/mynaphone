@@ -1,0 +1,78 @@
+# mynaphone configuration. Paths may be absolute or relative to this file.
+
+[paths]
+inbox_dir = "D:/Music/mynaphone/inbox"       # verified complete takes land here, provisionally tagged
+discard_dir = "D:/Music/mynaphone/discard"   # rejected takes (kept for inspection, auto-pruned)
+library_dir = "D:/Music/Library"   # final organized library (phase 2)
+db_path = "D:/Music/mynaphone/mynaphone.db"
+log_dir = "D:/Music/mynaphone/logs"
+
+[capture]
+# "process": capture only the source app's own audio (per-app loopback; nothing else can bleed in).
+# "device": capture the whole output device (older method; other apps' sounds end up in the mix).
+mode = "process"
+# Device mode only. "default" follows the Windows default playback device; "CABLE Output" for VB-CABLE.
+device = "default"
+# Sample rate. In process mode this is the capture rate (48000 matches Spotify's 48 kHz path on this PC;
+# use 44100 for a bit-exact lossless chain). In device mode 0 = whatever the device mixes at.
+sample_rate = 48000
+# 16 is right for lossy sources (Spotify Free/Premium, YouTube). Use 24 for Spotify Lossless.
+bit_depth = 16
+# Seconds of audio kept in memory at all times, so a late track-change event loses nothing.
+preroll_seconds = 3.0
+# How far before the track-change event the take starts; leading silence is trimmed afterwards.
+lead_margin_seconds = 0.5
+
+[rules]
+# Which media apps to record. Matched against the Windows media-session app id (case-insensitive).
+sources = ["Spotify.exe", "chrome.exe", "msedge.exe"]
+# A take is kept only if its length is within this many seconds of the track's reported duration,
+# and only if wall-clock time from start to end also matches (catches buffering stalls).
+duration_tolerance_seconds = 1.5
+# Tracks shorter than this are never recorded (ads, jingles, stray clips).
+min_duration_seconds = 45
+# Items longer than this are never recorded (podcasts, audiobooks, DJ mixes).
+max_duration_seconds = 900.0
+# Discard a take if playback was paused during it.
+discard_on_pause = true
+# Discard if a seek was observed.
+discard_on_seek = true
+# Titles that mark non-music items (ads on Spotify Free). Case-insensitive exact match.
+ignore_titles = ["Advertisement", "Spotify"]
+# Keep rejected takes on disk for this many days (0 = delete immediately).
+keep_discards_days = 3
+# Discard a take if any other app (notifications, browser, games) made any sound during it.
+discard_on_foreign_audio = true
+# Peak level (dBFS) another app must reach to count. -120 or lower means any sound at all.
+foreign_audio_threshold_db = -120.0
+# Harvest mode: when a song that is already archived starts, skip Spotify to the next one.
+harvest_mode = false
+
+[bridge]
+# Local WebSocket the Spicetify extension connects to for exact track ids, quality tier and buffering.
+enabled = true
+port = 8765
+
+[quality]
+# Re-record a track already in the archive if it is now playing at a higher tier than the stored copy.
+upgrade_on_higher_tier = true
+
+[library]
+# Final library format: "aac" (M4A; cars and phones), "mp3" (plays anywhere), "opus" (smallest; phones and
+# computers, not cars) or "flac" (lossless). Lossless-tier captures always stay FLAC.
+format = "aac"
+# Bitrate in kbps for the lossy formats. Sensible values: aac 192-320, mp3 256-320, opus 128-192.
+aac_bitrate = 256
+
+[identify]
+# Application API key from https://acoustid.org/my-applications (register an application, then copy its key).
+acoustid_key = ""
+# MusicBrainz asks every client to identify itself with a contact address; an email is fine.
+musicbrainz_contact = ""
+
+[app]
+start_minimized = true
+close_to_tray = true
+autostart_recording = true
+# Show a short explanation when the mouse rests on a button or setting.
+show_tooltips = true
