@@ -96,16 +96,14 @@ def test_theme_builds_and_tones_switch(qapp):
 @pytest.mark.parametrize("state", ["idle", "recording", "paused", "stopped"])
 def test_mark_renders_every_state_and_tile(qapp, state):
     for tile in (False, True):
-        pm = icons.app_icon(state, 32, tile=tile).pixmap(32, 32)
-        assert not pm.isNull() and pm.width() == 32
-        img = pm.toImage()
-        # the eye sits around (39, 26) of 64; red only while recording
-        x, y = (int(39 * 0.5 * 0.8 + 32 * 0.1), int(26 * 0.5 * 0.8 + 32 * 0.1)) if tile else (19, 13)
-        c = img.pixelColor(x, y)
-        if state == "recording":
-            assert c.red() > 180 and c.green() < 120
-        else:
-            assert not (c.red() > 180 and c.green() < 120)
+        for size in icons.MARK_SIZES:
+            pm = icons.app_icon(state, tile=tile).pixmap(size, size)
+            assert not pm.isNull() and pm.width() == size
+        img = icons.app_icon(state, tile=tile).pixmap(32, 32).toImage()
+        red = sum(1 for x in range(32) for y in range(32)
+                  if (c := img.pixelColor(x, y)).red() > 180 and c.green() < 120 and c.alpha() > 200)
+        # the eye is red only while recording
+        assert (red > 0) == (state == "recording")
 
 
 def test_nav_icons_exist_for_every_page(qapp):
@@ -239,3 +237,39 @@ def test_second_launch_talks_to_the_first(qapp, monkeypatch):
         assert A._already_running() is True
     finally:
         server.close()
+
+
+# -- now-playing card ------------------------------------------------------------------------
+
+def test_recording_title_is_not_squeezed(window, qapp):
+    st = window.status
+    window.nav.setCurrentRow(0)
+    qapp.processEvents()
+    row = st.title.parentWidget()
+    idle_height = row.height()
+    window.on_event({"kind": "recording", "artist": "Atif Aslam", "title": "Aadat",
+                     "album": "Kalyug (Original Motion Picture Soundtrack)", "expected_ms": 333_000})
+    window._tick()
+    qapp.processEvents()
+    assert st.title.height() >= st.title.sizeHint().height()
+    assert st.title.geometry().bottom() < st.sub.geometry().top()
+    assert row.height() == idle_height                     # the card doesn't jump when a song starts
+
+
+def test_previous_songs_verdict_leaves_the_new_recording_on_screen(window):
+    """The next song starts recording before the previous one is written out, so its verdict comes later."""
+    st = window.status
+    window.on_event({"kind": "recording", "artist": "A", "title": "Two", "expected_ms": 200_000})
+    window.on_event({"kind": "kept", "artist": "A", "title": "One", "captured_ms": 180_000,
+                     "expected_ms": 180_000, "tier": "high"})
+    assert window.recording_since is not None and not st.progress.isHidden() and st.title.text() == "Two"
+    window.on_event({"kind": "discarded", "artist": "A", "title": "Two", "reasons": ["buffering"]})
+    assert window.recording_since is None and st.progress.isHidden()
+
+
+def test_cover_placeholder_eye_turns_red_while_recording(window):
+    st = window.status
+    window.on_event({"kind": "recording", "artist": "A", "title": "Two", "expected_ms": 200_000})
+    shown = st.cover.pixmap().toImage()
+    assert shown == icons.app_icon("recording").pixmap(56, 56).toImage()
+    assert shown != icons.app_icon("idle").pixmap(56, 56).toImage()

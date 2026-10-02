@@ -1,64 +1,38 @@
 # Copyright (C) 2026 Salman Ravoof
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Programmatically drawn icons so the app ships with no image assets."""
+"""The Mynaphone mark from the designer's exports, and the sidebar icons drawn from Windows' icon font."""
 from __future__ import annotations
 
-from PySide6.QtCore import QPointF, QRectF, Qt
-from PySide6.QtGui import QBrush, QColor, QFont, QFontDatabase, QIcon, QPainter, QPixmap, QPolygonF
+from functools import cache
+from pathlib import Path
 
-INK = "#1c1b19"
-INK_DIM = "#5b574f"
-RING = "#ede7da"
-OCHRE = "#e0a526"
-OCHRE_DIM = "#8d877b"
-RED = "#e5484d"
+from PySide6.QtCore import QRectF, QSize, Qt
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QIcon, QPainter, QPixmap
 
-
-PAPER = "#f3efe6"
+# PNG exports of the designer's SVG source files (assets/mark/svg); to change the mark, edit those and re-export
+MARK_DIR = Path(__file__).resolve().parent / "assets" / "mark"
+MARK_SIZES = (16, 20, 24, 32, 48, 56, 64, 128, 256, 512)
+MARK_STATES = {"idle": "listening", "recording": "recording", "paused": "paused", "stopped": "stopped"}
 
 
-def app_icon(state: str = "idle", size: int = 64, tile: bool = False) -> QIcon:
-    """The mark: a myna's head in profile, beak and yellow eye patch included, always in ink.
+@cache
+def _mark(state: str, variant: str) -> QIcon:
+    icon = QIcon()
+    for size in MARK_SIZES:
+        icon.addFile(str(MARK_DIR / "png" / state / f"mynaphone-{state}-{variant}-{size}.png"), QSize(size, size))
+    return icon
 
-    The eye is the status dot. It is dark while the app listens and red only while a song is
-    being recorded. Paused greys the eye patch; stopped greys the whole head.
 
-    With `tile` the head sits on a rounded paper square, for the tray, the title bar and the dark
-    sidebar, where a bare ink head would vanish.
+def app_icon(state: str = "idle", tile: bool = False) -> QIcon:
+    """The mark: a myna's head in profile with its yellow eye patch and bill.
+
+    The eye is the status light. It's dark while the app listens and red only while a song is being
+    recorded; nothing else moves. Paused greys the patch and bill, and stopped greys the whole bird.
+
+    With `tile` the bird sits on a rounded paper square, for the tray and the title bar, where the bare
+    ink bird would vanish on a dark taskbar. Qt picks the export nearest each size and display scale.
     """
-    pm = QPixmap(size, size)
-    pm.fill(Qt.transparent)
-    p = QPainter(pm)
-    p.setRenderHint(QPainter.Antialiasing)
-    p.setPen(Qt.NoPen)
-    if tile:
-        p.setBrush(QBrush(QColor(PAPER)))
-        p.drawRoundedRect(QRectF(0, 0, size, size), size * 0.22, size * 0.22)
-        inset = size * 0.1
-        p.translate(inset, inset)
-        k = (size - 2 * inset) / 64.0
-    else:
-        k = size / 64.0
-    head_colour = INK_DIM if state == "stopped" else INK
-    eye_colour = RED if state == "recording" else RING if state == "stopped" else "#0b0b0a"
-    patch_colour = OCHRE_DIM if state in ("stopped", "paused") else OCHRE
-
-    # head: an egg shape, slightly taller than wide
-    p.setBrush(QBrush(QColor(head_colour)))
-    p.drawEllipse(QRectF(6 * k, 8 * k, 44 * k, 48 * k))
-
-    # beak, pointing right, slightly open
-    p.setBrush(QBrush(QColor(patch_colour)))
-    p.drawPolygon(QPolygonF([QPointF(45 * k, 27 * k), QPointF(64 * k, 33 * k), QPointF(45 * k, 36 * k)]))
-    p.drawPolygon(QPolygonF([QPointF(45 * k, 36 * k), QPointF(62 * k, 38 * k), QPointF(45 * k, 44 * k)]))
-
-    # the bare yellow skin behind the eye, then the eye itself
-    p.drawEllipse(QRectF(27 * k, 19 * k, 22 * k, 14 * k))
-    p.setBrush(QBrush(QColor(eye_colour)))
-    r = 4.8 * k
-    p.drawEllipse(QRectF(39 * k - r, 26 * k - r, 2 * r, 2 * r))
-    p.end()
-    return QIcon(pm)
+    return _mark(MARK_STATES.get(state, "listening"), "tile" if tile else "bare")
 
 
 # Segoe MDL2 Assets glyphs, present on every Windows 10 and 11 install

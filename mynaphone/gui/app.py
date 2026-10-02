@@ -268,6 +268,25 @@ def label(text: str, name: str | None = None, wrap: bool = False) -> QLabel:
     return lbl
 
 
+class _OneLine(QLabel):
+    """A label that stays on one line: text too long for it ends in an ellipsis, with all of it in the tooltip."""
+
+    def __init__(self, text: str, name: str):
+        super().__init__(text)
+        self.setObjectName(name)
+
+    def minimumSizeHint(self) -> QSize:
+        return QSize(0, super().minimumSizeHint().height())
+
+    def paintEvent(self, event) -> None:
+        rect = self.contentsRect()
+        shown = self.fontMetrics().elidedText(self.text(), Qt.ElideRight, rect.width())
+        self.setToolTip(self.text() if shown != self.text() else "")
+        p = QPainter(self)
+        self.style().drawItemText(p, rect, int(self.alignment()), self.palette(), self.isEnabled(), shown,
+                                  self.foregroundRole())
+
+
 def verdict_colour(verdict: str) -> QColor | None:
     return {"keep": QColor(theme.GREEN), "discard": QColor(theme.RED), "skip": QColor(theme.MUTED),
             "filed": QColor(theme.ACCENT)}.get(verdict)
@@ -286,11 +305,10 @@ class StatusPage(QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(12)
 
-        # now-playing card: a fixed-height row (cover + text), then the transport row
+        # now-playing card: a row (cover + text) sized below for its busiest state, then the transport row
         self.card, c = card()
         c.setSpacing(12)
         row_box = QWidget()
-        row_box.setFixedHeight(COVER)
         top = QHBoxLayout(row_box)
         top.setContentsMargins(0, 0, 0, 0)
         top.setSpacing(18)
@@ -298,7 +316,7 @@ class StatusPage(QWidget):
         self.cover.setObjectName("cover")
         self.cover.setFixedSize(COVER, COVER)
         self.cover.setAlignment(Qt.AlignCenter)
-        top.addWidget(self.cover, 0)
+        top.addWidget(self.cover, 0, Qt.AlignTop)
         text = QVBoxLayout()
         text.setContentsMargins(0, 2, 0, 2)
         text.setSpacing(4)
@@ -308,9 +326,8 @@ class StatusPage(QWidget):
         state_row.setContentsMargins(0, 0, 0, 0)
         state_row.addWidget(self.state)
         state_row.addStretch(1)
-        self.title = label("", "title")
-        self.title.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self.sub = label("Press Start to begin listening for music.", "muted", wrap=True)
+        self.title = _OneLine("", "title")
+        self.sub = _OneLine("Press Start to begin listening for music.", "muted")
         self.progress = QProgressBar()
         self.progress.setTextVisible(False)
         self.progress.setRange(0, 1000)
@@ -326,6 +343,8 @@ class StatusPage(QWidget):
         text.addWidget(self.timing)
         top.addLayout(text, 1)
         c.addWidget(row_box)
+        self._row, self._text_lay = row_box, text
+        row_box.setMinimumHeight(COVER)
 
         bottom = QHBoxLayout()
         bottom.setSpacing(8)
@@ -409,13 +428,35 @@ class StatusPage(QWidget):
         lay.addStretch(1)
         self.set_cover(None)
 
-    def set_cover(self, data: bytes | None) -> None:
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        self._size_now_playing()
+
+    def _size_now_playing(self) -> None:
+        """Give the now-playing row the height of its busiest state (title, progress bar and timing all
+        showing), measured once the theme's fonts apply, so the title is never squeezed and the card keeps
+        its height when a song starts."""
+        saved = (self.title.text(), self.sub.text(), self.timing.text(), self.progress.isHidden())
+        self.title.setText("Ág")
+        self.sub.setText("Ág")
+        self.timing.setText("0:00 / 0:00")
+        self.progress.show()
+        self._text_lay.invalidate()
+        need = self._text_lay.sizeHint().height()
+        self.title.setText(saved[0])
+        self.sub.setText(saved[1])
+        self.timing.setText(saved[2])
+        self.progress.setHidden(saved[3])
+        self._row.setMinimumHeight(max(COVER, need))
+
+    def set_cover(self, data: bytes | None, state: str = "idle") -> None:
+        """The song's cover art, or the mark in the recorder's state (eye red while recording) without one."""
         if data:
             pm = QPixmap()
             if pm.loadFromData(data):
                 self.cover.setPixmap(_rounded(pm, COVER))
                 return
-        self.cover.setPixmap(app_icon("idle", 56).pixmap(56, 56))
+        self.cover.setPixmap(app_icon(state).pixmap(56, 56))
 
     def set_recent(self, rows: list[tuple[str, str, str]]) -> None:
         self.recent.setRowCount(0)
@@ -871,12 +912,13 @@ class MainWindow(QMainWindow):
         self.worker: RecorderWorker | None = None
         self.bridge_connected: bool | None = None
         self.recording_since: float | None = None
+        self.recording_song: tuple[str, str] | None = None     # (artist, title) of the take on screen
         self.recording_expected_ms = 0
         self._quitting = False
         self._tray_hint_shown = False
 
         self.setWindowTitle("Mynaphone")
-        self.setWindowIcon(app_icon("stopped", 64, tile=True))
+        self.setWindowIcon(app_icon("stopped", tile=True))
         self.resize(1040, 680)
         self.setMinimumSize(860, 560)
 
@@ -1182,6 +1224,7 @@ class MainWindow(QMainWindow):
         elif kind == "recording":
             self.recording_since = float(ev.get("t_event") or time.monotonic())
             self.recording_expected_ms = int(ev.get("expected_ms") or 0)
+            self.recording_song = (ev.get("artist", ""), ev.get("title", ""))
             st.state.setText("Recording")
             theme.set_tone(st.state, "rec")
             st.title.setText(ev.get("title", ""))
@@ -1189,18 +1232,22 @@ class MainWindow(QMainWindow):
             st.sub.setText(f"{ev.get('artist', '')}" + (f"  ·  {album}" if album else ""))
             st.progress.setValue(0)
             st.progress.show()
-            st.set_cover(None)
+            st.set_cover(None, "recording")
             self.side_state.setText("Recording")
             self._set_icon("recording")
             self.tray.setToolTip(f"Mynaphone: recording {ev.get('artist')} - {ev.get('title')}")
         elif kind == "cover":
             if ev.get("title") == st.title.text():
-                st.set_cover(ev.get("data"))
+                st.set_cover(ev.get("data"), "recording")
         elif kind in ("kept", "discarded", "skipped"):
-            self.recording_since = None
-            st.progress.setValue(0)
-            st.progress.hide()
-            st.timing.setText("")
+            # the next song starts recording before this one is written out, so this verdict can
+            # arrive while the next song is on screen; only the on-screen song's verdict ends its display
+            if self.recording_song == (ev.get("artist", ""), ev.get("title", "")):
+                self.recording_since = None
+                self.recording_song = None
+                st.progress.setValue(0)
+                st.progress.hide()
+                st.timing.setText("")
             when = time.strftime("%H:%M")
             song = f"{ev.get('artist')} - {ev.get('title')}"
             if kind == "kept":
@@ -1243,6 +1290,7 @@ class MainWindow(QMainWindow):
                                               f"{Path(ev.get('path', '')).name}: {ev.get('error', '')}")
         elif kind == "idle":
             self.recording_since = None
+            self.recording_song = None
             st.progress.setValue(0)
             st.progress.hide()
             st.timing.setText("")
@@ -1251,6 +1299,7 @@ class MainWindow(QMainWindow):
             self._refresh_state_labels()
         elif kind == "stopped":
             self.recording_since = None
+            self.recording_song = None
             st.progress.setValue(0)
             st.progress.hide()
 
@@ -1266,7 +1315,7 @@ class MainWindow(QMainWindow):
             theme.set_tone(st.state, "off")
             st.title.setText("")
             st.sub.setText("Press Start to begin listening for music.")
-            st.set_cover(None)
+            st.set_cover(None, "stopped")
             self.side_state.setText("Stopped")
             self._set_icon("stopped")
             self.tray.setToolTip("Mynaphone: stopped")
@@ -1275,7 +1324,7 @@ class MainWindow(QMainWindow):
             theme.set_tone(st.state, "warn")
             st.title.setText("")
             st.sub.setText("Listening, but not recording. Press Resume to record the next song.")
-            st.set_cover(None)
+            st.set_cover(None, "paused")
             self.side_state.setText("Paused")
             self._set_icon("paused")
             self.tray.setToolTip("Mynaphone: paused")
@@ -1322,7 +1371,7 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ tray
 
     def _build_tray(self) -> None:
-        self.tray = QSystemTrayIcon(app_icon("stopped", 64, tile=True), self)
+        self.tray = QSystemTrayIcon(app_icon("stopped", tile=True), self)
         menu = QMenu()
         act_show = QAction("Open Mynaphone", self)
         act_show.triggered.connect(self.show_from_tray)
@@ -1366,7 +1415,7 @@ class MainWindow(QMainWindow):
                 self.show_from_tray()
 
     def _set_icon(self, state: str) -> None:
-        ic = app_icon(state, 64, tile=True)
+        ic = app_icon(state, tile=True)
         self.tray.setIcon(ic)
         self.setWindowIcon(ic)
 
@@ -1427,7 +1476,7 @@ def run_gui(config_path: Path, minimized: bool = False) -> int:
     app.setApplicationName("Mynaphone")
     app.setApplicationDisplayName("Mynaphone")
     app.setQuitOnLastWindowClosed(False)
-    app.setWindowIcon(app_icon("stopped", 64, tile=True))
+    app.setWindowIcon(app_icon("stopped", tile=True))
     theme.apply_theme(app)
     # one copy at a time: a second launch just brings the first one's window back
     dev_shots = bool(os.environ.get("MYNAPHONE_SHOT_DIR"))

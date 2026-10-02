@@ -1,4 +1,9 @@
-# Mynaphone
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/mynaphone-horizontal-dark.svg">
+    <img src="docs/images/mynaphone-horizontal.svg" alt="Mynaphone" width="480">
+  </picture>
+</h1>
 
 Keeps a private, properly tagged copy of the songs you play on your Windows PC, so you can listen
 when the internet is down.
@@ -52,7 +57,7 @@ it hears.
 | Spotify plans | Free, Premium, Premium with lossless | The recording matches the plan's stream quality; lossless captures stay FLAC |
 | Output formats | AAC (default), MP3, Opus, FLAC | Full tags, cover art and lyrics in every format |
 | Players for the result | Car head units, iPhone, Android, any computer; foobar2000, MusicBee, Poweramp, Navidrome, Jellyfin, Plex | Synced lyrics are embedded and also saved as `.lrc` files |
-| Metadata sources | AcoustID, MusicBrainz, Spotify, YouTube Music, LRCLIB, Cover Art Archive | All free; AcoustID needs a free application key |
+| Metadata sources | AcoustID, MusicBrainz, Spotify, YouTube Music, LRCLIB, Cover Art Archive, Apple's iTunes Search API, Last.fm | All free; AcoustID needs a free application key, and Last.fm (optional, for genres) a free API key |
 
 ## System requirements
 
@@ -136,7 +141,7 @@ You are responsible for checking the law and the terms that apply to you before 
 and for what you do with the recordings. Don't share, upload, sell or redistribute them.
 
 Mynaphone is an independent open-source project with no connection to Spotify, YouTube, Google,
-MusicBrainz, AcoustID or LRCLIB. Those names are trademarks of their owners and appear here only to
+MusicBrainz, AcoustID, LRCLIB, Apple or Last.fm. Those names are trademarks of their owners and appear here only to
 say which services the app works with.
 
 The software comes without warranty of any kind, as the [GPL license text](LICENSE) and the
@@ -159,6 +164,8 @@ You may reuse the documentation under CC BY 4.0.
 ## Acknowledgements
 
 Song identification uses the open [MusicBrainz database](https://musicbrainz.org) and the
-[AcoustID service](https://acoustid.org). Lyrics come from [the LRCLIB project](https://lrclib.net).
+[AcoustID service](https://acoustid.org). Lyrics come from [the LRCLIB project](https://lrclib.net). Genres come from
+[Apple's iTunes Search API](https://performance-partners.apple.com/search-api) and
+[the Last.fm API](https://www.last.fm/api).
 Encoding uses [the FFmpeg project](https://ffmpeg.org) and fingerprinting uses
 [the Chromaprint library](https://acoustid.org/chromaprint). The interface is built with Qt through PySide6.

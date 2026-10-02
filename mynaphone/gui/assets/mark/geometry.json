@@ -1,0 +1,26 @@
+{
+  "viewBox": [
+    0,
+    0,
+    680,
+    680
+  ],
+  "eye": {
+    "cx": 335,
+    "cy": 279,
+    "r": 49.5
+  },
+  "source": "approved image; smooth cubic outline tracing",
+  "sizes": [
+    16,
+    20,
+    24,
+    32,
+    48,
+    56,
+    64,
+    128,
+    256,
+    512
+  ]
+}

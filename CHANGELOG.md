@@ -42,16 +42,24 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (84 tests).
+- Test suite (101 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
 - Icons for the browser extension at 16, 32, 48 and 128 px, drawn from the myna mark.
 - A page on where the name comes from.
+- Genres for every song, from Apple's catalog first, then MusicBrainz, then Last.fm's tags with an
+  optional free API key, and Soundtrack for any soundtrack still without one. Your own edit wins.
+- Songs whose title or album says Instrumental aren't looked up for lyrics, and lyrics and
+  lyricist no longer count as missing for them.
+- An updated logo brief for a designer, with what the current mark still gets wrong.
 
 ### Changed
 - License: GNU GPL v3 or later.
 - The package reads its version number from `mynaphone/__init__.py`.
+- The designed mark, a myna in profile whose eye turns red while a song records, replaces the
+  placeholder drawn in code. The window, the tray and the browser extension use the designer's
+  exports, and the README opens with the wordmark.
 
 ### Fixed
 - Installing the package now pulls in everything the app imports. PySide6, ytmusicapi, psutil,
@@ -61,3 +69,14 @@ All notable changes to Mynaphone are listed here. The format follows
 - The window no longer stops responding for 10 to 20 seconds each time the recorder starts. Finding
   each source app's process through psutil kept every other part of the app waiting; it now reads
   one Windows process snapshot in about 10 ms.
+- Songs after a long one were discarded as "started mid-song". The next take waited until the
+  previous song had been written out, which took up to 8 seconds, and the 3-second buffer
+  couldn't reach back to its start. The next take now starts first.
+- Complete songs were discarded for "buffering" when Spotify loaded the next track during their
+  last seconds. Those reports are ignored; a stall still shows as extra playing time.
+- On the Status page the song title was squeezed while recording, and the mark shown in place of
+  missing cover art kept a dark eye. Long titles now end in an ellipsis.
+- A MusicBrainz release with a catalog number but no label stopped a song from being filed, and
+  the app retried it forever. Errors in a MusicBrainz reply no longer hold a song back.
+- The album's track and disc counts from Spotify's player are used when its web API answers with
+  an error.
