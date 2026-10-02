@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from mynaphone.takes import TakeMeta, judge, trim
+from mynaphone.takes import TakeMeta, judge, longest_hole_ms, trim
 
 
 def tone(seconds: float, rate: int = 48000, amp: float = 0.3) -> np.ndarray:
@@ -86,3 +86,26 @@ def test_foreign_audio_rule_can_be_switched_off(tmp_config):
     tmp_config.rules.discard_on_foreign_audio = False
     fa = {"apps": ["chrome.exe"], "count": 1, "max_db": -30.0, "isolated": False}
     assert judge(meta(240), 240.0, 240.0, {"foreign_audio": fa}, tmp_config).keep
+
+
+def test_longest_hole_leaves_out_silence_before_the_music_and_at_its_end():
+    rate = 48000
+    audio = np.concatenate([silence(1.5, rate), tone(30.0, rate), silence(4.0, rate)])
+    assert longest_hole_ms(audio, rate) == 0
+    assert longest_hole_ms(silence(5.0, rate), rate) == 0
+    assert longest_hole_ms(np.zeros((0, 2), np.float32), rate) == 0
+
+
+def test_longest_hole_finds_a_pause_inside_the_music():
+    rate = 48000
+    audio = np.concatenate([tone(20.0, rate), silence(1.2, rate), tone(20.0, rate)])
+    assert 1150 <= longest_hole_ms(audio, rate) <= 1250
+
+
+def test_a_stall_spoils_a_take_only_when_it_left_a_hole(tmp_config):
+    """Per-app capture gets no sound while Spotify loads, so a stalled song usually comes out whole."""
+    late = 240.0 + tmp_config.rules.duration_tolerance_seconds + 1.5
+    whole = judge(meta(240), 240.0, late, {"buffering": True, "hole_ms": 20}, tmp_config)
+    assert whole.keep and whole.reasons == []
+    holed = judge(meta(240), 240.0, late, {"buffering": True, "hole_ms": 1200}, tmp_config)
+    assert "buffering" in holed.reasons and any(r.startswith("stalled") for r in holed.reasons)

@@ -136,7 +136,8 @@ def _humanize(reason: str) -> str:
         "paused_by_user": "recording paused", "capture_overflow": "audio dropout",
         "device_changed": "output device changed",
         "stopped": "playback stopped", "session_gone": "player closed", "shutdown": "recorder stopped",
-        "overrun": "no track change seen",
+        "overrun": "no track change seen", "capture_not_ready": "audio capture not running yet",
+        "not_music": "not a music video", "browser_unverified": "couldn't confirm the browser tab's song",
     }.get(key, key)
 
 

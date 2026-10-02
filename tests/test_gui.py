@@ -315,3 +315,19 @@ def test_painted_or_covered_window_is_left_alone(window, monkeypatch, caplog):
         window._check_painted()                 # one dark spot is enough: a tooltip may cover another
     assert calls == []
     assert not [r for r in caplog.records if r.name.startswith("mynaphone")]
+
+
+def test_every_reason_the_recorder_gives_has_words():
+    """A skip or discard reason shows up raw in the Takes table unless _humanize knows it."""
+    import re
+
+    from mynaphone.gui.app import _humanize
+    root = Path(__file__).resolve().parents[1] / "mynaphone"
+    src = (root / "daemon.py").read_text(encoding="utf-8") + (root / "takes.py").read_text(encoding="utf-8")
+    codes = set(re.findall(r'reason="([a-z_]+)"', src))
+    codes |= set(re.findall(r'reason="[a-z_]+" if [^\n]*?else "([a-z_]+)"', src))
+    codes |= set(re.findall(r'reasons\.append\(f?"([a-z_]+)', src))
+    for group in re.findall(r'reason in \(([^)]*)\)', src):
+        codes |= set(re.findall(r'"([a-z_]+)"', group))
+    assert {"capture_not_ready", "browser_unverified", "buffering", "already_archived", "stopped"} <= codes
+    assert not sorted(c for c in codes if _humanize(c) == c)

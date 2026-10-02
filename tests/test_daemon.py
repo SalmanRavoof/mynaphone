@@ -186,6 +186,30 @@ def test_buffering_in_the_last_seconds_is_ignored(recorder, clock):
     assert [e["title"] for e in kept] == ["One"]
 
 
+def test_stall_that_left_no_hole_is_kept(recorder, clock):
+    """Spotify sends no sound while it loads, so the capture of a stalled song has no gap in it."""
+    rec, loop = recorder
+    run(loop, rec._handle(snap("One"), "media", None))
+    clock.advance(60.0)
+    run(loop, rec._on_bridge(BridgeEvent(kind="state", state=SpotifyState(name="One", is_buffering=True,
+                                                                          received_at=clock()))))
+    assert rec.active.flags["buffering"]
+    clock.advance(120.0)
+    run(loop, rec._handle(snap("Two"), "media", None))
+    assert [e["title"] for e in rec.events if e["kind"] == "kept"] == ["One"]
+
+
+def test_song_replaced_at_once_is_not_a_take(recorder, clock, tmp_config):
+    """Pressing play on a new song, Spotify names the last one for a moment first; that blip is dropped."""
+    rec, loop = recorder
+    run(loop, rec._handle(snap("Old"), "media", None))
+    clock.advance(0.2)
+    run(loop, rec._handle(snap("New"), "media", None))
+    assert rec.active.meta.title == "New"
+    assert not [e for e in rec.events if e["kind"] in ("kept", "discarded")]
+    assert not glob.glob(str(tmp_config.paths.discard_dir / "*Old*"))
+
+
 def test_duplicate_is_skipped_and_harvest_skips_player(recorder, clock):
     rec, loop = recorder
     play_full_song(rec, loop, clock, "One")

@@ -86,3 +86,11 @@ All notable changes to Mynaphone are listed here. The format follows
   restored it. It now looks for its sidebar on screen after it opens, and minimizes and restores
   itself once when the sidebar isn't there. The log gets a line each time, along with Qt's own
   warnings and every screen that is added or removed.
+- Songs were discarded for "playback stalled" when the recording was complete. Spotify sends no
+  sound while it loads, so a stall usually leaves no gap in the capture. A stall now discards a
+  take only when the music has a silent hole of 0.3 seconds or more.
+- Pressing play on a new song after a pause left a "Discarded" row for the song before it, because
+  Spotify names that song for a moment first. A take that the next song replaces within 2 seconds
+  is dropped.
+- Some skip reasons, such as `capture_not_ready`, showed as raw codes in the Takes table. They read
+  in words now, and a test checks that every reason the recorder gives has a label.

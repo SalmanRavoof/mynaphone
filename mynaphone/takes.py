@@ -18,6 +18,9 @@ from mutagen.flac import FLAC, Picture
 log = logging.getLogger("mynaphone.takes")
 
 SILENCE = 10 ** (-60 / 20)       # -60 dBFS: anything below is treated as silence for trimming
+AUDIBLE = 10 ** (-45 / 20)       # -45 dBFS: clearly audible, so the song has begun
+HOLE = 10 ** (-80 / 20)          # -80 dBFS: what a player sends while it waits or is paused
+HOLE_MS = 300                    # a stretch this long inside the music spoils the take
 
 
 @dataclass
@@ -80,10 +83,37 @@ def trim(audio: np.ndarray, rate: int, expected_ms: int, lead_window_s: float, t
     return audio, lead_ms
 
 
+def longest_hole_ms(audio: np.ndarray, rate: int, tail_s: float = 10.0) -> int:
+    """The longest stretch of near-digital silence between the song's first clearly audible moment and its
+    last tail_s seconds, which are left out because songs end quietly.
+
+    A player that pauses mid-song leaves a hole like this in the capture. One that stalls while it loads
+    usually sends nothing at all, so the song comes out whole and only runs late.
+    """
+    blk = max(1, rate // 100)                          # 10 ms blocks
+    n = len(audio) // blk
+    if n == 0:
+        return 0
+    peaks = np.max(np.abs(audio[: n * blk]), axis=1).reshape(n, blk).max(axis=1)
+    loud = np.flatnonzero(peaks > AUDIBLE)
+    if len(loud) == 0:
+        return 0
+    quiet = peaks[loud[0]: max(int(loud[0]), n - int(tail_s * rate / blk))] < HOLE
+    if not quiet.any():
+        return 0
+    edges = np.diff(np.concatenate(([0], quiet.astype(np.int8), [0])))
+    longest = int((np.flatnonzero(edges == -1) - np.flatnonzero(edges == 1)).max())
+    return longest * blk * 1000 // rate
+
+
 def judge(meta: TakeMeta, captured_s: float, wall_s: float, flags: dict, cfg) -> Verdict:
     reasons: list[str] = []
     tol = cfg.rules.duration_tolerance_seconds
     exp_s = meta.expected_ms / 1000.0
+    # A stall only spoils the file when it left a hole in the music (see longest_hole_ms). Without the
+    # audio to look at, assume it did.
+    hole = flags.get("hole_ms")
+    spoiled = hole is None or hole >= HOLE_MS
     if meta.expected_ms <= 0:
         reasons.append("no_duration")
     elif exp_s < cfg.rules.min_duration_seconds:
@@ -95,7 +125,10 @@ def judge(meta: TakeMeta, captured_s: float, wall_s: float, flags: dict, cfg) ->
     if flags.get("seek") and cfg.rules.discard_on_seek:
         reasons.append("seek")
     if flags.get("buffering"):
-        reasons.append("buffering")
+        if spoiled:
+            reasons.append("buffering")
+        else:
+            log.info("%s stalled, but the audio has no hole in it; keeping the take", meta.title)
     if flags.get("overflows", 0):
         reasons.append(f"capture_overflow:{flags['overflows']}")
     if flags.get("device_changes", 0):
@@ -112,7 +145,7 @@ def judge(meta: TakeMeta, captured_s: float, wall_s: float, flags: dict, cfg) ->
     if meta.expected_ms > 0:
         if abs(captured_s - exp_s) > tol:
             reasons.append(f"length_mismatch:{captured_s:.1f}s_vs_{exp_s:.1f}s")
-        if wall_s - exp_s > tol + 1.0:
+        if wall_s - exp_s > tol + 1.0 and spoiled:
             reasons.append(f"stalled:{wall_s - exp_s:.1f}s_extra")
         if exp_s - wall_s > tol:
             reasons.append(f"cut_short:{exp_s - wall_s:.1f}s_missing")

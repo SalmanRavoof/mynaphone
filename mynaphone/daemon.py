@@ -18,7 +18,7 @@ from .config import Config
 from .postprocess import PostProcessor
 from .sessions import ForeignAudioMonitor, app_session_volume
 from .store import Store, tier_rank
-from .takes import TakeMeta, judge, output_path, sidecar, tag_flac, trim, write_flac
+from .takes import TakeMeta, judge, longest_hole_ms, output_path, sidecar, tag_flac, trim, write_flac
 
 log = logging.getLogger("mynaphone")
 
@@ -37,6 +37,7 @@ class ActiveTake:
 
 
 STOP = "STOP"
+BLIP_SECONDS = 2.0   # a take replaced by the next song this fast was never that song playing
 
 
 class Recorder:
@@ -531,6 +532,10 @@ class Recorder:
                          ", ".join(report.apps))
         self.foreign.forget_before(take.t_begin)
         wall_s = (take.t_end or time.monotonic()) - a.t_event
+        if reason == "track_change" and wall_s < BLIP_SECONDS:
+            # Spotify names the last song for a moment when you press play on the next one; that isn't a take
+            log.info("dropped %.1f s of %s - %s: the player moved on at once", wall_s, a.meta.artist, a.meta.title)
+            return None
         # a stop reported at the song's expected end (YouTube does this between tracks) is a normal finish
         at_end = (bool(a.meta.expected_ms)
                   and wall_s >= a.meta.expected_ms / 1000.0 - self.cfg.rules.duration_tolerance_seconds)
@@ -553,6 +558,7 @@ class Recorder:
         audio, lead_ms = trim(audio, take.rate, meta.expected_ms,
                               cfg.capture.lead_margin_seconds + 1.5, cfg.rules.duration_tolerance_seconds)
         captured_s = len(audio) / float(take.rate)
+        flags["hole_ms"] = longest_hole_ms(audio, take.rate)
         verdict = judge(meta, captured_s, wall_s, flags, cfg)
         verdict.trimmed_lead_ms = lead_ms
         root = cfg.paths.inbox_dir if verdict.keep else cfg.paths.discard_dir
