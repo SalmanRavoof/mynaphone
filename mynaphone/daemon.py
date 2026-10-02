@@ -200,9 +200,16 @@ class Recorder:
     async def _handle(self, snap: S.Snapshot, kind: str, session) -> None:
         a = self.active
         if a and a.app.lower() == snap.app.lower() and snap.key != a.key and not self._is_blank(snap):
-            # boundary: the session now reports a different track
-            await self._finish("track_change")
-            a = None
+            # boundary: the session now reports a different track. Start the next take before writing
+            # the old one out: writing a long song takes seconds, and the next take can only reach
+            # preroll_seconds back into the ring buffer for its opening.
+            ended = self._end_take("track_change")
+            try:
+                await self._handle(snap, kind, session)
+            finally:
+                if ended is not None:
+                    await self._write_take(*ended)
+            return
         if a and a.app.lower() == snap.app.lower():
             # same track: pause/stop/seek/stall checks
             if snap.status == S.PAUSED:
@@ -320,7 +327,17 @@ class Recorder:
         if st.name and a.meta.title and st.name.strip().lower() != a.meta.title.strip().lower():
             return  # bridge is reporting a different track than the media session; ignore
         self._enrich_from_bridge(a.meta, st)
-        if st.is_buffering and (time.monotonic() - a.t_event) > 2.0:
+        since_start = time.monotonic() - a.t_event
+        # Spotify loads the next track during the last seconds of this one and reports buffering while it
+        # does. A real stall there still shows up in the verdict as extra wall-clock time.
+        near_end = bool(a.meta.expected_ms) and since_start > a.meta.expected_ms / 1000.0 - 10.0
+        if st.is_buffering and since_start > 2.0:
+            if near_end:
+                if not a.flags.get("buffering_near_end"):
+                    log.info("buffering reported in the last seconds of %s; ignored (Spotify loading the next track)",
+                             a.meta.title)
+                a.flags["buffering_near_end"] = True
+                return
             if not a.flags.get("buffering"):
                 log.info("buffering reported by spotify during %s", a.meta.title)
             a.flags["buffering"] = True
@@ -488,12 +505,18 @@ class Recorder:
             await asyncio.sleep(3.0)
 
     async def _finish(self, reason: str) -> None:
+        ended = self._end_take(reason)
+        if ended is not None:
+            await self._write_take(*ended)
+
+    def _end_take(self, reason: str) -> tuple[ActiveTake, Take, dict, float] | None:
+        """Stop the active take's capture and settle its flags. Quick, so the next take can start at once."""
         a, self.active = self.active, None
         if a is None:
-            return
+            return None
         take = a.capture.end_take() if a.capture is not None else None
         if take is None:
-            return
+            return None
         a.meta.ended_at = dt.datetime.now(dt.timezone.utc).isoformat()
         flags = dict(a.flags)
         flags["overflows"] = take.overflows
@@ -517,6 +540,10 @@ class Recorder:
                 and self.bridge.state.name.strip().lower() == a.meta.title.strip().lower()):
             self._enrich_from_bridge(a.meta, self.bridge.state)
         self._attach_lyrics(a.meta)
+        return a, take, flags, wall_s
+
+    async def _write_take(self, a: ActiveTake, take: Take, flags: dict, wall_s: float) -> None:
+        """Judge, write and index an ended take, off the event loop; this is the slow part."""
         await self.loop.run_in_executor(None, self._finalize, a, take, flags, wall_s)
 
     def _finalize(self, a: ActiveTake, take: Take, flags: dict, wall_s: float) -> None:

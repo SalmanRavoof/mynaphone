@@ -4,11 +4,13 @@
 import asyncio
 import datetime as dt
 import glob
+import time
 
 import numpy as np
 import pytest
 
 from mynaphone import smtc as S
+from mynaphone.bridge import BridgeEvent, SpotifyState
 from mynaphone.capture import Take
 from mynaphone.daemon import Recorder
 
@@ -141,6 +143,47 @@ def test_late_event_reaches_into_ring_buffer(recorder, clock):
     # the position is extrapolated with the wall clock, so the call's own duration is added; on a
     # cold start (no compiled files yet, as on CI) that is a few milliseconds
     assert 2_000 <= rec.active.flags["reported_start_ms"] < 2_500
+
+
+def test_next_take_starts_before_the_last_one_is_written(recorder, clock, monkeypatch):
+    """Writing a long song out takes seconds. The next take must not wait for it, because it can only
+    reach preroll_seconds back into the ring buffer for its opening."""
+    rec, loop = recorder
+    finalize = rec._finalize
+
+    def slow_finalize(*args):
+        time.sleep(1.0)
+        finalize(*args)
+
+    monkeypatch.setattr(rec, "_finalize", slow_finalize)
+    play_full_song(rec, loop, clock, "One", end_ms=60_000)
+    run(loop, rec._handle(snap("Two"), "media", None))                     # boundary
+    assert rec.active.meta.title == "Two"
+    # waiting for the write would put the start past 1000 ms; the margin covers a slow machine
+    assert rec.active.flags["reported_start_ms"] < 800
+    order = [(e["kind"], e["title"]) for e in rec.events if e["kind"] in ("recording", "kept")]
+    assert order.index(("recording", "Two")) < order.index(("kept", "One"))
+
+
+def test_buffering_in_the_last_seconds_is_ignored(recorder, clock):
+    """Spotify reports buffering while it loads the next track, near the end of the current one."""
+    rec, loop = recorder
+
+    def buffering(title):
+        state = SpotifyState(name=title, is_buffering=True, received_at=clock())
+        run(loop, rec._on_bridge(BridgeEvent(kind="state", state=state)))
+
+    run(loop, rec._handle(snap("One"), "media", None))
+    clock.advance(177.0)                                                   # 3 s before the end
+    buffering("One")
+    assert not rec.active.flags.get("buffering") and rec.active.flags["buffering_near_end"]
+    clock.advance(3.0)
+    run(loop, rec._handle(snap("Two"), "media", None))
+    clock.advance(60.0)                                                    # mid-song
+    buffering("Two")
+    assert rec.active.flags["buffering"]
+    kept = [e for e in rec.events if e["kind"] == "kept"]
+    assert [e["title"] for e in kept] == ["One"]
 
 
 def test_duplicate_is_skipped_and_harvest_skips_player(recorder, clock):
