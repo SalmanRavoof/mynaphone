@@ -15,7 +15,7 @@ licenses are also available at the URLs given.
 | mutagen | GPL-2.0-or-later | Imported in-process to read and write audio tags. Compatible with Mynaphone's GPL-3.0-or-later license. | https://github.com/quodlibet/mutagen |
 | pycaw | MIT | Reads Windows per-app audio sessions (device mode). | https://github.com/AndreMiras/pycaw |
 | comtypes | MIT | COM access used by pycaw. | https://github.com/enthought/comtypes |
-| psutil | BSD-3-Clause | Finds the source app's process. | https://github.com/giampaolo/psutil |
+| psutil | BSD-3-Clause | Lists removable drives for the USB export and names the app behind each audio session (with pycaw). | https://github.com/giampaolo/psutil |
 | PyAudioWPatch (PortAudio) | MIT (PortAudio: MIT-style) | Whole-device loopback capture (device mode). | https://github.com/s0d3s/PyAudioWPatch |
 | numpy | BSD-3-Clause | Audio buffers and trimming. | https://numpy.org |
 | python-soundfile (libsndfile) | BSD-3-Clause (libsndfile: LGPL-2.1-or-later) | Writes FLAC files. | https://github.com/bastibe/python-soundfile |

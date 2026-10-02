@@ -42,7 +42,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (81 tests).
+- Test suite (84 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -58,3 +58,6 @@ All notable changes to Mynaphone are listed here. The format follows
   pycaw and comtypes were missing from its dependencies.
 - Past takes in the Activity and Status tables and in the `status` command show the PC's local
   time. They used to show UTC.
+- The window no longer stops responding for 10 to 20 seconds each time the recorder starts. Finding
+  each source app's process through psutil kept every other part of the app waiting; it now reads
+  one Windows process snapshot in about 10 ms.
