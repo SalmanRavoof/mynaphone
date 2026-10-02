@@ -47,6 +47,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
 - Icons for the browser extension at 16, 32, 48 and 128 px, drawn from the myna mark.
+- A page on where the name comes from.
 
 ### Changed
 - License: GNU GPL v3 or later.

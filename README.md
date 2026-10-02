@@ -11,7 +11,8 @@ Then it finds out which song it was, using a free AcoustID key you register once
 cover art, and files it as an AAC file in a folder layout you can copy to a phone or to a USB stick
 for the car.
 
-The name is myna plus gramophone. The myna is the Indian bird that repeats whatever it hears.
+The name is [myna plus gramophone](docs/name.md). The myna is the Indian bird that repeats whatever
+it hears.
 
 ## What it does
 
@@ -117,6 +118,7 @@ The [install guide](docs/install.md) has every step with screenshots' worth of d
 | [Security and privacy](docs/security.md) | What the app can reach, what it sends, and how to report a vulnerability |
 | [Legal notice](docs/legal.md) | What the app does and doesn't do, and what you are responsible for |
 | [Design research](docs/research.md) | The survey of existing tools and techniques the design came from |
+| [Where the name comes from](docs/name.md) | The myna, the gramophone, and what each one has to do with the app |
 
 ## Intended use and legal notice
 
