@@ -83,8 +83,8 @@ method** to **Whole output device** in Settings. Recording works; other apps' so
 ## Where the logs are
 
 `D:\Music\mynaphone\logs\mynaphone.log` by default (`log_dir` in `config.toml`), rotated at 5 MB.
-The Activity page shows the live log. Each discarded take also has a `.json` file next to it in the
-discard folder with every measurement.
+The Activity page shows the live log. Each discarded recording also has a `.json` file next to it in
+the discard folder with every measurement.
 
 ## Reporting a bug
 

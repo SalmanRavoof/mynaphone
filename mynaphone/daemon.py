@@ -609,7 +609,9 @@ class Recorder:
                     meta.cover = data
             except Exception as e:
                 log.debug("cover download failed (%s); using thumbnail if any", e)
-        if verdict.keep or cfg.rules.keep_discards_days > 0:
+        # a take skipped before any sound reached the capture trims to nothing; an empty FLAC can't be
+        # tagged and has nothing to inspect, so such a discard gets no files, only its row in the store
+        if verdict.keep or (cfg.rules.keep_discards_days > 0 and len(audio)):
             path = output_path(root, meta)
             write_flac(path, audio, take.rate, cfg.capture.bit_depth)
             try:

@@ -4,6 +4,7 @@
 import asyncio
 import datetime as dt
 import glob
+import logging
 import time
 
 import numpy as np
@@ -16,7 +17,8 @@ from mynaphone.daemon import Recorder
 
 
 class FakeCapture:
-    """Produces a tone for exactly the time a take was open."""
+    """Produces a tone for exactly the time a take was open. With sends_audio off, the app sent no audio at
+    all, as Spotify does while it waits for data on a dropped connection."""
 
     def __init__(self, clock, rate=48000):
         self.clock, self.rate, self.channels = clock, rate, 2
@@ -24,6 +26,7 @@ class FakeCapture:
         self.healthy = True
         self._take = None
         self.ring_seconds = 3.0
+        self.sends_audio = True
 
     def start(self): ...
     def stop(self): ...
@@ -40,7 +43,7 @@ class FakeCapture:
         seconds = max(0.0, t.t_end - t.t_begin)
         n = int(seconds * self.rate)
         x = (0.3 * np.sin(2 * np.pi * 440 * np.arange(n) / self.rate)).astype(np.float32)
-        t.chunks = [np.stack([x, x], axis=1)]
+        t.chunks = [np.stack([x, x], axis=1)] if self.sends_audio else []
         return t
 
     @property
@@ -357,3 +360,27 @@ def test_overrun_tick_closes_take(recorder, clock):
     run(loop, rec._tick())
     assert rec.active is None
     assert any(e["kind"] in ("kept", "discarded") for e in rec.events)
+
+
+@pytest.mark.parametrize("ending", ["stopped", "overrun"])
+def test_take_with_no_audio_leaves_no_file(recorder, clock, tmp_config, caplog, ending):
+    """Spotify can show a song as playing while it waits for data and send no audio at all. Stopped after
+    a few seconds, or closed by the overrun check after the whole song, such a take has nothing left
+    after trimming; it used to leave a 0-byte FLAC, a JSON and a tagging warning in the discard folder."""
+    rec, loop = recorder
+    rec.captures["*"].sends_audio = False
+    run(loop, rec._handle(snap("One", end_ms=198_000), "media", None))
+    if ending == "stopped":
+        clock.advance(5.0)                                                 # past the 2 s quick-skip drop
+        run(loop, rec._handle(snap("One", status=S.STOPPED, pos_ms=5_000, end_ms=198_000), "playback", None))
+    else:
+        clock.advance(204.0)
+        run(loop, rec._tick())
+    d = [e for e in rec.events if e["kind"] == "discarded"]
+    assert d and d[0]["title"] == "One" and d[0]["captured_ms"] == 0
+    assert "length_mismatch:0.0s_vs_198.0s" in d[0]["reasons"]
+    row = rec.store.recent_takes(1)[0]
+    assert row["title"] == "One" and row["verdict"] == "discard" and row["file_path"] is None
+    assert list(tmp_config.paths.discard_dir.iterdir()) == []
+    # only the app's own loggers count; asyncio reports other tests' leftover cover tasks whenever they are collected
+    assert not [r for r in caplog.records if r.name.startswith("mynaphone") and r.levelno >= logging.WARNING]

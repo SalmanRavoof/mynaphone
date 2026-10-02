@@ -46,7 +46,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (101 tests).
+- Test suite (123 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -132,3 +132,8 @@ All notable changes to Mynaphone are listed here. The format follows
   then failed the length check (Divinity: Original Sin 2 main theme, 216.9 of 219.0 s). An ended
   take now keeps recording for 3 seconds alongside the next one, and the trim cuts it at the song's
   published length.
+- A take with no sound in it no longer leaves an empty FLAC file and a "tagging failed" warning
+  in the discard folder. Spotify can show a song as playing while it waits for data and send no
+  audio at all; stopped, or closed after the song's length, such a take has nothing left once the
+  leading silence is trimmed. It now gets no files, and the Activity page still lists it with the
+  reason it was discarded.
