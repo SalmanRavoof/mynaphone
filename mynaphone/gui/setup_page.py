@@ -122,6 +122,26 @@ class SetupPage(QScrollArea):
         c.addLayout(row)
         self.key_status = label("", "small", wrap=True)
         c.addWidget(self.key_status)
+        c.addWidget(label("Optional: a Last.fm API key. Genres come from Apple's catalog and MusicBrainz, and "
+                          "with this key Last.fm's tags fill in the songs both lack. It's free: log in at "
+                          "last.fm, create an API account with any name, and paste the API key here. "
+                          "The shared secret isn't needed.", "muted", wrap=True))
+        row = QHBoxLayout()
+        self.lastfm_key = QLineEdit(self.win.cfg.identify.lastfm_api_key)
+        self.lastfm_key.setPlaceholderText("paste the Last.fm API key")
+        self.lastfm_key.setEchoMode(QLineEdit.Password)
+        btn_lastfm = QPushButton("Open last.fm")
+        btn_lastfm.clicked.connect(lambda: webbrowser.open("https://www.last.fm/api/account/create"))
+        btn_lastfm.setToolTip("Open Last.fm's API account page in your browser to create a key.")
+        self.btn_lastfm = QPushButton("Save key")
+        self.btn_lastfm.clicked.connect(self.save_lastfm_key)
+        self.btn_lastfm.setToolTip("Store the Last.fm API key in config.toml.")
+        row.addWidget(self.lastfm_key, 1)
+        row.addWidget(btn_lastfm)
+        row.addWidget(self.btn_lastfm)
+        c.addLayout(row)
+        self.lastfm_status = label("", "small", wrap=True)
+        c.addWidget(self.lastfm_status)
         lay.addWidget(f)
 
         # 3 folder
@@ -201,6 +221,8 @@ class SetupPage(QScrollArea):
             self.tools_status.setStyleSheet(f"color: {theme.AMBER};")
         self.key_status.setText("Key saved." if self.win.cfg.identify.acoustid_key.strip()
                                 else "No key yet. Without it songs are filed with Spotify's tags only.")
+        self.lastfm_status.setText("Last.fm key saved." if self.win.cfg.identify.lastfm_api_key.strip()
+                                   else "No Last.fm key. Genres come from Apple and MusicBrainz only.")
         appdata = Path(os.environ.get("APPDATA", ""))
         ext = appdata / "spicetify" / "Extensions" / "mynaphone.js"
         if shutil.which("spicetify") is None:
@@ -255,6 +277,12 @@ class SetupPage(QScrollArea):
     @Slot()
     def save_key(self) -> None:
         self.win.cfg.identify.acoustid_key = self.key.text().strip()
+        self.win.cfg.save()
+        self.refresh()
+
+    @Slot()
+    def save_lastfm_key(self) -> None:
+        self.win.cfg.identify.lastfm_api_key = self.lastfm_key.text().strip()
         self.win.cfg.save()
         self.refresh()
 

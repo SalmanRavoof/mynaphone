@@ -269,6 +269,15 @@ def looks_like_soundtrack(album: str, title: str = "") -> bool:
     return bool(SOUNDTRACK_RE.search(album or "")) or bool(re.search(r"\(from [\"“']", title or "", re.I))
 
 
+INSTRUMENTAL_RE = re.compile(r"\binstrumentals?\b", re.I)
+
+
+def is_instrumental(title: str, album: str = "") -> bool:
+    """True when the title or the album says there are no vocals: 'Kyon Hawa (Instrumental)',
+    'Romancing The Legend: Veer-Zaara Instrumental'. Such songs have no lyrics or lyricist to look for."""
+    return bool(INSTRUMENTAL_RE.search(title or "") or INSTRUMENTAL_RE.search(album or ""))
+
+
 def from_tags(meta: dict) -> Identity:
     """Build an identity from the capture's provisional (Spotify) metadata."""
     ident = Identity(source="spotify" if meta.get("source_uri") else "tags")
@@ -311,6 +320,11 @@ def apply_spotify(ident: Identity, meta: dict) -> None:
     if cr and not ident.copyright:
         ident.copyright = cr[0]
     md = extra.get("track_metadata") or {}
+    # Spotify's player reports where the track sits on its album even when the web API refuses
+    for attr, k in (("track_number", "album_track_number"), ("track_total", "album_track_count"),
+                    ("disc_number", "album_disc_number"), ("disc_total", "album_disc_count")):
+        if not getattr(ident, attr) and str(md.get(k) or "").isdigit():
+            setattr(ident, attr, int(md[k]))
     ti = extra.get("track_info") or {}
     if ti.get("explicit") is not None:
         ident.explicit = bool(ti["explicit"])

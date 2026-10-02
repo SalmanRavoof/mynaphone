@@ -69,6 +69,11 @@ aac_bitrate = 256
 acoustid_key = ""
 # MusicBrainz asks every client to identify itself with a contact address; an email is fine.
 musicbrainz_contact = ""
+# Optional. Genres come from Apple's catalog, then MusicBrainz; with this free key from
+# https://www.last.fm/api/account/create, Last.fm's tags fill in the songs both lack.
+lastfm_api_key = ""
+# The Apple store searched for genres, as a two-letter country code. US covers Indian film songs too.
+apple_country = "US"
 
 [app]
 start_minimized = true

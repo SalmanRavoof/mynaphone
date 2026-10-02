@@ -86,6 +86,10 @@ Identification runs in 5 steps.
    soundtrack albums from phrases such as "Original Motion Picture Soundtrack" and "From ...", and
    treats the album artist of a soundtrack as its composer. For YouTube captures, the YouTube Music
    catalog supplies album, year and track number.
+6. The genre comes from the first source that has one: Apple's catalog, then MusicBrainz, then
+   Last.fm's tags when you've added a Last.fm key. Only tags that are genre names count, so tags
+   like "seen live" never become a genre. A soundtrack still without a genre after that gets
+   Soundtrack. A genre you type in the Library editor always wins.
 
 ## Lyrics and cover art
 
@@ -94,6 +98,10 @@ recording and cover languages that LRCLIB often lacks. Otherwise the app asks LR
 artist, album and duration. Synced lyrics go into the file's lyrics tag and into a `.lrc` file next
 to it, because some players read one and some read the other. Cover art comes from the capture,
 which includes Spotify's 640 px image, and failing that from the Cover Art Archive.
+
+A song whose title or album says "Instrumental" has no words, so the app doesn't look up lyrics
+for it, and lyrics and lyricist don't count as missing. LRCLIB also marks some songs as
+instrumental, and those are treated the same way.
 
 ## A song from YouTube that the fingerprint does not know
 
@@ -146,6 +154,8 @@ Only during identification, and only for these requests:
 - MusicBrainz receives release, recording and work ids.
 - LRCLIB receives the title, artist, album and duration.
 - The Cover Art Archive receives a release id.
+- Apple's iTunes Search API receives the artist and title, to find the genre.
+- Last.fm receives the artist, title and your API key, only when you've added a key.
 - The Spotify bridge and the browser extension talk only to the app, on 127.0.0.1.
 
 No audio ever leaves the PC. When the network is down nothing is sent; lookups queue and retry.

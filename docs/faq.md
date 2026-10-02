@@ -88,7 +88,8 @@ signed in to, and the browser extension runs inside your signed-in browser.
 ### Data sent off the PC
 
 A fingerprint, titles, ids and durations, sent to AcoustID, MusicBrainz, LRCLIB and the Cover Art
-Archive during identification. No audio, no file names, no listening history. The
+Archive during identification, and the artist and title to Apple and, with your key, Last.fm, for
+the genre. No audio, no file names, no listening history. The
 [security page](security.md) lists each request.
 
 ### Spicetify's effect on Spotify

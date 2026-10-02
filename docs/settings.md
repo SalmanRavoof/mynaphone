@@ -73,6 +73,8 @@ rejected takes kept for inspection, divided by the size of an average 4.5-minute
 |---|---|---|
 | `acoustid_key` | empty | Your AcoustID application key. Required for fingerprint identification. |
 | `musicbrainz_contact` | empty | Contact MusicBrainz asks clients to send (an email or URL). Left empty, the project URL is sent. |
+| `lastfm_api_key` | empty | Optional Last.fm API key. With it, Last.fm's tags give a genre to songs that Apple and MusicBrainz have none for. |
+| `apple_country` | `US` | The Apple store searched for genres, as a two-letter country code. The US store covers Indian film songs too. |
 
 ## Application (`[app]`)
 

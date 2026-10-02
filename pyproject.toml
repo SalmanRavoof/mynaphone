@@ -48,6 +48,9 @@ version = { attr = "mynaphone.__version__" }
 [tool.setuptools.packages.find]
 include = ["mynaphone*"]
 
+[tool.setuptools.package-data]
+mynaphone = ["genres.txt", "gui/assets/mark/**/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"

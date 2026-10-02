@@ -15,7 +15,7 @@ This page lists what Mynaphone can reach on your PC, what leaves it, and how to 
 
 ## Data that leaves your PC
 
-Only during identification, and only to these 4 services:
+Only during identification, and only to these 6 services:
 
 | Service | What is sent | What comes back |
 |---|---|---|
@@ -23,6 +23,8 @@ Only during identification, and only to these 4 services:
 | MusicBrainz | Release, recording and work ids | Titles, credits, dates, labels, ISRCs |
 | LRCLIB | Title, artist, album and duration | Lyrics |
 | Cover Art Archive | A release id | A cover image |
+| Apple's iTunes Search API | Artist and title | A genre |
+| Last.fm, only with your key | Artist, title and your API key | Listener tags, used for the genre |
 
 No audio, no file names, no listening history and no account details ever leave the PC. The two
 bridges, the Spicetify extension and the browser extension, connect only to the recorder at
@@ -30,8 +32,8 @@ bridges, the Spicetify extension and the browser extension, connect only to the 
 
 ## Credentials
 
-The app keeps one credential, your AcoustID application key, in `config.toml`, which `.gitignore`
-keeps out of any fork you push. The app never asks for your Spotify, Google or any other
+The app keeps at most 2 credentials in `config.toml`: your AcoustID application key and, if you
+added one, your Last.fm API key. `.gitignore` keeps that file out of any fork you push. The app never asks for your Spotify, Google or any other
 password, and the bridges use the sessions already signed in to Spotify and Chrome.
 
 ## Code you can read

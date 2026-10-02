@@ -16,7 +16,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import identify, lyrics as lyr, tools
+from . import genres, identify, lyrics as lyr, tools
 from .config import Config
 from .library import file_take, resolve_cover, write_lyrics, write_lyrics_sidecar
 from .metadata import missing_fields, refresh_track
@@ -134,17 +134,22 @@ class PostProcessor(threading.Thread):
             ident = yt or identify.from_tags(meta)
             if yt:
                 note = (note + "; " if note else "") + "YouTube Music catalogue"
-            return ident, note
-
-        try:
-            identify.enrich_from_musicbrainz(ident, self.cfg.identify.musicbrainz_contact)
-        except Exception as e:
-            raise OSError(f"musicbrainz unavailable: {e}") from e
-        if not ident.track_number and meta.get("track_number"):
-            ident.track_number = int(meta["track_number"])
-        if not ident.is_soundtrack and identify.looks_like_soundtrack(meta.get("album", ""), meta.get("title", "")):
-            ident.secondary_types.append("Soundtrack")
-        identify.apply_spotify(ident, meta)
+        else:
+            try:
+                identify.enrich_from_musicbrainz(ident, self.cfg.identify.musicbrainz_contact)
+            except OSError as e:
+                # the network or MusicBrainz is down: the song stays in the inbox for another try
+                raise OSError(f"musicbrainz unavailable: {e}") from e
+            except Exception:
+                # a reply this code can't read mustn't hold the song back forever; file it without those details
+                log.exception("could not read MusicBrainz's details for %s; filing without them", path.name)
+            if not ident.track_number and meta.get("track_number"):
+                ident.track_number = int(meta["track_number"])
+            if not ident.is_soundtrack and identify.looks_like_soundtrack(meta.get("album", ""),
+                                                                          meta.get("title", "")):
+                ident.secondary_types.append("Soundtrack")
+            identify.apply_spotify(ident, meta)
+        genres.resolve(ident, meta.get("artist", ""), (meta.get("expected_ms") or 0) / 1000.0, self.cfg)
         return ident, note
 
     def process(self, path: Path) -> Path:
@@ -167,7 +172,9 @@ class PostProcessor(threading.Thread):
             lyr_state = "synced" if sp.get("synced") else "plain"
             if sp.get("language") and not ident.language:
                 ident.language = sp["language"]
-        if lyr_state != "synced":
+        if not text and identify.is_instrumental(ident.title or meta.get("title", ""), ident.album):
+            lyr_state = "instrumental"      # nothing to look up
+        if lyr_state not in ("synced", "instrumental"):
             try:
                 got = lyr.fetch(ident.title, ident.artist or meta.get("artist", ""), ident.album, duration_s)
                 if got and got.instrumental and not text:
@@ -242,11 +249,14 @@ class PostProcessor(threading.Thread):
             path = Path(r["file_path"] or "")
             if not path.exists():
                 continue
-            try:
-                got = lyr.fetch(r["title"], r["artist"], r["album"] or "", (r["duration_ms"] or 0) / 1000.0)
-            except Exception as e:
-                log.info("lyrics backfill paused (%s)", e)
-                break
+            if identify.is_instrumental(r["title"], r["album"] or ""):
+                got = lyr.Lyrics(instrumental=True)     # the title says so; no lookup needed
+            else:
+                try:
+                    got = lyr.fetch(r["title"], r["artist"], r["album"] or "", (r["duration_ms"] or 0) / 1000.0)
+                except Exception as e:
+                    log.info("lyrics backfill paused (%s)", e)
+                    break
             state = "none"
             if got and got.instrumental:
                 state = "instrumental"
@@ -264,6 +274,8 @@ class PostProcessor(threading.Thread):
             miss = json.loads(self.store.track(int(r["id"]))["missing_json"] or "[]")
             if state in ("plain", "synced", "instrumental"):
                 miss = [m for m in miss if m != "lyrics" and (m != "synced_lyrics" or state == "plain")]
+            if state == "instrumental":
+                miss = [m for m in miss if m != "lyricists"]
             self.store.conn.execute(
                 "UPDATE tracks SET lyrics_state=?, lyrics_tries=COALESCE(lyrics_tries,0)+1, missing_json=? WHERE id=?",
                 (state, json.dumps(miss), int(r["id"])))

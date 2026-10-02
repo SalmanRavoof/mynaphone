@@ -12,7 +12,7 @@ import json
 import logging
 from pathlib import Path
 
-from . import identify, lyrics as lyr, tools
+from . import genres, identify, lyrics as lyr, tools
 from .config import Config
 from .identify import Identity
 from .library import classify, place, resolve_cover, tag, write_lyrics_sidecar
@@ -47,6 +47,8 @@ def missing_fields(ident: Identity, has_cover: bool, lyrics_state: str) -> list[
             ok = lyrics_state in ("synced", "instrumental")
         elif key == "year":
             ok = bool(ident.year)
+        elif key == "lyricists" and lyrics_state == "instrumental":
+            ok = True                     # no words, so no lyricist
         else:
             v = getattr(ident, key, None)
             ok = bool(v)
@@ -159,6 +161,7 @@ def refresh_track(cfg: Config, store: Store, row, lookup: bool = True, manual: d
         except Exception as e:
             note = f"lookup failed: {e}"
             log.info("refresh lookup failed for %s: %s", path.name, e)
+        genres.resolve(ident, row["artist"] or "", (row["duration_ms"] or 0) / 1000.0, cfg)
     # never let a YouTube view count stand as an album, whatever an older capture stored
     if identify.looks_like_count(ident.album):
         ident.album = ""
@@ -170,9 +173,11 @@ def refresh_track(cfg: Config, store: Store, row, lookup: bool = True, manual: d
         cover = new_cover
     if cover is None and lookup:
         cover = resolve_cover(path, ident, meta.get("cover_url") or "")
+    instrumental = (identify.is_instrumental(ident.title, ident.album)
+                    or ("lyrics_state" in row.keys() and row["lyrics_state"] == "instrumental"))
     if new_lyrics is not None:
         lyrics_text = new_lyrics
-    elif lookup and lyrics_state_of(lyrics_text) != "synced":
+    elif lookup and not instrumental and lyrics_state_of(lyrics_text) != "synced":
         try:
             got = lyr.fetch(ident.title, ident.artist, ident.album, (row["duration_ms"] or 0) / 1000.0)
             if got and got.best and (got.synced or not lyrics_text):
@@ -180,6 +185,8 @@ def refresh_track(cfg: Config, store: Store, row, lookup: bool = True, manual: d
         except Exception:
             pass
     lyr_state = lyrics_state_of(lyrics_text)
+    if lyr_state == "none" and instrumental:
+        lyr_state = "instrumental"
 
     kind = manual_all.get("kind") or classify(ident)
     capture = {"source_app": row["source_app"] or "", "source_uri": row["source_uri"] or "",

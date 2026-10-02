@@ -76,6 +76,12 @@ AcoustID asks every application to register, which costs nothing and takes a min
 
 Your profile page also shows a "user API key". That one is for submitting fingerprints and the app doesn't need it.
 
+Optionally, add a Last.fm API key as well. Genres come from Apple's catalog and MusicBrainz, and
+Last.fm's tags fill in the songs both lack. Log in at Last.fm, open
+[Create API account](https://www.last.fm/api/account/create), give it any name, and copy the
+**API key**. The shared secret isn't needed. Paste it on the Set up page, or on the
+`lastfm_api_key` line in step 5.
+
 ## Step 5: Your settings file
 
 1. In the Mynaphone folder, copy `config.example.toml` and name the copy `config.toml`.

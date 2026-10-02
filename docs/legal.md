@@ -54,7 +54,8 @@ You are solely responsible for what you record and what you do with it.
 
 This is an independent, open-source project. It is not affiliated with, sponsored by, endorsed
 by or in any way officially connected with Spotify AB, Google LLC or YouTube, the MetaBrainz
-Foundation (MusicBrainz), AcoustID OÜ, LRCLIB, or any other service mentioned in this documentation.
+Foundation (MusicBrainz), AcoustID OÜ, LRCLIB, Apple Inc., Last.fm Ltd, or any other service mentioned
+in this documentation.
 Product and service names are the trademarks of their respective owners and are used only to identify
 the services the app can work with. No logos of those services are used.
 
@@ -67,6 +68,11 @@ the services the app can work with. No logos of those services are used.
   key comes with the app. Mynaphone stays within 3 requests per second.
 - **LRCLIB.** An open API without keys. Mynaphone identifies itself with a User-Agent.
 - **Cover Art Archive.** Images are fetched by MusicBrainz release id.
+- **Apple's iTunes Search API.** An open API without keys. The app reads only a song's genre name
+  from it and uses none of Apple's previews or artwork. Apple limits the API to about 20 requests a
+  minute, so the app waits at least 3 seconds between them.
+- **Last.fm.** Used only when you add your own free API key, to read a song's tags. No key comes
+  with the app, and nothing is scrobbled or posted to your account.
 
 ## Warranty
 

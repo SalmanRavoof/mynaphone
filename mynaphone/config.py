@@ -74,6 +74,8 @@ class Library:
 class Identify:
     acoustid_key: str = ""          # application API key from acoustid.org/my-applications
     musicbrainz_contact: str = ""   # email or URL MusicBrainz asks clients to send in User-Agent
+    lastfm_api_key: str = ""        # optional, from last.fm/api/account/create; used for genres
+    apple_country: str = "US"       # Apple storefront searched for genres (a two-letter country code)
 
 
 @dataclass
@@ -150,6 +152,7 @@ class Config:
             upgrade=_b(self.quality.upgrade_on_higher_tier),
             lib_format=_s(self.library.format), aac_bitrate=self.library.aac_bitrate,
             acoustid_key=_s(self.identify.acoustid_key), musicbrainz_contact=_s(self.identify.musicbrainz_contact),
+            lastfm_api_key=_s(self.identify.lastfm_api_key), apple_country=_s(self.identify.apple_country),
             start_minimized=_b(self.app.start_minimized), close_to_tray=_b(self.app.close_to_tray),
             autostart_recording=_b(self.app.autostart_recording), show_tooltips=_b(self.app.show_tooltips),
         ), encoding="utf-8")
@@ -239,6 +242,11 @@ aac_bitrate = {aac_bitrate}
 acoustid_key = {acoustid_key}
 # MusicBrainz asks every client to identify itself with a contact address; an email is fine.
 musicbrainz_contact = {musicbrainz_contact}
+# Optional. Genres come from Apple's catalog, then MusicBrainz; with this free key from
+# https://www.last.fm/api/account/create, Last.fm's tags fill in the songs both lack.
+lastfm_api_key = {lastfm_api_key}
+# The Apple store searched for genres, as a two-letter country code. US covers Indian film songs too.
+apple_country = {apple_country}
 
 [app]
 start_minimized = {start_minimized}

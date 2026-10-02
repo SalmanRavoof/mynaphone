@@ -98,7 +98,8 @@ def release(mbid: str) -> dict | None:
         "media": [],
     }
     for li in r.get("label-info", []) or []:
-        if li.get("label", {}).get("name") and not out["label"]:
+        # a release can list a catalog number with no label: "label": null
+        if (li.get("label") or {}).get("name") and not out["label"]:
             out["label"] = li["label"]["name"]
         if li.get("catalog-number") and not out["catalog"]:
             out["catalog"] = li["catalog-number"]

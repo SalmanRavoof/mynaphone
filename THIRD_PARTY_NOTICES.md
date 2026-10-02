@@ -30,6 +30,9 @@ licenses are also available at the URLs given.
 - **AcoustID** web service: free for non-commercial use; each user registers their own application key. https://acoustid.org/webservice
 - **LRCLIB**: open API. https://lrclib.net
 - **Cover Art Archive**: images are served under the terms stated by the archive for each image. https://coverartarchive.org
+- **Apple iTunes Search API**: open API, used to read genres. https://performance-partners.apple.com/search-api
+- **Last.fm API**: used with the user's own API key, to read tags for genres. https://www.last.fm/api/tos
+- **MusicBrainz genre list** (`mynaphone/genres.txt`): CC0 1.0, from https://musicbrainz.org/genres
 
 ## Distributing a bundled build
 
