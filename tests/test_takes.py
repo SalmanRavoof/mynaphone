@@ -32,6 +32,25 @@ def test_trim_keeps_trailing_silence_inside_published_length():
     assert abs(len(out) / rate - 10.0) < 0.05        # the 2 s of silence inside the song stay
 
 
+def test_trim_cuts_the_last_songs_quiet_tail():
+    """Toxicity: 0.65 s of the previous song at about -52 dBFS, 0.6 s of the player's digital silence,
+    then the song. The tail is above -60 dB, so it used to block the trim and the song's end was cut."""
+    rate = 48000
+    audio = np.concatenate([tone(0.65, rate, amp=0.0025), silence(0.6, rate), tone(10.0, rate),
+                            silence(1.0, rate)])
+    out, lead_ms = trim(audio, rate, expected_ms=10_000, lead_window_s=2.0, tolerance_s=1.5)
+    assert 1240 <= lead_ms <= 1260
+    assert abs(len(out) / rate - 10.0) < 0.05
+
+
+def test_trim_keeps_a_quiet_opening_without_a_gap():
+    """A song that opens softly (above -60 dB) and has no digital silence keeps its opening."""
+    rate = 48000
+    audio = np.concatenate([silence(0.3, rate), tone(1.0, rate, amp=0.002), tone(9.0, rate)])
+    _, lead_ms = trim(audio, rate, expected_ms=10_000, lead_window_s=2.0, tolerance_s=1.5)
+    assert 290 <= lead_ms <= 310
+
+
 def test_trim_handles_empty_audio():
     out, lead = trim(np.zeros((0, 2), np.float32), 48000, 10_000, 2.0, 1.5)
     assert len(out) == 0 and lead == 0

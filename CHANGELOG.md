@@ -110,3 +110,6 @@ All notable changes to Mynaphone are listed here. The format follows
   through the client's CosmosAsync, the metadata service mostly answered in protobuf, which the
   bridge couldn't read. The bridge now fetches it with the client's token and reads either JSON or
   protobuf. The web API fallback reports its HTTP status when it fails.
+- A song that started on the previous song's quiet tail kept that tail, and the cut to its
+  published length then clipped its ending (Toxicity). The trim now starts the song after the
+  last stretch of 0.2 seconds or more of digital silence in the lead window.

@@ -21,6 +21,7 @@ SILENCE = 10 ** (-60 / 20)       # -60 dBFS: anything below is treated as silenc
 AUDIBLE = 10 ** (-45 / 20)       # -45 dBFS: clearly audible, so the song has begun
 HOLE = 10 ** (-80 / 20)          # -80 dBFS: what a player sends while it waits or is paused
 HOLE_MS = 300                    # a stretch this long inside the music spoils the take
+LEAD_GAP_MS = 200                # a stretch this long below HOLE in the lead window is the gap between songs
 
 
 @dataclass
@@ -64,9 +65,12 @@ def trim(audio: np.ndarray, rate: int, expected_ms: int, lead_window_s: float, t
         return audio, 0
     mono = np.max(np.abs(audio), axis=1)
     window = min(len(mono), int(lead_window_s * rate))
-    idx = np.argmax(mono[:window] > SILENCE) if window else 0
-    if window and not (mono[:window] > SILENCE).any():
-        idx = window
+    # The window can open on the previous song's quiet tail (about -50 dBFS, Toxicity), which isn't
+    # silence by the -60 dB rule. The player's gap between songs is digital silence, so the song
+    # starts after the last such gap in the window.
+    start = _lead_gap_end(mono, rate, window)
+    sound = mono[start:window] > SILENCE
+    idx = start + int(np.argmax(sound)) if sound.any() else window
     audio = audio[idx:]
     lead_ms = int(idx * 1000 / rate)
     if expected_ms > 0:
@@ -81,6 +85,19 @@ def trim(audio: np.ndarray, rate: int, expected_ms: int, lead_window_s: float, t
             last -= 1
         audio = audio[:last]
     return audio, lead_ms
+
+
+def _lead_gap_end(mono: np.ndarray, rate: int, window: int) -> int:
+    """Where the last stretch of LEAD_GAP_MS or more below HOLE ends in the first window samples; 0 if none."""
+    blk = max(1, rate // 100)                          # 10 ms blocks
+    n = window // blk
+    if n == 0:
+        return 0
+    quiet = mono[: n * blk].reshape(n, blk).max(axis=1) < HOLE
+    edges = np.diff(np.concatenate(([0], quiet.astype(np.int8), [0])))
+    starts, ends = np.flatnonzero(edges == 1), np.flatnonzero(edges == -1)
+    gaps = ends[(ends - starts) * blk * 1000 >= LEAD_GAP_MS * rate]
+    return int(gaps[-1]) * blk if len(gaps) else 0
 
 
 def longest_hole_ms(audio: np.ndarray, rate: int, tail_s: float = 10.0) -> int:
