@@ -1,8 +1,5 @@
 <h1>
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/mynaphone-horizontal-dark.svg">
-    <img src="docs/images/mynaphone-horizontal.svg" alt="Mynaphone" width="480">
-  </picture>
+  <img src="docs/images/banner.png" alt="Mynaphone" width="880">
 </h1>
 
 [![Tests](https://github.com/SalmanRavoof/mynaphone/actions/workflows/tests.yml/badge.svg)](https://github.com/SalmanRavoof/mynaphone/actions/workflows/tests.yml)

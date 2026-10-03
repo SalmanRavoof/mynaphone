@@ -43,5 +43,5 @@ either the corresponding source code of Mynaphone, FFmpeg, Chromaprint and Qt or
 provide it, as the GPL and LGPL require. The documentation in `docs/` is licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 The Mynaphone name, the myna mark and the wordmark (`mynaphone/gui/assets/mark/`, the icons in
-`browser-extension/` and `docs/images/mynaphone-horizontal*.svg`) are not licensed under the GPL or
+`browser-extension/` and `docs/images/mynaphone-horizontal*.svg`, `docs/images/banner.png` and `docs/images/social-preview.png`) are not licensed under the GPL or
 CC BY 4.0. All rights reserved by Salman Ravoof.
