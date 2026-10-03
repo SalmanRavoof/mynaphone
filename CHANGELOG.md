@@ -122,3 +122,8 @@ All notable changes to Mynaphone are listed here. The format follows
 - Capture of Chrome restarted every few seconds. Chrome briefly starts lone chrome.exe processes
   with lower pids, and the capture took the lowest one each time. It now stays on the process it
   has while that one is still a top process, and otherwise picks the one with the most children.
+- A complete song was discarded as "paused" when Spotify's queue ran out after it, because Spotify
+  reports a pause at that moment. A pause in a song's last 10 seconds now ends the take, and the
+  length check still rejects a song paused before its end.
+- Spotify bridge failures are reported in the log: errors inside the extension, the first state of
+  each connection, and the extension seeing no track while Spotify plays one.

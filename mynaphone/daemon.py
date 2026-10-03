@@ -40,6 +40,7 @@ STOP = "STOP"
 BLIP_SECONDS = 2.0   # a take replaced by the next song this fast was never that song playing
 START_LAG_MAX_MS = 6000   # the most start-up delay forgiven; Spotify's has been 1.5 to 3.7 s
 START_LEAD_MAX_MS = 2500   # the most a song's first reading may run ahead of the clock and still be its start
+NEAR_END_SECONDS = 10.0   # Spotify's buffering or pause this close to the end belongs to the next track
 TIMELINE_LOG_SECONDS = 20.0   # log each timeline reading this far into a take, to diagnose seek and stall flags
 
 
@@ -216,7 +217,12 @@ class Recorder:
             return
         if a and a.app.lower() == snap.app.lower():
             # same track: pause/stop/seek/stall checks
-            if snap.status == S.PAUSED:
+            if snap.status == S.PAUSED and self._near_end(a):
+                # Spotify pauses at the end of its queue once the last song finishes (Amidinine). That is
+                # the song ending; a pause seconds early still fails the length check.
+                log.info("paused in the last seconds of %s; taken as its end", a.meta.title)
+                await self._finish("stopped")
+            elif snap.status == S.PAUSED:
                 if not a.flags.get("paused"):
                     log.info("paused during take: %s", a.meta.title)
                 a.flags["paused"] = True
@@ -336,6 +342,12 @@ class Recorder:
             a.flags["buffering"] = True
             log.info("playback stalled (%.1fs behind) in %s", -drift / 1000, a.meta.title)
 
+    @staticmethod
+    def _near_end(a: ActiveTake) -> bool:
+        """Within the song's last NEAR_END_SECONDS, where Spotify loads the next track or stops its queue."""
+        since_start = time.monotonic() - a.t_event
+        return bool(a.meta.expected_ms) and since_start > a.meta.expected_ms / 1000.0 - NEAR_END_SECONDS
+
     async def _on_bridge(self, ev: BridgeEvent) -> None:
         st = ev.state
         a = self.active
@@ -350,7 +362,7 @@ class Recorder:
         since_start = time.monotonic() - a.t_event
         # Spotify loads the next track during the last seconds of this one and reports buffering while it
         # does. A real stall there still shows up in the verdict as extra wall-clock time.
-        near_end = bool(a.meta.expected_ms) and since_start > a.meta.expected_ms / 1000.0 - 10.0
+        near_end = self._near_end(a)
         if st.is_buffering and since_start > 2.0:
             if near_end:
                 if not a.flags.get("buffering_near_end"):

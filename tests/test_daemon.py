@@ -109,6 +109,24 @@ def test_pause_discards(recorder, clock):
     assert d and "paused" in d[0]["reasons"]
 
 
+def test_pause_at_the_end_of_the_queue_keeps_the_song(recorder, clock):
+    """Spotify pauses when its queue runs out after the last song (Amidinine, 2026-10-03)."""
+    rec, loop = recorder
+    run(loop, rec._handle(snap("One", end_ms=120_000), "media", None))
+    clock.advance(120.5)
+    run(loop, rec._handle(snap("One", status=S.PAUSED, pos_ms=120_000, end_ms=120_000), "playback", None))
+    assert rec.active is None
+    assert [e["title"] for e in rec.events if e["kind"] == "kept"] == ["One"]
+
+
+def test_pause_seconds_before_the_end_still_discards(recorder, clock):
+    rec, loop = recorder
+    run(loop, rec._handle(snap("One", end_ms=120_000), "media", None))
+    clock.advance(114.0)
+    run(loop, rec._handle(snap("One", status=S.PAUSED, pos_ms=114_000, end_ms=120_000), "playback", None))
+    assert [e["title"] for e in rec.events if e["kind"] == "discarded"] == ["One"]
+
+
 def test_seek_is_detected_from_timeline(recorder, clock):
     rec, loop = recorder
     run(loop, rec._handle(snap("One"), "media", None))
