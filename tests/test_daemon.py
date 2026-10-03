@@ -32,7 +32,7 @@ class FakeCapture:
         self._take = Take(rate=self.rate, channels=self.channels, t_begin=t_begin)
         return self._take
 
-    def end_take(self):
+    def end_take(self, tail_seconds=0.0):
         t, self._take = self._take, None
         if t is None:
             return None

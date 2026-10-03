@@ -127,3 +127,8 @@ All notable changes to Mynaphone are listed here. The format follows
   length check still rejects a song paused before its end.
 - Spotify bridge failures are reported in the log: errors inside the extension, the first state of
   each connection, and the extension seeing no track while Spotify plays one.
+- The end of a song was cut by about 1.5 to 2 seconds. Spotify's sound trails its clock, so it names
+  the next track while the last one is still playing, and the take stopped there. A slow fade-out
+  then failed the length check (Divinity: Original Sin 2 main theme, 216.9 of 219.0 s). An ended
+  take now keeps recording for 3 seconds alongside the next one, and the trim cuts it at the song's
+  published length.

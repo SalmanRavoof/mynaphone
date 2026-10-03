@@ -41,6 +41,7 @@ BLIP_SECONDS = 2.0   # a take replaced by the next song this fast was never that
 START_LAG_MAX_MS = 6000   # the most start-up delay forgiven; Spotify's has been 1.5 to 3.7 s
 START_LEAD_MAX_MS = 2500   # the most a song's first reading may run ahead of the clock and still be its start
 NEAR_END_SECONDS = 10.0   # Spotify's buffering or pause this close to the end belongs to the next track
+END_TAIL_SECONDS = 3.0   # audio kept past a track change; Spotify's sound trails its clock by 1.3-2.2 s
 TIMELINE_LOG_SECONDS = 20.0   # log each timeline reading this far into a take, to diagnose seek and stall flags
 
 
@@ -546,7 +547,8 @@ class Recorder:
         a, self.active = self.active, None
         if a is None:
             return None
-        take = a.capture.end_take() if a.capture is not None else None
+        tail = END_TAIL_SECONDS if reason == "track_change" else 0.0
+        take = a.capture.end_take(tail) if a.capture is not None else None
         if take is None:
             return None
         a.meta.ended_at = dt.datetime.now(dt.timezone.utc).isoformat()
@@ -580,6 +582,8 @@ class Recorder:
 
     async def _write_take(self, a: ActiveTake, take: Take, flags: dict, wall_s: float) -> None:
         """Judge, write and index an ended take, off the event loop; this is the slow part."""
+        if take.tail_until:
+            await asyncio.sleep(max(0.0, take.tail_until - time.monotonic()) + 0.2)
         await self.loop.run_in_executor(None, self._finalize, a, take, flags, wall_s)
 
     def _finalize(self, a: ActiveTake, take: Take, flags: dict, wall_s: float) -> None:

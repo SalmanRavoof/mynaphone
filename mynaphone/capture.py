@@ -41,6 +41,7 @@ class Take:
     overflows: int = 0
     device_changes: int = 0
     t_end: float | None = None
+    tail_until: float | None = None     # still collecting audio past t_end until this monotonic time
 
     def audio(self) -> np.ndarray:
         if not self.chunks:
@@ -64,6 +65,7 @@ class _RingCapture:
         self._ring_seconds = 0.0
         self._lock = threading.Lock()
         self._take: Take | None = None
+        self._tails: list[Take] = []      # ended takes still collecting their tail
 
     def _push(self, chunk: np.ndarray, glitch: bool = False) -> None:
         now = time.monotonic()
@@ -72,6 +74,10 @@ class _RingCapture:
                 if glitch:
                     self._take.overflows += 1
                 self._take.chunks.append(chunk)
+            if self._tails:
+                self._tails = [t for t in self._tails if now <= t.tail_until]
+                for t in self._tails:
+                    t.chunks.append(chunk)
             self._ring.append((now, chunk))
             self._ring_seconds += len(chunk) / self.rate
             while self._ring_seconds > self.preroll and len(self._ring) > 1:
@@ -99,11 +105,17 @@ class _RingCapture:
             self._take = take
             return take
 
-    def end_take(self) -> Take | None:
+    def end_take(self, tail_seconds: float = 0.0) -> Take | None:
+        """Stop the take at once (t_end is now). With tail_seconds, it keeps collecting audio that long,
+        alongside the next take: Spotify's sound runs behind its clock, so a song is still playing when
+        the next one is named. Wait for take.tail_until before reading its audio."""
         with self._lock:
             take, self._take = self._take, None
             if take is not None:
                 take.t_end = time.monotonic()
+                if tail_seconds > 0:
+                    take.tail_until = take.t_end + tail_seconds
+                    self._tails.append(take)
             return take
 
     @property

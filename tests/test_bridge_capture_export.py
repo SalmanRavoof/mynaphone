@@ -129,3 +129,23 @@ def test_export_plan_and_mirror(tmp_path):
     assert not stale.exists() and not stale.parent.exists()
     p4 = export.plan(lib, dest, include_lyrics=True)
     assert [d.name for _, d in p4.copy] == ["S.lrc"]
+
+
+def test_ended_take_collects_its_tail_alongside_the_next():
+    """Spotify's sound trails its clock, so the last song is still playing when the next is named."""
+    cap = _RingCapture(3.0)
+    cap.rate = 10
+
+    def chunk(v):
+        return np.full((10, 2), v, dtype=np.float32)
+
+    cap.begin_take(time.monotonic() - 1)
+    cap._push(chunk(1))
+    old = cap.end_take(tail_seconds=60.0)
+    new = cap.begin_take(time.monotonic())
+    cap._push(chunk(2))
+    assert [c[0, 0] for c in old.chunks] == [1, 2] and [c[0, 0] for c in new.chunks] == [2]
+    old.tail_until = time.monotonic() - 1                  # the tail is over
+    cap._push(chunk(3))
+    assert [c[0, 0] for c in old.chunks] == [1, 2] and [c[0, 0] for c in new.chunks] == [2, 3]
+    assert cap.end_take().tail_until is None
