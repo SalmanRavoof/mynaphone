@@ -277,7 +277,17 @@
     };
   }
 
+  // a failure inside send() used to vanish; report it to the app, at most once a minute
+  let lastErrorAt = 0;
+  function report(where, e) {
+    if (!ws || ws.readyState !== 1 || Date.now() - lastErrorAt < 60000) return;
+    lastErrorAt = Date.now();
+    try { ws.send(JSON.stringify({ type: "error", where: where, error: describe(e) })); } catch (x) {}
+  }
   function send(force) {
+    try { sendState(force); } catch (e) { report("send", e); }
+  }
+  function sendState(force) {
     if (!ws || ws.readyState !== 1) return;
     const s = snapshot();
     if (!s) return;
@@ -302,7 +312,7 @@
     const sig = JSON.stringify([s.uri, s.playbackId, s.isPaused, s.isBuffering, s.position]);
     if (!force && sig === lastSent) return;
     lastSent = sig;
-    try { ws.send(JSON.stringify(s)); } catch (e) {}
+    try { ws.send(JSON.stringify(s)); } catch (e) { report("sending state", e); }
   }
 
   function connect() {

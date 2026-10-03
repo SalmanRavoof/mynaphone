@@ -183,11 +183,16 @@ class Bridge:
             return
         self._status(True)
         log.info("spicetify extension connected")
+        first_logged = False
         try:
             async for raw in ws:
                 try:
                     msg = json.loads(raw)
                 except Exception:
+                    continue
+                if msg.get("type") == "error":
+                    log.warning("spicetify extension error in %s: %s", str(msg.get("where", ""))[:40],
+                                re.sub(r"[\x00-\x1f\x7f]+", " ", str(msg.get("error", "")))[:300])
                     continue
                 if msg.get("type") == "lyrics":
                     self._store_lyrics(msg)
@@ -215,6 +220,11 @@ class Bridge:
                     received_at=time.monotonic(),
                     client_ts=int(msg.get("ts") or 0),
                 )
+                if not first_logged:
+                    first_logged = True
+                    log.info("first state from Spotify: %s (quality %s, track details %s)",
+                             st.name or "nothing playing", "yes" if st.quality else "no",
+                             "pending" if msg.get("trackInfo") is None else "yes")
                 self.state = st
                 changed = (st.uri != prev.uri or st.playback_id != prev.playback_id
                            or st.is_paused != prev.is_paused or st.is_buffering != prev.is_buffering
