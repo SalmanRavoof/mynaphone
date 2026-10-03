@@ -287,10 +287,28 @@
   function send(force) {
     try { sendState(force); } catch (e) { report("send", e); }
   }
+  // After a fresh start the extension once saw no track for 20 minutes while songs played. Say so when
+  // Spicetify.Player has nothing but Spotify's own player API has a track.
+  let noTrackSince = 0, stuckReported = false;
+  function playerApiHasTrack() {
+    try {
+      const api = Spicetify.Platform.PlayerAPI;
+      const st = api.getState ? api.getState() : api._state;
+      return !!(st && st.item);
+    } catch (e) { return false; }
+  }
   function sendState(force) {
     if (!ws || ws.readyState !== 1) return;
     const s = snapshot();
-    if (!s) return;
+    if (!s) {
+      noTrackSince = noTrackSince || Date.now();
+      if (!stuckReported && Date.now() - noTrackSince > 60000 && playerApiHasTrack()) {
+        stuckReported = true;
+        report("snapshot", "Spicetify.Player has had no track for a minute, but PlayerAPI has one");
+      }
+      return;
+    }
+    noTrackSince = 0;
     const albumUri = s.album && s.album.uri;
     if (albumUri && albumUri.startsWith("spotify:album:")) {
       s.albumInfo = details(albumUri, albumCache, [albumFromSpclient, albumFromGraphql, albumFromWebApi]);
