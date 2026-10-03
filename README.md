@@ -29,8 +29,7 @@ it hears.
 
 > [!NOTE]
 > Mynaphone has no packaged release yet. It runs from a copy of this repository with Python, and the
-> [install guide](docs/install.md) takes about 15 minutes. It is in daily use on the author's
-> Windows 10 laptop; Windows 11 hasn't been tested yet.
+> [install guide](docs/install.md) takes about 15 minutes. It is in daily use by its author.
 
 ## What it does
 

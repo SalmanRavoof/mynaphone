@@ -53,6 +53,5 @@ to keep. They're grouped by what you came to do, so start with the group that ma
 ## About these pages
 
 The documentation is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The
-screenshots show version 0.1.0 on Windows 10 at 150 % display scaling, with the author's own
-library. If a page is wrong or unclear, [open an issue](https://github.com/SalmanRavoof/mynaphone/issues)
+screenshots show version 0.1.0 at 150 % display scaling, with the author's own library. If a page is wrong or unclear, [open an issue](https://github.com/SalmanRavoof/mynaphone/issues)
 and name the page.

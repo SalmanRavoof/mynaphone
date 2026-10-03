@@ -24,6 +24,10 @@ licenses are also available through the links given.
 | [PyWinRT](https://github.com/pywinrt/pywinrt) (winrt-* packages) | MIT | Windows media-session API access. | [pywinrt/pywinrt](https://github.com/pywinrt/pywinrt) |
 | [Spicetify](https://github.com/spicetify/cli) | MIT | Hosts the Spotify bridge extension (installed separately by the user). | [spicetify/cli](https://github.com/spicetify/cli) |
 
+The letters of the Mynaphone wordmark are set in [Lexend](https://github.com/googlefonts/lexend),
+copyright 2018 The Lexend Project Authors, licensed under the SIL Open Font License 1.1. The
+wordmark images contain the letters as outlines; no font file is distributed.
+
 ## Data services
 
 - **MusicBrainz** data: core data CC0 1.0; some supplementary data CC BY-NC-SA 3.0, per the [MusicBrainz data license](https://musicbrainz.org/doc/About/Data_License).
