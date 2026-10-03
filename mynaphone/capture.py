@@ -175,15 +175,30 @@ def process_table() -> list[tuple[int, int, str]]:
         k32.CloseHandle(snap)
 
 
-def root_pid(process_name: str) -> int | None:
-    """Pid of the top-most process with this image name (the one whose parent is not the same app)."""
+def root_pid(process_name: str, current: int | None = None, table: list[tuple[int, int, str]] | None = None
+             ) -> int | None:
+    """Pid of the app's main process: a top-most process with this image name (its parent is not the same
+    app), preferring `current` while it still is one, then the one with the most child processes.
+
+    Chrome briefly starts lone chrome.exe processes (opening a link from another app, updates). Taking the
+    lowest pid let each of them take over the capture for a few seconds.
+    """
     name = process_name.lower()
-    procs = sorted((pid, ppid) for pid, ppid, exe in process_table() if exe.lower() == name)
+    procs = sorted((pid, ppid) for pid, ppid, exe in (table if table is not None else process_table())
+                   if exe.lower() == name)
     if not procs:
         return None
     pids = {pid for pid, _ in procs}
     roots = [pid for pid, ppid in procs if ppid not in pids]
-    return (roots or [procs[0][0]])[0]
+    if not roots:
+        return procs[0][0]
+    if current in roots:
+        return current
+    children = {pid: 0 for pid in roots}
+    for _, ppid in procs:
+        if ppid in children:
+            children[ppid] += 1
+    return max(roots, key=lambda pid: (children[pid], -pid))
 
 
 class ProcessCapture(_RingCapture):
@@ -240,7 +255,7 @@ class ProcessCapture(_RingCapture):
     def _supervise(self) -> None:
         """Keep a helper attached to the app's current process; wait while the app is not running."""
         while not self._stop.is_set():
-            pid = root_pid(self.process_name)
+            pid = root_pid(self.process_name, self.pid if self._alive else None)
             if pid is None:
                 if self._alive:
                     log.info("%s closed; waiting for it", self.process_name)

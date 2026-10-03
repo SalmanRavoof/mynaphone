@@ -113,3 +113,6 @@ All notable changes to Mynaphone are listed here. The format follows
 - A song that started on the previous song's quiet tail kept that tail, and the cut to its
   published length then clipped its ending (Toxicity). The trim now starts the song after the
   last stretch of 0.2 seconds or more of digital silence in the lead window.
+- Capture of Chrome restarted every few seconds. Chrome briefly starts lone chrome.exe processes
+  with lower pids, and the capture took the lowest one each time. It now stays on the process it
+  has while that one is still a top process, and otherwise picks the one with the most children.

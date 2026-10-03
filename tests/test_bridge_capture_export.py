@@ -70,6 +70,16 @@ def test_root_pid_picks_the_top_process(monkeypatch):
     assert cap.root_pid("msedge.exe") is None
 
 
+def test_root_pid_ignores_lone_short_lived_processes():
+    """Chrome starts lone chrome.exe processes with lower pids for a few seconds; they mustn't take over."""
+    from mynaphone.capture import root_pid
+    table = [(900, 600, "explorer.exe"), (2236, 17416, "chrome.exe"), (2240, 2236, "chrome.exe"),
+             (5120, 2236, "chrome.exe"), (344, 4400, "chrome.exe")]
+    assert root_pid("chrome.exe", table=table) == 2236              # the root with children
+    assert root_pid("chrome.exe", current=2236, table=table) == 2236
+    assert root_pid("chrome.exe", current=344, table=table[:4]) == 2236   # the lone one has gone
+
+
 def test_process_table_lists_this_process():
     import psutil
     table = {pid: (ppid, name) for pid, ppid, name in process_table()}
