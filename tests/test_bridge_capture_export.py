@@ -131,21 +131,25 @@ def test_export_plan_and_mirror(tmp_path):
     assert [d.name for _, d in p4.copy] == ["S.lrc"]
 
 
-def test_ended_take_collects_its_tail_alongside_the_next():
+def test_ended_take_collects_its_tail_alongside_the_next(monkeypatch):
     """Spotify's sound trails its clock, so the last song is still playing when the next is named."""
+    import mynaphone.capture as capture
+    now = [100.0]       # a fake clock: before Python 3.13, Windows' monotonic clock ticks every 15.6 ms
+    monkeypatch.setattr(capture.time, "monotonic", lambda: now[0])
     cap = _RingCapture(3.0)
     cap.rate = 10
 
     def chunk(v):
+        now[0] += 1.0
         return np.full((10, 2), v, dtype=np.float32)
 
-    cap.begin_take(time.monotonic() - 1)
+    cap.begin_take(now[0])
     cap._push(chunk(1))
-    old = cap.end_take(tail_seconds=60.0)
-    new = cap.begin_take(time.monotonic())
+    old = cap.end_take(tail_seconds=2.5)
+    new = cap.begin_take(now[0] + 0.5)
     cap._push(chunk(2))
     assert [c[0, 0] for c in old.chunks] == [1, 2] and [c[0, 0] for c in new.chunks] == [2]
-    old.tail_until = time.monotonic() - 1                  # the tail is over
+    now[0] += 1.0                                          # the tail is over
     cap._push(chunk(3))
     assert [c[0, 0] for c in old.chunks] == [1, 2] and [c[0, 0] for c in new.chunks] == [2, 3]
     assert cap.end_take().tail_until is None
