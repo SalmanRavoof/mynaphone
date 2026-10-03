@@ -38,6 +38,7 @@ class ActiveTake:
 
 STOP = "STOP"
 BLIP_SECONDS = 2.0   # a take replaced by the next song this fast was never that song playing
+START_LAG_MAX_MS = 6000   # the most start-up delay forgiven; Spotify's has been 1.5 to 3.7 s
 
 
 class Recorder:
@@ -310,6 +311,14 @@ class Recorder:
         expected = a.flags.get("start_position_ms", 0) + since_start * 1000.0
         drift = snap.position_ms - expected
         tol = self.cfg.rules.duration_tolerance_seconds * 1000.0
+        # Spotify names a track a second or more before its sound starts, so its position begins behind
+        # the clock. The first reading once the song is under way sets that lag; a stall is falling
+        # further behind it.
+        if "start_lag_ms" not in a.flags:
+            if snap.position_ms < 1000:
+                return
+            a.flags["start_lag_ms"] = int(min(max(-drift, 0.0), START_LAG_MAX_MS))
+        drift += a.flags["start_lag_ms"]
         if drift > tol and not a.flags.get("seek"):
             a.flags["seek"] = True
             log.info("seek detected (+%.1fs) in %s", drift / 1000, a.meta.title)

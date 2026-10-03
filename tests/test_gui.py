@@ -106,6 +106,23 @@ def test_mark_renders_every_state_and_tile(qapp, state):
         assert (red > 0) == (state == "recording")
 
 
+def test_tray_eye_is_big_enough_to_see_turn_red(qapp):
+    """At 150 % the tray icon is 24 px; the designer's eye alone gave it 8 red pixels."""
+    from PySide6.QtCore import QSize
+
+    def red(pm):
+        img = pm.toImage()
+        return sum(1 for x in range(img.width()) for y in range(img.height())
+                   if (c := img.pixelColor(x, y)).red() > 150 and c.green() < 110 and c.alpha() > 128)
+
+    assert all(icons._small_svg(s, v) for s in icons.MARK_STATES.values() for v in ("tile", "bare"))
+    tray = icons.app_icon("recording", tile=True).pixmap(QSize(16, 16), 1.5)
+    assert tray.width() == 24 and red(tray) >= 30
+    assert red(icons.app_icon("idle", tile=True).pixmap(QSize(16, 16), 1.5)) == 0
+    # the taskbar asks for 32 px at 150 %: it gets a sharp 48 px icon, not the 24 px one stretched
+    assert icons.app_icon("recording", tile=True).pixmap(QSize(32, 32), 1.5).width() == 48
+
+
 def test_nav_icons_exist_for_every_page(qapp):
     for name in ("Status", "Activity", "Library", "Settings", "Setup check", "Set up"):
         ic = icons.nav_icon(name)

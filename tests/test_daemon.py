@@ -117,6 +117,21 @@ def test_seek_is_detected_from_timeline(recorder, clock):
     assert rec.active.flags.get("seek") is True
 
 
+def test_spotify_start_up_delay_is_not_a_stall(recorder, clock):
+    """Spotify names a track about 2 s before its sound starts; only falling further behind is a stall."""
+    rec, loop = recorder
+    run(loop, rec._handle(snap("One"), "media", None))
+    clock.advance(4.5)
+    run(loop, rec._handle(snap("One", pos_ms=2_600), "timeline", None))    # 1.9 s behind, as on O Sanam
+    assert not rec.active.flags.get("buffering") and rec.active.flags["start_lag_ms"] == 1900
+    clock.advance(60.0)
+    run(loop, rec._handle(snap("One", pos_ms=62_600), "timeline", None))
+    assert not rec.active.flags.get("buffering")
+    clock.advance(30.0)
+    run(loop, rec._handle(snap("One", pos_ms=70_000), "timeline", None))   # stuck for over 20 s
+    assert rec.active.flags["buffering"]
+
+
 def test_boundary_timeline_quirk_is_ignored(recorder, clock):
     """At a track change Spotify sends the next song's timeline before the new title; must not count as a stall."""
     rec, loop = recorder

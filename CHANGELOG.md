@@ -94,3 +94,9 @@ All notable changes to Mynaphone are listed here. The format follows
   is dropped.
 - Some skip reasons, such as `capture_not_ready`, showed as raw codes in the Takes table. They read
   in words now, and a test checks that every reason the recorder gives has a label.
+- Every song was flagged "playback stalled" a few seconds in, because Spotify's position starts
+  1.5 to 3.7 seconds behind the clock while the track loads. That first lag is now the starting
+  point, and only falling further behind it counts as a stall.
+- The red eye was too small to see in the tray and on the taskbar. Up to 48 px the mark is drawn
+  from the designer's SVG with a bigger eye, and at 150 % scaling the taskbar now gets a sharp
+  48 px icon where it used to get a stretched 24 px one.
