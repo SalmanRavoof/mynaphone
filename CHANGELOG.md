@@ -106,3 +106,7 @@ All notable changes to Mynaphone are listed here. The format follows
   looked like a jump ahead. Each reading is now brought up to the current time before it's
   compared. A first reading up to 2.5 seconds ahead also counts as the song's start, and the log
   records each reading in a song's first 20 seconds.
+- Spotify's track details (ISRC, explicit flag, popularity) were missing for most songs. Asked
+  through the client's CosmosAsync, the metadata service mostly answered in protobuf, which the
+  bridge couldn't read. The bridge now fetches it with the client's token and reads either JSON or
+  protobuf. The web API fallback reports its HTTP status when it fails.

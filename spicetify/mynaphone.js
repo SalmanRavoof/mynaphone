@@ -68,6 +68,78 @@
     return clean(parts.join(" "));
   }
   const JSON_HEADERS = { Accept: "application/json" };
+  function accessToken() {
+    try { const t = Spicetify.Platform.Session.accessToken; if (t) return t; } catch (e) {}
+    try { return Spicetify.Platform.AuthorizationAPI.getState().token.accessToken || ""; } catch (e) {}
+    return "";
+  }
+  // The metadata service answers JSON when asked, but through CosmosAsync the Accept header is often
+  // lost and the reply is protobuf. Fetch it with the client's token and read either form.
+  async function getWithToken(url, label) {
+    const token = accessToken();
+    if (!token) throw new Error(label + ": no access token");
+    const r = await fetch(url, { headers: { Authorization: "Bearer " + token, Accept: "application/json" } });
+    if (!r.ok) throw new Error(label + ": HTTP " + r.status);
+    if ((r.headers.get("content-type") || "").includes("json")) return { json: await r.json() };
+    return { bytes: new Uint8Array(await r.arrayBuffer()) };
+  }
+  // just enough protobuf to read Spotify's Track message: field number -> list of raw values
+  function protoFields(buf) {
+    const out = new Map();
+    let i = 0;
+    const varint = () => {
+      let n = 0n, shift = 0n, b;
+      do {
+        if (i >= buf.length) throw new Error("truncated protobuf");
+        b = buf[i++];
+        n |= BigInt(b & 0x7f) << shift;
+        shift += 7n;
+      } while (b & 0x80);
+      return n;
+    };
+    while (i < buf.length) {
+      const key = Number(varint());
+      const field = key >> 3, wire = key & 7;
+      let v = null;
+      if (wire === 0) v = varint();
+      else if (wire === 2) { const len = Number(varint()); v = buf.subarray(i, i + len); i += len; }
+      else if (wire === 1) i += 8;
+      else if (wire === 5) i += 4;
+      else throw new Error("protobuf wire type " + wire);
+      if (i > buf.length) throw new Error("truncated protobuf");
+      if (!out.has(field)) out.set(field, []);
+      out.get(field).push(v);
+    }
+    return out;
+  }
+  const utf8 = b => new TextDecoder().decode(b);
+  const zigzag = n => (n === undefined ? undefined : Number((n >> 1n) ^ -(n & 1n)));
+  // Track: 2 name, 5 number, 6 disc_number, 7 duration, 8 popularity (sint32), 9 explicit,
+  // 10 external_id { 1 type, 2 id }
+  function trackFromProto(buf) {
+    const f = protoFields(buf);
+    const one = k => (f.get(k) || [])[0];
+    if (one(2) === undefined) throw new Error("metadata service: no track in the reply");
+    let isrc;
+    for (const raw of f.get(10) || []) {
+      const e = protoFields(raw);
+      const type = e.has(1) ? utf8(e.get(1)[0]) : "";
+      if (type.toLowerCase() === "isrc" && e.has(2)) isrc = utf8(e.get(2)[0]);
+    }
+    return {
+      isrc: isrc, explicit: one(9) === undefined ? undefined : one(9) === 1n, popularity: zigzag(one(8)),
+      track_number: zigzag(one(5)), disc_number: zigzag(one(6)), duration_ms: zigzag(one(7)),
+      source: "spclient protobuf",
+    };
+  }
+  function trackFromJson(t) {
+    if (!t || t.error || !t.name) throw new Error("metadata service: " + errorText(t));
+    const isrc = (t.external_id || []).find(x => (x.type || "").toLowerCase() === "isrc");
+    return {
+      isrc: isrc ? isrc.id : undefined, explicit: t.explicit, popularity: t.popularity,
+      track_number: t.number, disc_number: t.disc_number, duration_ms: t.duration, source: "spclient",
+    };
+  }
   function isoDate(d) {
     if (!d || !d.year) return { date: "", precision: "" };
     const p2 = n => String(n).padStart(2, "0");
@@ -76,18 +148,18 @@
     return { date: d.year + "-" + p2(d.month) + "-" + p2(d.day), precision: "day" };
   }
   async function trackFromSpclient(id) {
-    const t = await Spicetify.CosmosAsync.get(
+    const r = await getWithToken(
+      "https://spclient.wg.spotify.com/metadata/4/track/" + idToHex(id) + "?market=from_token", "metadata service");
+    return r.json ? trackFromJson(r.json) : trackFromProto(r.bytes);
+  }
+  // the old route, kept in case the client's fetch is refused: answers JSON now and then
+  async function trackFromCosmos(id) {
+    return trackFromJson(await Spicetify.CosmosAsync.get(
       "https://spclient.wg.spotify.com/metadata/4/track/" + idToHex(id) + "?market=from_token", undefined,
-      JSON_HEADERS);
-    if (!t || t.error || !t.name) throw new Error("metadata service: " + errorText(t));
-    const isrc = (t.external_id || []).find(x => (x.type || "").toLowerCase() === "isrc");
-    return {
-      isrc: isrc ? isrc.id : undefined, explicit: t.explicit, popularity: t.popularity,
-      track_number: t.number, disc_number: t.disc_number, duration_ms: t.duration, source: "spclient",
-    };
+      JSON_HEADERS));
   }
   async function trackFromWebApi(id) {
-    const t = await Spicetify.CosmosAsync.get("https://api.spotify.com/v1/tracks/" + id);
+    const t = (await getWithToken("https://api.spotify.com/v1/tracks/" + id, "web API")).json;
     if (!t || t.error || !t.id) throw new Error("web API: " + errorText(t));
     return {
       isrc: t.external_ids && t.external_ids.isrc, explicit: t.explicit, popularity: t.popularity,
@@ -214,7 +286,7 @@
       s.albumInfo = details(albumUri, albumCache, [albumFromSpclient, albumFromGraphql, albumFromWebApi]);
     }
     if (s.uri && s.uri.startsWith("spotify:track:")) {
-      s.trackInfo = details(s.uri, trackCache, [trackFromSpclient, trackFromWebApi]);
+      s.trackInfo = details(s.uri, trackCache, [trackFromSpclient, trackFromCosmos, trackFromWebApi]);
     }
     // lyrics travel once per track, as their own message, since they are large
     if (s.uri && !lyricsSent.has(s.uri)) {
