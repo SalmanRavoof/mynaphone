@@ -132,6 +132,33 @@ def test_spotify_start_up_delay_is_not_a_stall(recorder, clock):
     assert rec.active.flags["buffering"]
 
 
+def test_reading_handled_late_is_not_a_seek(recorder, clock):
+    """While a long song is written out, the queue waits, so the new song's first timeline reading is
+    handled seconds after Spotify sent it. Taken at face value it set a 5 s start lag, and the next fresh
+    reading looked like a 3 s jump ahead (Hydrogen, Felina, Jessie's Land and four more on 2026-10-02)."""
+    rec, loop = recorder
+    run(loop, rec._handle(snap("One"), "media", None))
+    clock.advance(9.0)
+    late = snap("One", pos_ms=2_000)                                       # sent at 4 s, 2 s behind
+    late.last_updated -= dt.timedelta(seconds=5)
+    run(loop, rec._handle(late, "timeline", None))
+    assert 1_800 <= rec.active.flags["start_lag_ms"] <= 2_200
+    clock.advance(4.5)
+    run(loop, rec._handle(snap("One", pos_ms=11_500), "timeline", None))   # fresh, still 2 s behind
+    assert not rec.active.flags.get("seek") and not rec.active.flags.get("buffering")
+
+
+def test_small_lead_at_the_start_is_not_a_seek(recorder, clock):
+    rec, loop = recorder
+    run(loop, rec._handle(snap("One"), "media", None))
+    clock.advance(4.5)
+    run(loop, rec._handle(snap("One", pos_ms=6_400), "timeline", None))    # 1.9 s ahead
+    assert not rec.active.flags.get("seek") and rec.active.flags["start_lag_ms"] == -1900
+    clock.advance(60.0)
+    run(loop, rec._handle(snap("One", pos_ms=66_400), "timeline", None))
+    assert not rec.active.flags.get("seek") and not rec.active.flags.get("buffering")
+
+
 def test_boundary_timeline_quirk_is_ignored(recorder, clock):
     """At a track change Spotify sends the next song's timeline before the new title; must not count as a stall."""
     rec, loop = recorder

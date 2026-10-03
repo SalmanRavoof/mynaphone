@@ -39,6 +39,8 @@ class ActiveTake:
 STOP = "STOP"
 BLIP_SECONDS = 2.0   # a take replaced by the next song this fast was never that song playing
 START_LAG_MAX_MS = 6000   # the most start-up delay forgiven; Spotify's has been 1.5 to 3.7 s
+START_LEAD_MAX_MS = 2500   # the most a song's first reading may run ahead of the clock and still be its start
+TIMELINE_LOG_SECONDS = 20.0   # log each timeline reading this far into a take, to diagnose seek and stall flags
 
 
 class Recorder:
@@ -308,16 +310,24 @@ class Recorder:
             return
         if snap.position_ms < 3000 and since_start > exp_s - 5.0:
             return
+        # The position is as of the reading's own timestamp. A reading handled late (the queue waits while
+        # a long song is written out) would otherwise look seconds behind, so bring it up to now.
+        position = snap.expected_position_ms()
         expected = a.flags.get("start_position_ms", 0) + since_start * 1000.0
-        drift = snap.position_ms - expected
+        drift = position - expected
         tol = self.cfg.rules.duration_tolerance_seconds * 1000.0
+        if since_start < TIMELINE_LOG_SECONDS:
+            age = ((dt.datetime.now(dt.timezone.utc) - snap.last_updated).total_seconds() * 1000.0)
+            log.info("timeline in %s: at %.1fs, reported %.1fs (%.0f ms old), drift %+.1fs, start lag %s",
+                     a.meta.title, since_start, snap.position_ms / 1000, age, drift / 1000,
+                     a.flags.get("start_lag_ms", "unset"))
         # Spotify names a track a second or more before its sound starts, so its position begins behind
         # the clock. The first reading once the song is under way sets that lag; a stall is falling
-        # further behind it.
+        # further behind it. A small lead is taken the same way, so the start can't pass for a seek.
         if "start_lag_ms" not in a.flags:
-            if snap.position_ms < 1000:
+            if position < 1000:
                 return
-            a.flags["start_lag_ms"] = int(min(max(-drift, 0.0), START_LAG_MAX_MS))
+            a.flags["start_lag_ms"] = int(min(max(-drift, -START_LEAD_MAX_MS), START_LAG_MAX_MS))
         drift += a.flags["start_lag_ms"]
         if drift > tol and not a.flags.get("seek"):
             a.flags["seek"] = True

@@ -100,3 +100,9 @@ All notable changes to Mynaphone are listed here. The format follows
 - The red eye was too small to see in the tray and on the taskbar. Up to 48 px the mark is drawn
   from the designer's SVG with a bigger eye, and at 150 % scaling the taskbar now gets a sharp
   48 px icon where it used to get a stretched 24 px one.
+- Songs that followed a long one were often discarded as "seek detected", about 6 seconds in.
+  While the long song was written out, the new song's first position reading waited in the queue.
+  Read seconds late, it looked like a 5-second start-up delay, and the next fresh reading then
+  looked like a jump ahead. Each reading is now brought up to the current time before it's
+  compared. A first reading up to 2.5 seconds ahead also counts as the song's start, and the log
+  records each reading in a song's first 20 seconds.
