@@ -66,6 +66,7 @@ class Identity:
     country: str = ""
     status: str = ""
     original_date: str = ""
+    release_date: str = ""          # the matched edition's own date, when the original year replaced it
     language: str = ""
     media_format: str = ""
     explicit: bool | None = None
@@ -643,6 +644,20 @@ def prefer_vocals(ident: Identity) -> None:
         ident.artist = ", ".join(ident.vocals)
 
 
+def prefer_original_year(ident: Identity) -> None:
+    """Date the song by its album's first release, not by the edition the fingerprint matched.
+
+    AcoustID matched Wish You Were Here to its 2025 reissue; people know it as 1975. The matched
+    edition's date stays in release_date. A year typed in the Library editor still wins.
+    """
+    orig = ident.original_date or ""
+    if not orig[:4].isdigit() or (ident.year and int(orig[:4]) >= ident.year):
+        return
+    ident.release_date = ident.release_date or ident.date
+    ident.year = int(orig[:4])
+    ident.date = orig
+
+
 def enrich_from_musicbrainz(ident: Identity, contact: str = "") -> None:
     """Fill composer/lyricist/singers/ISRC/label/genres/... from MusicBrainz. Best effort."""
     from . import musicbrainz as mb
@@ -663,6 +678,7 @@ def enrich_from_musicbrainz(ident: Identity, contact: str = "") -> None:
             ident.label = rel["label"] or ident.label
             ident.catalog = rel["catalog"]
             ident.original_date = rel["original_date"]
+            prefer_original_year(ident)
             ident.release_type = rel["rg_type"] or ident.release_type
             if rel["rg_secondary"]:
                 ident.secondary_types = list(dict.fromkeys(ident.secondary_types + rel["rg_secondary"]))

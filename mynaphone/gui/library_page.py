@@ -186,6 +186,12 @@ class LibraryPage(QWidget):
         self.kind.setFixedWidth(220)
         self.kind.setToolTip("Force the song into the Soundtracks, Artists or Singles layout, or let the app decide.")
         form.addRow("Filed as", self.kind)
+        self.instrumental = QComboBox()
+        self.instrumental.addItems(["Decide automatically", "Yes, no vocals", "No, it has vocals"])
+        self.instrumental.setFixedWidth(220)
+        self.instrumental.setToolTip("An instrumental needs no lyrics or lyricist, so they stop showing as missing. "
+                                     "The app decides from the title and album unless you choose.")
+        form.addRow("Instrumental", self.instrumental)
         rl.addLayout(form)
         rl.addWidget(label("Lists such as composers or genres take several names separated by semicolons. "
                            "Fields you edit are kept even when the song is looked up again.", "small", wrap=True))
@@ -282,8 +288,8 @@ class LibraryPage(QWidget):
             self._load(int(tid))
 
     def _set_editor_enabled(self, on: bool) -> None:
-        for w in list(self.fields.values()) + [self.kind, self.lyrics, self.btn_cover, self.btn_lookup,
-                                               self.btn_folder, self.btn_save]:
+        for w in list(self.fields.values()) + [self.kind, self.instrumental, self.lyrics, self.btn_cover,
+                                               self.btn_lookup, self.btn_folder, self.btn_save]:
             w.setEnabled(on)
 
     def _load(self, tid: int) -> None:
@@ -311,6 +317,7 @@ class LibraryPage(QWidget):
             e.setStyleSheet(f"border-color: {theme.ACCENT};" if key in manual else "")
         kinds = {"soundtrack": 1, "album": 2, "single": 3, "compilation": 4}
         self.kind.setCurrentIndex(kinds.get(manual.get("kind", ""), 0))
+        self.instrumental.setCurrentIndex({True: 1, False: 2}.get(manual.get("instrumental"), 0))
         cover, lyrics = metadata.read_file_extras(Path(r["file_path"]))
         self._show_cover(cover)
         self.lyrics.setPlainText(lyrics)
@@ -359,6 +366,9 @@ class LibraryPage(QWidget):
         k = kinds[self.kind.currentIndex()]
         if k != manual.get("kind", ""):
             out["kind"] = k
+        inst = ["", True, False][self.instrumental.currentIndex()]
+        if inst != manual.get("instrumental", ""):
+            out["instrumental"] = inst   # "" clears an earlier choice
         return out
 
     def apply(self, lookup: bool) -> None:

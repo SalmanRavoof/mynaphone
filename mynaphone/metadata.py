@@ -32,7 +32,7 @@ LABELS = dict(FIELDS)
 
 # fields a person can edit; the rest are lookup-only
 EDITABLE = ["title", "artist", "album", "album_artist", "year", "track_number", "track_total",
-            "disc_number", "disc_total", "composers", "lyricists", "genres", "isrc", "label", "kind"]
+            "disc_number", "disc_total", "composers", "lyricists", "genres", "isrc", "label", "kind", "instrumental"]
 LIST_FIELDS = {"composers", "lyricists", "genres", "artists"}
 
 
@@ -59,6 +59,8 @@ def missing_fields(ident: Identity, has_cover: bool, lyrics_state: str) -> list[
 
 def apply_manual(ident: Identity, manual: dict) -> None:
     for k, v in (manual or {}).items():
+        if k == "instrumental":
+            continue                      # not a tag; refresh_track reads it
         if k == "kind":
             if v == "soundtrack" and not ident.is_soundtrack:
                 ident.secondary_types.append("Soundtrack")
@@ -173,8 +175,11 @@ def refresh_track(cfg: Config, store: Store, row, lookup: bool = True, manual: d
         cover = new_cover
     if cover is None and lookup:
         cover = resolve_cover(path, ident, meta.get("cover_url") or "")
-    instrumental = (identify.is_instrumental(ident.title, ident.album)
-                    or ("lyrics_state" in row.keys() and row["lyrics_state"] == "instrumental"))
+    if isinstance(manual_all.get("instrumental"), bool):
+        instrumental = manual_all["instrumental"]       # set in the Library editor
+    else:
+        instrumental = (identify.is_instrumental(ident.title, ident.album)
+                        or ("lyrics_state" in row.keys() and row["lyrics_state"] == "instrumental"))
     if new_lyrics is not None:
         lyrics_text = new_lyrics
     elif lookup and not instrumental and lyrics_state_of(lyrics_text) != "synced":

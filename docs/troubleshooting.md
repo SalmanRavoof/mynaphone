@@ -36,7 +36,9 @@ Start with **Setup check** > **Run checks** in the app. Then find your symptom h
 
 ## Wrong song or wrong album
 
-The fingerprint matched a different release (a reissue, a compilation). On the Library page select
+The fingerprint matched a different release (a reissue, a compilation). For a reissue the year
+already follows the album's first release on MusicBrainz, so Wish You Were Here files under 1975,
+not 2025. For anything else, on the Library page select
 the song, correct the fields and select **Save**. Manual fields are kept on later lookups. If the
 identification itself is wrong, fix the title and artist, then select **Look up again**.
 

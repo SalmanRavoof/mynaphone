@@ -77,7 +77,10 @@ Most discards mean the song was not played cleanly end to end. Play it again fro
    as synced.
 4. To replace the cover, select **Cover image** and choose a picture file.
 5. To force the song under Soundtracks, Artists or Singles, change **Filed as**.
-6. Select **Save**. The file is re-tagged, and moved if its folder name changed.
+6. If the song has no vocals, set **Instrumental** to **Yes, no vocals**. Lyrics and lyricist then
+   stop showing as missing, and the app stops looking for them. The app guesses from titles and
+   albums that say "Instrumental"; choose **No, it has vocals** when that guess is wrong.
+7. Select **Save**. The file is re-tagged, and moved if its folder name changed.
 
 Fields you edit get a blue border and automatic lookups never overwrite them.
 

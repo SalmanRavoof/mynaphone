@@ -36,6 +36,10 @@ All notable changes to Mynaphone are listed here. The format follows
   lyrics in each.
 - Free-space estimate for the chosen library drive, in Settings, Set up and the Setup check.
 - In-app Set up page for first run: tools download, AcoustID key, library folder, bridges.
+- An **Instrumental** choice in the Library editor. Marking a song as instrumental stops lyrics and
+  lyricist showing as missing; marking it as having vocals overrides a title that says Instrumental.
+- Years follow the album's first release. When the fingerprint matches a reissue (the 2025 Wish You
+  Were Here), the year tag and folder use the original year, 1975 there.
 - Volume checks: a take started with the app below 100 % in the Volume Mixer or in its own slider
   is rejected; the Windows master volume and mute are ignored (they do not affect per-app capture).
 - A stop reported at a song's expected end counts as a normal finish (YouTube Music between tracks).

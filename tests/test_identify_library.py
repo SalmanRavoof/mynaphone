@@ -275,3 +275,41 @@ def test_split_names_keeps_duos_together():
     assert split_names("Shreya Ghoshal and Sonu Nigam") == ["Shreya Ghoshal", "Sonu Nigam"]
     assert same_name("Rekha Bhardwaj", "Rekha Bharadwaj") and same_name("Shrradha Pandit", "Shraddha Pandit")
     assert not same_name("Sonu Nigam", "Shreya Ghoshal")
+
+
+def test_original_year_wins_over_a_reissue():
+    """AcoustID matched Wish You Were Here to its 2025 reissue; the album came out in 1975."""
+    from mynaphone.identify import prefer_original_year
+    i = Identity(year=2025, date="2025-09-12", original_date="1975-09-12")
+    prefer_original_year(i)
+    assert i.year == 1975 and i.date == "1975-09-12" and i.release_date == "2025-09-12"
+    same = Identity(year=1975, date="1975-09-12", original_date="1975-09-12")
+    prefer_original_year(same)
+    assert same.date == "1975-09-12" and same.release_date == ""
+    manual = Identity(year=2025, date="2025", original_date="1975")
+    prefer_original_year(manual)
+    apply_manual(manual, {"year": "2025"})                     # a typed year still wins
+    assert manual.year == 2025
+
+
+def test_instrumental_choice_in_the_library_editor(tmp_config):
+    from mynaphone.metadata import refresh_track
+    from mynaphone.store import Store
+    rate = 48000
+    x = np.zeros(rate, dtype=np.float32)
+    path = tmp_config.paths.library_dir / "Track (Instrumental).flac"
+    path.parent.mkdir(parents=True)
+    sf.write(str(path), np.stack([x, x], axis=1), rate, subtype="PCM_16")
+    store = Store(tmp_config.paths.db_path)
+    tid = store.add_track(artist="A", title="Theme", album="Score", album_artist="A", duration_ms=1000,
+                          file_path=str(path), state="library", meta_json={}, lyrics_state="none")
+    res = refresh_track(tmp_config, store, store.track(tid), lookup=False, manual={"instrumental": True}, move=False)
+    assert store.track(tid)["lyrics_state"] == "instrumental"
+    assert "lyrics" not in res["missing"] and "lyricists" not in res["missing"]
+    # the title says Instrumental, but the person says it has vocals
+    store.conn.execute("UPDATE tracks SET title='Theme (Instrumental)' WHERE id=?", (tid,))
+    res = refresh_track(tmp_config, store, store.track(tid), lookup=False, manual={"instrumental": False}, move=False)
+    assert store.track(tid)["lyrics_state"] == "none" and "lyricists" in res["missing"]
+    assert json.loads(store.track(tid)["manual_json"])["instrumental"] is False
+    refresh_track(tmp_config, store, store.track(tid), lookup=False, manual={"instrumental": ""}, move=False)
+    assert "instrumental" not in json.loads(store.track(tid)["manual_json"])
