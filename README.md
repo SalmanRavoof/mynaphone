@@ -161,6 +161,10 @@ the same terms. The components it builds on, among them ffmpeg, Chromaprint, Qt 
 mutagen, have their own compatible licenses, listed in the [third-party notices](THIRD_PARTY_NOTICES.md).
 You may reuse the documentation under CC BY 4.0.
 
+The Mynaphone name, the myna mark and the wordmark are not covered by either license. They belong to
+Salman Ravoof, all rights reserved, and may not be copied or reused. A modified version you distribute
+needs its own name and logo. See [Name and logo](docs/legal.md#name-and-logo).
+
 ## Acknowledgements
 
 Song identification uses the open [MusicBrainz database](https://musicbrainz.org) and the

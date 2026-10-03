@@ -40,3 +40,7 @@ If you package Mynaphone with the `tools` binaries and the Python environment in
 download, include this file and `LICENSE`, the full license texts of every component above, and
 either the corresponding source code of Mynaphone, FFmpeg, Chromaprint and Qt or a written offer to
 provide it, as the GPL and LGPL require. The documentation in `docs/` is licensed CC BY 4.0.
+
+The Mynaphone name, the myna mark and the wordmark (`mynaphone/gui/assets/mark/`, the icons in
+`browser-extension/` and `docs/images/mynaphone-horizontal*.svg`) are not licensed under the GPL or
+CC BY 4.0. All rights reserved by Salman Ravoof.

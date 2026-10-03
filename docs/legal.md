@@ -59,6 +59,17 @@ in this documentation.
 Product and service names are the trademarks of their respective owners and are used only to identify
 the services the app can work with. No logos of those services are used.
 
+## Name and logo
+
+The Mynaphone name, the myna mark and the wordmark belong to Salman Ravoof. All rights are reserved:
+they aren't covered by the GPL that applies to the code or by the CC BY 4.0 license that applies to
+this documentation, and they may not be copied, modified or reused. That covers the files in
+`mynaphone/gui/assets/mark/`, the icons in `browser-extension/` and the wordmark images in
+`docs/images/`.
+
+You may fork and distribute the code under the GPL. A version you distribute needs its own name and
+logo, so nobody mistakes it for this project.
+
 ## Data sources and their terms
 
 - **MusicBrainz.** Core data is released under CC0; some supplementary data is CC BY-NC-SA 3.0.

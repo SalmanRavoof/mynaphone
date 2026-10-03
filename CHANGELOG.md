@@ -56,6 +56,8 @@ All notable changes to Mynaphone are listed here. The format follows
 
 ### Changed
 - License: GNU GPL v3 or later.
+- The Mynaphone name, mark and wordmark are reserved by their owner and aren't covered by the GPL
+  or CC BY 4.0.
 - The package reads its version number from `mynaphone/__init__.py`.
 - The designed mark, a myna in profile whose eye turns red while a song records, replaces the
   placeholder drawn in code. The window, the tray and the browser extension use the designer's
