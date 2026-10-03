@@ -5,6 +5,11 @@
   </picture>
 </h1>
 
+[![Tests](https://github.com/SalmanRavoof/mynaphone/actions/workflows/tests.yml/badge.svg)](https://github.com/SalmanRavoof/mynaphone/actions/workflows/tests.yml)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
+![Windows 10 2004+ and 11](https://img.shields.io/badge/Windows-10%202004%2B%20%7C%2011-0078D4)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-3776AB)
+
 Keeps a private, properly tagged copy of the songs you play on your Windows PC, so you can listen
 when the internet is down.
 
@@ -19,9 +24,18 @@ for the car.
 The name is [myna plus gramophone](docs/name.md). The myna is the Indian bird that repeats whatever
 it hears.
 
-## What it does
+**[Install](docs/install.md)** · **[Record your first song](docs/first-song.md)** ·
+**[Everyday use](docs/using.md)** · **[Troubleshooting](docs/troubleshooting.md)** ·
+**[All docs](docs/README.md)**
 
-![The Status page while Mynaphone waits for the next song in Spotify, with counts and the latest takes](docs/images/status.png)
+![The Status page recording Woh Ladki Jo from Spotify, with the cover, a progress line, the counts and the last few takes](docs/images/status.png)
+
+> [!NOTE]
+> Mynaphone has no packaged release yet. It runs from a copy of this repository with Python, and the
+> [install guide](docs/install.md) takes about 15 minutes. It is in daily use on the author's
+> Windows 10 laptop; Windows 11 hasn't been tested yet.
+
+## What it does
 
 - Records per app, so notifications and other programs never end up in a recording.
 - Keeps a take only when the song played from the first second to the last, with no pause, seek,
@@ -40,7 +54,7 @@ it hears.
 
 | Every take and why it was kept or discarded | Each song's missing details beside the editor |
 |---|---|
-| ![The Activity page, listing takes with their result and reason](docs/images/activity.png) | ![The Library page, with a song's missing details beside the editor](docs/images/library.png) |
+| ![The Activity page, listing takes with their result and reason above the live log](docs/images/activity.png) | ![The Library page, with a song's missing details beside the editor](docs/images/library.png) |
 
 ## Things it never does
 
@@ -56,7 +70,7 @@ it hears.
 | Music sources | Spotify desktop app; YouTube and YouTube Music in Chrome or Edge with the bundled browser extension | Any other Windows app that reports what it plays can be added by process name, untested |
 | Spotify plans | Free, Premium, Premium with lossless | The recording matches the plan's stream quality; lossless captures stay FLAC |
 | Output formats | AAC (default), MP3, Opus, FLAC | Full tags, cover art and lyrics in every format |
-| Players for the result | Car head units, iPhone, Android, any computer; foobar2000, MusicBee, Poweramp, Navidrome, Jellyfin, Plex | Synced lyrics are embedded and also saved as `.lrc` files |
+| Players for the result | Car head units, iPhone, Android, any computer; foobar2000, MusicBee, Poweramp, Navidrome, Jellyfin, Plexamp | Synced lyrics are embedded and also saved as `.lrc` files |
 | Metadata sources | AcoustID, MusicBrainz, Spotify, YouTube Music, LRCLIB, Cover Art Archive, Apple's iTunes Search API, Last.fm | All free; AcoustID needs a free application key, and Last.fm (optional, for genres) a free API key |
 
 ## System requirements
@@ -76,7 +90,8 @@ recorder depends on are Windows features. The library it produces plays on any d
 
 ## Install
 
-1. Install Python 3.11 or later from python.org, ticking "Add Python to PATH".
+1. Install Python 3.11 or later from the [Python downloads for Windows](https://www.python.org/downloads/windows/),
+   ticking **Add python.exe to PATH**.
 2. Download or clone this repository, for example to `D:\Mynaphone`.
 3. In PowerShell, inside that folder, run these 3 commands:
 
@@ -98,25 +113,34 @@ recorder depends on are Windows features. The library it produces plays on any d
    It opens on a **Set up** page that walks you through the rest: the free AcoustID key, the library
    folder with an estimate of how many songs fit, and the optional Spotify and browser bridges.
 
-The [install guide](docs/install.md) has every step with screenshots' worth of detail.
+The [install guide](docs/install.md) covers each step in full, with screenshots of the Set up and
+Setup check pages, plus updating and uninstalling.
 
 ## Quick start
 
 1. Open Mynaphone and go to **Setup check**. Select **Run checks** and fix anything marked Problem.
 2. In Spotify, set **Streaming quality** to a fixed value rather than Automatic, and switch
    **Normalize volume**, **Crossfade** and **Automix** off. The Setup check page lists these.
-3. On the **Status** page, select **Start**. The tray icon's dot turns red while a song records.
+3. On the **Status** page, select **Start**. The myna's eye in the tray icon turns red while a song records.
 4. Play a song in Spotify from its beginning and let it finish.
 5. Within a minute the song appears on the **Library** page with its tags, and the file is in your
    library folder.
 
+[Record your first song](docs/first-song.md) walks through the same steps and shows what each page
+looks like along the way.
+
 ## Documentation
+
+The [documentation index](docs/README.md) groups every page by what you want to do.
 
 | Page | What you'll find |
 |---|---|
 | [Install guide](docs/install.md) | Setup step by step, the AcoustID key, the Spotify and browser bridges, updating, uninstalling |
+| [Record your first song](docs/first-song.md) | A first recording from start to finish, and what each page shows along the way |
 | [Using Mynaphone](docs/using.md) | Everyday tasks: recording, harvest mode, fixing a song's details, exporting to USB |
-| [Settings reference](docs/settings.md) | Every setting, its default and what it changes |
+| [The window and the tray](docs/window.md) | Every page, button and column, with screenshots |
+| [Settings reference](docs/settings.md) | Every setting, where it is in the window, its default and what it changes |
+| [Command line](docs/command-line.md) | Every command and option, for running without the window |
 | [How it works](docs/how-it-works.md) | The capture pipeline, the keep-or-discard rules, identification, what goes over the network |
 | [Troubleshooting guide](docs/troubleshooting.md) | Symptoms, causes and fixes, and where the logs are |
 | [Questions and answers](docs/faq.md) | Quality, account safety, formats, devices, privacy, comparisons with other tools |
@@ -141,25 +165,28 @@ You are responsible for checking the law and the terms that apply to you before 
 and for what you do with the recordings. Don't share, upload, sell or redistribute them.
 
 Mynaphone is an independent open-source project with no connection to Spotify, YouTube, Google,
-MusicBrainz, AcoustID, LRCLIB, Apple or Last.fm. Those names are trademarks of their owners and appear here only to
-say which services the app works with.
+MusicBrainz, AcoustID, LRCLIB, Apple or Last.fm. Those names are trademarks of their owners and
+appear here only to say which services the app works with.
 
 The software comes without warranty of any kind, as the [GPL license text](LICENSE) and the
 [legal notice](docs/legal.md) explain.
 
-## Contributing and support
+## Getting help and contributing
 
-Bug reports and ideas are welcome as GitHub issues. The [contributing guide](CONTRIBUTING.md)
-explains how to set up a development environment, run the tests, and which kinds of changes will
-not be merged.
+- For a question or a problem, start with the [troubleshooting guide](docs/troubleshooting.md) and the
+  [questions and answers](docs/faq.md). [Getting help](SUPPORT.md) says what to include in an issue.
+- Bug reports and ideas are welcome as [GitHub issues](https://github.com/SalmanRavoof/mynaphone/issues).
+- The [contributing guide](CONTRIBUTING.md) explains how to set up a development environment, run
+  the tests, and which kinds of changes will not be merged.
+- Report a security problem privately, as the [security policy](SECURITY.md) describes.
 
 ## License
 
-Mynaphone is free software under the GNU General Public License, version 3 or later. You may use,
-study, share and improve it, and a modified version you distribute must come with its source under
-the same terms. The components it builds on, among them ffmpeg, Chromaprint, Qt through PySide6 and
-mutagen, have their own compatible licenses, listed in the [third-party notices](THIRD_PARTY_NOTICES.md).
-You may reuse the documentation under CC BY 4.0.
+Mynaphone is free software under the [GNU General Public License, version 3 or later](LICENSE). You
+may use, study, share and improve it, and a modified version you distribute must come with its
+source under the same terms. The components it builds on have their own compatible licenses, listed
+in the [third-party notices](THIRD_PARTY_NOTICES.md). You may reuse the documentation under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 The Mynaphone name, the myna mark and the wordmark are not covered by either license. They belong to
 Salman Ravoof, all rights reserved, and may not be copied or reused. A modified version you distribute
@@ -167,9 +194,34 @@ needs its own name and logo. See [Name and logo](docs/legal.md#name-and-logo).
 
 ## Acknowledgements
 
-Song identification uses the open [MusicBrainz database](https://musicbrainz.org) and the
-[AcoustID service](https://acoustid.org). Lyrics come from [the LRCLIB project](https://lrclib.net). Genres come from
-[Apple's iTunes Search API](https://performance-partners.apple.com/search-api) and
-[the Last.fm API](https://www.last.fm/api).
-Encoding uses [the FFmpeg project](https://ffmpeg.org) and fingerprinting uses
-[the Chromaprint library](https://acoustid.org/chromaprint). The interface is built with Qt through PySide6.
+Mynaphone stands on other people's open work. Each project below is linked to its home, and the
+[third-party notices](THIRD_PARTY_NOTICES.md) give every license.
+
+Song data and lookups:
+
+- [The MusicBrainz database](https://musicbrainz.org), run by the MetaBrainz Foundation, for
+  releases, recordings, credits and the [genre list](https://musicbrainz.org/genres).
+- [The AcoustID service](https://acoustid.org), for matching fingerprints to MusicBrainz recordings.
+- [The Cover Art Archive](https://coverartarchive.org), for album covers by MusicBrainz release.
+- [The LRCLIB project](https://lrclib.net), for synced and plain lyrics.
+- [Apple's iTunes Search API](https://performance-partners.apple.com/search-api) and
+  [the Last.fm API](https://www.last.fm/api), for genres.
+- [The ytmusicapi library](https://github.com/sigma67/ytmusicapi), for YouTube Music catalog lookups.
+
+Audio, tags and the window:
+
+- [The FFmpeg project](https://ffmpeg.org), through the [gyan.dev Windows builds](https://www.gyan.dev/ffmpeg/builds/),
+  for encoding.
+- [The Chromaprint library](https://acoustid.org/chromaprint) and its `fpcalc` tool, for fingerprints.
+- [Qt](https://www.qt.io/), through [Qt for Python (PySide6)](https://doc.qt.io/qtforpython-6/), for the
+  window and the tray icon.
+- [The mutagen library](https://github.com/quodlibet/mutagen), for reading and writing tags.
+- [PyAudioWPatch](https://github.com/s0d3s/PyAudioWPatch) on [PortAudio](https://portaudio.com/), for
+  whole-device capture, and [python-soundfile](https://github.com/bastibe/python-soundfile) on
+  [libsndfile](https://libsndfile.github.io/libsndfile/), for writing FLAC.
+- [PyWinRT](https://github.com/pywinrt/pywinrt), for the Windows media-session API, and
+  [pycaw](https://github.com/AndreMiras/pycaw) with [comtypes](https://github.com/enthought/comtypes),
+  for per-app volume and audio sessions.
+- [NumPy](https://numpy.org), [psutil](https://github.com/giampaolo/psutil) and
+  [websockets](https://github.com/python-websockets/websockets).
+- [Spicetify](https://spicetify.app), which hosts the Spotify bridge inside the Spotify app.

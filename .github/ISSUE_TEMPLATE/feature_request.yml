@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest something Mynaphone could do for you.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Mynaphone records what Windows is already playing, on your own PC, for your own listening.
+        Downloading from a service, getting around copy protection and sharing recordings are out of scope;
+        the [contributing guide](https://github.com/SalmanRavoof/mynaphone/blob/main/CONTRIBUTING.md#what-will-not-be-merged)
+        has the full list.
+  - type: textarea
+    id: what
+    attributes:
+      label: What you'd like it to do
+      description: What you're trying to do, and where Mynaphone gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: how
+    attributes:
+      label: How you'd use it
+      description: The music app or service, the device you listen on, and how often this comes up for you.
+  - type: textarea
+    id: tried
+    attributes:
+      label: Anything you've tried so far
+      description: Settings, workarounds or other tools you've used for this, if any.

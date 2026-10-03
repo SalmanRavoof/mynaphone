@@ -5,26 +5,36 @@ use the app.
 
 ## From a playing song to a filed one
 
+```mermaid
+flowchart LR
+    src["Spotify or browser"] -- "audio" --> helper["Per-app capture helper"]
+    helper -- "raw audio" --> ring["3-second ring buffer"]
+    ring --> take["Take"]
+    src -- "now playing: Windows media session and bridges" --> sm["State machine"]
+    sm --> verdict{"Kept?"}
+    take --> verdict
+    verdict -- "no" --> discard["Discard folder with a .json reason"]
+    verdict -- "yes" --> inbox["Inbox FLAC"]
+    inbox --> fp["Fingerprint"] --> aid["AcoustID"] --> mb["MusicBrainz"]
+    mb --> lyr["Lyrics"] --> cov["Cover"] --> enc["Encode and tag"] --> lib["Library"]
 ```
-Spotify / browser ──audio──▶ per-app capture helper ──PCM──▶ ring buffer ──▶ take
-      │                                                                      │
-      └──"now playing" (Windows media session + bridges)──▶ state machine ──▶ verdict
-                                                                             │ keep
-                                                     inbox FLAC + sidecar ◀──┘
-                                                             │
-     fingerprint ─▶ AcoustID ─▶ MusicBrainz ─▶ lyrics ─▶ cover ─▶ encode ─▶ tag ─▶ file into library
-```
+
+Recording and the verdict happen on your PC with no network. A kept take waits in the inbox until
+the lookups from AcoustID onward can reach the internet.
 
 ## Capturing one app's audio
 
 Windows can hand an application the audio stream of one other process. That facility, called process
-loopback, arrived with Windows 10 version 2004.
+loopback, arrived with Windows 10 version 2004. Microsoft documents it as the
+[process loopback activation type](https://learn.microsoft.com/en-us/windows/win32/api/audioclientactivationparams/ne-audioclientactivationparams-audioclient_activation_type)
+and shows it in its [application loopback sample](https://learn.microsoft.com/en-us/samples/microsoft/windows-classic-samples/applicationloopbackaudio-sample/).
 
-Mynaphone's helper, a 300-line C# program, asks Windows for Spotify's stream, or Chrome's, and
+Mynaphone's helper, a 300-line C# program in [`helper/ProcessLoopback.cs`](../helper/ProcessLoopback.cs), asks Windows for Spotify's stream, or Chrome's, and
 passes it to the app as raw audio. Because only that process's audio is in the stream, a
 notification chime, a video in another window or a game cannot get into a recording.
 
-The older "device" mode records the whole output device instead. In that mode a monitor watches every
+The older "device" mode records the whole output device instead, through Windows'
+[loopback recording](https://learn.microsoft.com/en-us/windows/win32/coreaudio/loopback-recording). In that mode a monitor watches every
 app's audio session and rejects a take if anything else made a sound while it ran.
 
 The app keeps the last 3 seconds of audio in memory at all times. Windows reports a track change 1
@@ -38,16 +48,17 @@ The recorder has 3 sources of information, each more detailed than the last.
 The Windows media session comes first. Every modern media app tells Windows its title, artist, album,
 cover, playback state and position, which is the same data the media keys and the volume flyout use.
 It works for Spotify, browsers and most players, and it is the recorder's clock for starts, ends,
-pauses and seeks.
+pauses and seeks. Mynaphone reads it through Windows'
+[media session manager API](https://learn.microsoft.com/en-us/uwp/api/windows.media.control.globalsystemmediatransportcontrolssessionmanager).
 
-The Spotify bridge adds what Windows doesn't know. It is optional and needs Spicetify installed. A
-Spicetify extension inside Spotify reports the
+The Spotify bridge adds what Windows doesn't know. It is optional and needs [Spicetify](https://spicetify.app)
+installed. A Spicetify extension inside Spotify, [`spicetify/mynaphone.js`](../spicetify/mynaphone.js), reports the
 exact track id and album id, the track and disc numbers, and the quality tier the song played at.
 It also passes on buffering, Spotify's own synced lyrics, and album facts such as the release date
 and label, all over a local WebSocket.
 
-YouTube gets the same treatment from the browser extension, which comes in the repository and is
-loaded into Chrome or Edge by hand. On a YouTube page it reports the video id,
+YouTube gets the same treatment from the browser extension in [`browser-extension/`](../browser-extension/),
+which is loaded into Chrome or Edge by hand. On a YouTube page it reports the video id,
 whether YouTube marks the video as music, and every play, pause, seek and speed change. On YouTube
 Music it also reads the artist, album and year from the player bar.
 
@@ -66,18 +77,19 @@ A take is kept only if all of these are true:
 - In device mode, no other app made a sound.
 
 Every take, kept or not, is logged with its measurements, so you can see why a verdict went the way
-it did and the rules can be revisited later.
+it did and the rules can be revisited later. The [troubleshooting guide](troubleshooting.md#every-discard-reason)
+lists every reason a take can be discarded.
 
 ## Identifying the song
 
-Identification runs in 5 steps.
+Identification runs in 6 steps.
 
-1. Chromaprint computes an acoustic fingerprint of the first 2 minutes of the recording.
-2. AcoustID matches the fingerprint against its database and returns MusicBrainz recording and
+1. [Chromaprint](https://acoustid.org/chromaprint) computes an acoustic fingerprint of the first 2 minutes of the recording.
+2. [AcoustID](https://acoustid.org/webservice) matches the fingerprint against its database and returns MusicBrainz recording and
    release ids with a confidence score. This step needs the free application key entered on the
    Set up page; without it the recorder goes straight to step 5. Among candidate releases, the one whose album title matches
    what Spotify reported wins. Failing that, an ordinary album beats a compilation.
-3. MusicBrainz supplies the release (label, catalog number, barcode, country, date, type, genres,
+3. The [MusicBrainz API](https://musicbrainz.org/doc/MusicBrainz_API) supplies the release (label, catalog number, barcode, country, date, type, genres,
    track and disc numbers), the recording (ISRC, singers and performers) and the linked work
    (composer, lyricist, language).
 4. Spotify's own facts fill in whatever is still missing, among them the release date, explicit
@@ -85,19 +97,20 @@ Identification runs in 5 steps.
 5. When nothing matched, the recorder falls back on the capture's own tags. A text rule recognizes
    soundtrack albums from phrases such as "Original Motion Picture Soundtrack" and "From ...", and
    treats the album artist of a soundtrack as its composer. For YouTube captures, the YouTube Music
-   catalog supplies album, year and track number.
-6. The genre comes from the first source that has one: Apple's catalog, then MusicBrainz, then
-   Last.fm's tags when you've added a Last.fm key. Only tags that are genre names count, so tags
+   catalog supplies album, year and track number, through [ytmusicapi](https://github.com/sigma67/ytmusicapi).
+6. The genre comes from the first source that has one: Apple's catalog through the
+   [iTunes Search API](https://performance-partners.apple.com/search-api), then MusicBrainz, then
+   Last.fm's tags through the [Last.fm API](https://www.last.fm/api) when you've added a Last.fm key. Only tags that are genre names count, so tags
    like "seen live" never become a genre. A soundtrack still without a genre after that gets
    Soundtrack. A genre you type in the Library editor always wins.
 
 ## Lyrics and cover art
 
 Spotify's own lyrics come first when the bridge supplied them, because they match the exact
-recording and cover languages that LRCLIB often lacks. Otherwise the app asks LRCLIB by title,
+recording and cover languages that LRCLIB often lacks. Otherwise the app asks [LRCLIB](https://lrclib.net/docs) by title,
 artist, album and duration. Synced lyrics go into the file's lyrics tag and into a `.lrc` file next
 to it, because some players read one and some read the other. Cover art comes from the capture,
-which includes Spotify's 640 px image, and failing that from the Cover Art Archive.
+which includes Spotify's 640 px image, and failing that from the [Cover Art Archive](https://musicbrainz.org/doc/Cover_Art_Archive/API).
 
 A song whose title or album says "Instrumental" has no words, so the app doesn't look up lyrics
 for it, and lyrics and lyricist don't count as missing. LRCLIB also marks some songs as
@@ -120,7 +133,7 @@ watch page itself.
 
 ## Encoding and filing
 
-The inbox FLAC is a lossless copy of what the app decoded. The recorder encodes it once, to AAC
+The inbox FLAC is a lossless copy of what the app decoded. The recorder encodes it once with [FFmpeg](https://ffmpeg.org), to AAC
 256 kbps by default, which plays in cars and on phones at about 9 MB a song. Lossless-tier captures
 stay FLAC. The file is then placed by type:
 
@@ -137,7 +150,8 @@ composer tags, so an A. R. Rahman album remains one folder while each track stil
 Nigam or Shreya Ghoshal. When MusicBrainz credits the recording to the composer and lists the singers only
 as vocal performers, the app swaps the singers into the artist tag itself.
 
-Tags follow the MusicBrainz Picard conventions, so other players and taggers understand them.
+Tags follow [MusicBrainz Picard's tag mapping](https://picard-docs.musicbrainz.org/en/latest/appendices/tag_mapping.html),
+so other players and taggers understand them. [mutagen](https://github.com/quodlibet/mutagen) writes them.
 
 ## Tracking what is still missing
 
@@ -148,7 +162,7 @@ fills itself in.
 
 ## Where the network is used
 
-Only during identification, and only for these requests:
+Only while a kept take is identified and filed, and only for these requests:
 
 - AcoustID receives the fingerprint and the duration.
 - MusicBrainz receives release, recording and work ids.
@@ -156,14 +170,18 @@ Only during identification, and only for these requests:
 - The Cover Art Archive receives a release id.
 - Apple's iTunes Search API receives the artist and title, to find the genre.
 - Last.fm receives the artist, title and your API key, only when you've added a key.
-- The Spotify bridge and the browser extension talk only to the app, on 127.0.0.1.
+- For a YouTube capture, YouTube Music's catalog receives a search for the song or film, and
+  youtube.com receives a request for the video's public page when the browser extension didn't send
+  the description.
+- The cover image the player reported, on Spotify's or YouTube's image server, is downloaded at full
+  size.
+- The Spotify bridge asks Spotify's own servers for track details, as the Spotify app does, and
+  passes them only to the app on 127.0.0.1. The browser extension talks only to the app.
 
 No audio ever leaves the PC. When the network is down nothing is sent; lookups queue and retry.
+The [security page](security.md#data-that-leaves-your-pc) lists the same requests with what comes back.
 
 ## Words used on these pages
 
-- A take is one attempt to record one song.
-- Loopback means recording the sound a PC is already playing.
-- A fingerprint is a compact description of how a recording sounds, used to look it up.
-- A tier is the quality level a service played a song at, such as Spotify Free, Premium or lossless.
-- The inbox is the folder of verified takes waiting to be identified and filed.
+The [documentation index](README.md#words-used-across-these-pages) explains take, inbox, tier,
+bridge, fingerprint and the other words these pages use.

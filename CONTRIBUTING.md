@@ -8,7 +8,7 @@ Everyone who takes part in the issues and pull requests agrees to the
 
 ## Reporting a bug
 
-Open a GitHub issue with the bug report template. It asks for:
+[Open a GitHub issue](https://github.com/SalmanRavoof/mynaphone/issues/new/choose) with the bug report form. It asks for:
 
 - Your Windows version (`winver`) and whether the Spotify bridge or browser extension was connected.
 - What you did, what you expected, what happened.
@@ -40,7 +40,7 @@ python -m venv .venv
 .\.venv\Scripts\ruff check .
 ```
 
-The `dev` extra adds pytest and Ruff to the app's own dependencies. The tests need neither Spotify
+The `dev` extra adds [pytest](https://docs.pytest.org/) and [Ruff](https://docs.astral.sh/ruff/) to the app's own dependencies. The tests need neither Spotify
 nor an internet connection. 3 of them encode a short file with ffmpeg
 and are skipped when ffmpeg is absent. The window tests in `tests/test_gui.py` run Qt offscreen and
 start no recorder. Qt is loaded in `conftest.py` before anything else because the Windows Runtime
@@ -55,8 +55,8 @@ Layout:
 - `helper/` the C# per-app capture helper.
 - `spicetify/` and `browser-extension/` the 2 bridges.
 - `tests/` pytest suite.
-- `docs/` user documentation.
-- `.github/` the test workflow and the issue and pull request templates.
+- `docs/` user documentation, indexed in `docs/README.md`.
+- `.github/` the test workflow, the issue forms and the pull request template.
 
 ## Code style
 
@@ -68,6 +68,25 @@ Layout:
 - Keep user-facing text in plain language; see the docs for tone.
 - No new runtime dependencies without discussion; every one adds to the license notices.
 - Add or update a test for behavior changes in the verdict rules, placement or identification.
+
+## Writing documentation
+
+The docs are Markdown files that GitHub renders, with no separate site. `docs/README.md` sorts them
+into getting started, everyday tasks, reference and background, and a new page needs a row there and
+in the README's documentation table.
+
+- Write in plain US English, in short paragraphs. Use numbered steps for a procedure, one action per
+  step, and name window controls in bold exactly as they appear, such as **Save settings**.
+- Headings are in sentence case. A heading that other pages link to keeps its wording, because
+  GitHub builds the anchor from it.
+- Link a service, library or standard the first time a page mentions it, on its name, and give every
+  number a source.
+- Use GitHub's alerts, such as `> [!NOTE]` and `> [!WARNING]`, at most once or twice a page.
+- Give every screenshot alt text that says what it shows.
+
+Screenshots live in `docs/images/` as PNG files, taken from the real window at 150 % display scaling
+in the light theme, about 1560 by 1020 pixels and under 250 KB each. When a change alters a page of
+the window, replace its screenshot under the same file name so the links keep working.
 
 ## Licensing of contributions
 

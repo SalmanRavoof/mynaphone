@@ -68,6 +68,11 @@ All notable changes to Mynaphone are listed here. The format follows
   exports, and the README opens with the wordmark.
 - The mark on the Status card, shown when a song has no cover art, is bigger. The bird now spans
   about three-quarters of its tile.
+- Documentation: new pages for a first recording, the window and tray, and the command line, and a
+  documentation index. Fresh screenshots of every page, the export dialog and the tray menu. The
+  settings reference names each setting as the window shows it. Every service, library and source
+  the docs mention is linked. Bug reports and feature requests use GitHub issue forms, and
+  `SUPPORT.md` says where to get help.
 
 ### Fixed
 - Installing the package now pulls in everything the app imports. PySide6, ytmusicapi, psutil,

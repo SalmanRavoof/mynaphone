@@ -1,0 +1,73 @@
+name: Bug report
+description: A song was kept, discarded, tagged or filed wrongly, or the app misbehaved.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting. Before you start, run **Setup check** > **Run checks** in the app, and look
+        for your symptom in the [troubleshooting guide](https://github.com/SalmanRavoof/mynaphone/blob/main/docs/troubleshooting.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead. If it's about a song, give its title and the app it played in.
+    validations:
+      required: true
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version and build
+      description: Run `winver`.
+      placeholder: Windows 10 22H2, build 19045
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Mynaphone version
+      description: Shown at the bottom of the sidebar.
+      placeholder: "0.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: capture
+    attributes:
+      label: Capture method
+      description: Settings > Capture > Capture method.
+      options:
+        - Per app
+        - Whole output device
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Source app
+      multiple: true
+      options:
+        - Spotify desktop app
+        - YouTube or YouTube Music in Chrome
+        - YouTube or YouTube Music in Edge
+        - Another app
+    validations:
+      required: true
+  - type: checkboxes
+    id: bridges
+    attributes:
+      label: Bridges
+      description: The Status page shows whether the Spotify bridge is connected; the log shows the browser extension.
+      options:
+        - label: The Spotify bridge was connected
+        - label: The browser extension was connected
+  - type: textarea
+    id: reason
+    attributes:
+      label: The take's reason and .json file
+      description: If it's about one take, the reason the Activity page gives (rest the mouse on it for the full list), and the take's `.json` file from the inbox or discard folder if you're happy to share it.
+  - type: textarea
+    id: log
+    attributes:
+      label: Log lines
+      description: Paste the lines from around that time, from `D:\Music\mynaphone\logs\mynaphone.log` or the `log_dir` set in `config.toml`. Remove any song titles or file names you'd rather not share.
+      render: text
