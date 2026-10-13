@@ -81,6 +81,8 @@ All notable changes to Mynaphone are listed here. The format follows
 - Spotify's track details (ISRC, track and disc numbers, duration) stopped arriving about an hour
   after Spotify started: the bridge used the access token from start-up, which expires. It now uses
   the token Spotify keeps refreshed and tries the other one on a 401.
+- A song paused mid-way could be taken as ended once the clock passed its last 10 seconds, though
+  the song stood still. The end-of-queue check now counts only the time the song played.
 - Installing the package now pulls in everything the app imports. PySide6, ytmusicapi, psutil,
   pycaw and comtypes were missing from its dependencies.
 - Past takes in the Activity and Status tables and in the `status` command show the PC's local

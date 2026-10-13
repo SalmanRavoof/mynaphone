@@ -34,6 +34,8 @@ class ActiveTake:
     replace_id: int | None = None
     session: object = None
     capture: object = None
+    paused_at: float | None = None              # monotonic time the current pause began
+    paused_seconds: float = 0.0                 # time spent in earlier pauses
 
 
 STOP = "STOP"
@@ -218,6 +220,9 @@ class Recorder:
             return
         if a and a.app.lower() == snap.app.lower():
             # same track: pause/stop/seek/stall checks
+            if snap.status != S.PAUSED and a.paused_at is not None:
+                a.paused_seconds += time.monotonic() - a.paused_at
+                a.paused_at = None
             if snap.status == S.PAUSED and self._near_end(a):
                 # Spotify pauses at the end of its queue once the last song finishes (Amidinine). That is
                 # the song ending; a pause seconds early still fails the length check.
@@ -227,6 +232,8 @@ class Recorder:
                 if not a.flags.get("paused"):
                     log.info("paused during take: %s", a.meta.title)
                 a.flags["paused"] = True
+                if a.paused_at is None:
+                    a.paused_at = time.monotonic()
             elif snap.status in (S.STOPPED, S.CLOSED):
                 await self._finish("stopped")
             elif kind == "timeline" and snap.status == S.PLAYING:
@@ -345,9 +352,15 @@ class Recorder:
 
     @staticmethod
     def _near_end(a: ActiveTake) -> bool:
-        """Within the song's last NEAR_END_SECONDS, where Spotify loads the next track or stops its queue."""
-        since_start = time.monotonic() - a.t_event
-        return bool(a.meta.expected_ms) and since_start > a.meta.expected_ms / 1000.0 - NEAR_END_SECONDS
+        """Within the song's last NEAR_END_SECONDS, where Spotify loads the next track or stops its queue.
+
+        Counts only the time the song played: while it is paused the clock runs on but the song stands
+        still (The Gathering of the Pact, paused at 0:42, was taken as ended 90 s later)."""
+        if not a.meta.expected_ms:
+            return False
+        now = time.monotonic()
+        paused = a.paused_seconds + (now - a.paused_at if a.paused_at is not None else 0.0)
+        return now - a.t_event - paused > a.meta.expected_ms / 1000.0 - NEAR_END_SECONDS
 
     async def _on_bridge(self, ev: BridgeEvent) -> None:
         st = ev.state

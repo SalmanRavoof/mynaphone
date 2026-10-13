@@ -130,6 +130,37 @@ def test_pause_seconds_before_the_end_still_discards(recorder, clock):
     assert [e["title"] for e in rec.events if e["kind"] == "discarded"] == ["One"]
 
 
+def test_long_pause_mid_song_is_not_taken_as_the_end(recorder, clock):
+    """The Gathering of the Pact (2026-10-09) paused at 0:42; a second pause event 90 s later was taken as
+    the song ending because the clock had passed its last seconds while the song stood still."""
+    rec, loop = recorder
+    run(loop, rec._handle(snap("One", end_ms=140_000), "media", None))
+    clock.advance(42)
+    run(loop, rec._handle(snap("One", status=S.PAUSED, pos_ms=42_000, end_ms=140_000), "playback", None))
+    clock.advance(90)
+    run(loop, rec._handle(snap("One", status=S.PAUSED, pos_ms=42_000, end_ms=140_000), "playback", None))
+    assert rec.active is not None and rec.active.flags["paused"]
+    assert not [e for e in rec.events if e["kind"] in ("kept", "discarded")]
+
+
+def test_pause_after_a_resume_counts_only_playing_time(recorder, clock):
+    rec, loop = recorder
+    run(loop, rec._handle(snap("One", end_ms=120_000), "media", None))
+    clock.advance(30)
+    run(loop, rec._handle(snap("One", status=S.PAUSED, pos_ms=30_000, end_ms=120_000), "playback", None))
+    clock.advance(60)
+    run(loop, rec._handle(snap("One", pos_ms=30_000, end_ms=120_000), "playback", None))       # resumed
+    clock.advance(50)   # 140 s since the start, but only 80 s of the song
+    run(loop, rec._handle(snap("One", status=S.PAUSED, pos_ms=80_000, end_ms=120_000), "playback", None))
+    assert rec.active is not None
+    clock.advance(1)
+    run(loop, rec._handle(snap("One", pos_ms=80_000, end_ms=120_000), "playback", None))       # resumed
+    clock.advance(35)   # the song's last 5 s
+    run(loop, rec._handle(snap("One", status=S.PAUSED, pos_ms=115_000, end_ms=120_000), "playback", None))
+    assert rec.active is None
+    assert [e["title"] for e in rec.events if e["kind"] == "discarded"] == ["One"]
+
+
 def test_seek_is_detected_from_timeline(recorder, clock):
     rec, loop = recorder
     run(loop, rec._handle(snap("One"), "media", None))
