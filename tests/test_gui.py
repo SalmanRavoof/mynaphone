@@ -348,3 +348,18 @@ def test_every_reason_the_recorder_gives_has_words():
         codes |= set(re.findall(r'"([a-z_]+)"', group))
     assert {"capture_not_ready", "browser_unverified", "buffering", "already_archived", "stopped"} <= codes
     assert not sorted(c for c in codes if _humanize(c) == c)
+
+
+def test_start_with_windows_command_opens_the_window(window, monkeypatch):
+    """Start with Windows never started the app: its entry put --config after gui, which the command line refused."""
+    import shlex
+
+    import mynaphone.__main__ as cli
+    seen = []
+    monkeypatch.setattr(cli, "cmd_gui", lambda args: seen.append((args.config, args.minimized)) or 0)
+    words = [w.strip('"') for w in shlex.split(window._login_command(), posix=False)]
+    assert words[1:3] == ["-m", "mynaphone"]
+    assert cli.main(words[3:]) == 0
+    old = ["gui", "--config", str(window.config_path), "--minimized"]      # as earlier versions wrote it
+    assert cli.main(old) == 0
+    assert seen == [(str(window.config_path), True)] * 2

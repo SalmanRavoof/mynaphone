@@ -1158,7 +1158,7 @@ class MainWindow(QMainWindow):
     def _login_command(self) -> str:
         pyw = Path(sys.executable).with_name("pythonw.exe")
         exe = pyw if pyw.exists() else Path(sys.executable)
-        return f'"{exe}" -m mynaphone gui --config "{self.config_path}" --minimized'
+        return f'"{exe}" -m mynaphone --config "{self.config_path}" gui --minimized'
 
     def login_item_present(self) -> bool:
         try:
