@@ -68,17 +68,24 @@
     return clean(parts.join(" "));
   }
   const JSON_HEADERS = { Accept: "application/json" };
-  function accessToken() {
-    try { const t = Spicetify.Platform.Session.accessToken; if (t) return t; } catch (e) {}
-    try { return Spicetify.Platform.AuthorizationAPI.getState().token.accessToken || ""; } catch (e) {}
-    return "";
+  // The authorization state holds the token Spotify keeps refreshed, the one Spicetify's own requests use.
+  // The session's copy is the token from start-up: an hour later every request with it fails with 401.
+  function accessTokens() {
+    const out = [];
+    try { const t = Spicetify.Platform.AuthorizationAPI.getState().token.accessToken; if (t) out.push(t); } catch (e) {}
+    try { const t = Spicetify.Platform.Session.accessToken; if (t && !out.includes(t)) out.push(t); } catch (e) {}
+    return out;
   }
   // The metadata service answers JSON when asked, but through CosmosAsync the Accept header is often
   // lost and the reply is protobuf. Fetch it with the client's token and read either form.
   async function getWithToken(url, label) {
-    const token = accessToken();
-    if (!token) throw new Error(label + ": no access token");
-    const r = await fetch(url, { headers: { Authorization: "Bearer " + token, Accept: "application/json" } });
+    const tokens = accessTokens();
+    if (!tokens.length) throw new Error(label + ": no access token");
+    let r;
+    for (const token of tokens) {
+      r = await fetch(url, { headers: { Authorization: "Bearer " + token, Accept: "application/json" } });
+      if (r.status !== 401) break;
+    }
     if (!r.ok) throw new Error(label + ": HTTP " + r.status);
     if ((r.headers.get("content-type") || "").includes("json")) return { json: await r.json() };
     return { bytes: new Uint8Array(await r.arrayBuffer()) };
