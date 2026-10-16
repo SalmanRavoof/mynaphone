@@ -1441,7 +1441,7 @@ class MainWindow(QMainWindow):
         act_inbox = QAction("Open inbox folder", self)
         act_inbox.triggered.connect(lambda: os.startfile(str(self.cfg.paths.inbox_dir)))
         act_quit = QAction("Quit", self)
-        act_quit.triggered.connect(self.quit_app)
+        act_quit.triggered.connect(lambda: self.quit_app("Quit in the tray menu"))
         menu.addAction(act_show)
         menu.addSeparator()
         menu.addAction(self.act_toggle)
@@ -1553,10 +1553,10 @@ class MainWindow(QMainWindow):
             self.hide_to_tray()
         else:
             event.ignore()
-            self.quit_app()
+            self.quit_app("the window was closed")
 
-    @Slot()
-    def quit_app(self) -> None:
+    def quit_app(self, reason: str) -> None:
+        log.info("quitting: %s", reason)
         self._quitting = True
         self.tray.hide()
         if self.worker is not None and self.worker.isRunning():
@@ -1627,6 +1627,9 @@ def run_gui(config_path: Path, minimized: bool = False) -> int:
     # a screen that sleeps, wakes or is unplugged leaves a line, for when the window comes up blank
     app.screenAdded.connect(lambda s: log.info("screen added: %s", _screen_facts(s)))
     app.screenRemoved.connect(lambda s: log.info("screen removed: %s", s.name()))
+    # so the log says how the app ended, not only that it stopped
+    app.commitDataRequest.connect(lambda _manager: log.info("Windows is signing out or shutting down"))
+    app.aboutToQuit.connect(lambda: log.info("Mynaphone closed"))
     app.setWindowIcon(app_icon("stopped", tile=True))
     theme.apply_theme(app)
     # one copy at a time: a second launch just brings the first one's window back

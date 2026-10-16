@@ -241,6 +241,49 @@ def test_late_event_reaches_into_ring_buffer(recorder, clock):
     assert 2_000 <= rec.active.flags["reported_start_ms"] < 2_500
 
 
+def test_stuck_cover_read_does_not_keep_the_take(recorder, clock, monkeypatch):
+    """Thumbnail reads that never finished held their takes, so every song's audio stayed in memory until the
+    app quit: 69 of 70 songs on 13 October 2026, and python.exe at 16.3 GB on the 4th."""
+    import gc
+    import weakref
+
+    import mynaphone.daemon as D
+    rec, loop = recorder
+    monkeypatch.setattr(D, "COVER_WAIT_SECONDS", 0.05)
+    held = []           # Windows keeps a stuck read's callback, and through it the waiting task, alive
+
+    async def never_returns(session, with_thumbnail=False):
+        held.append(asyncio.get_running_loop().create_future())
+        await held[-1]
+    monkeypatch.setattr(D.S, "snapshot", never_returns)
+    run(loop, rec._handle(snap("One"), "media", FakeSession()))
+    take = weakref.ref(rec.active.take)
+    clock.advance(180)
+    run(loop, rec._handle(snap("Two"), "media", None))              # One is written out
+    assert [e for e in rec.events if e["kind"] == "kept" and e["title"] == "One"]
+    gc.collect()
+    assert take() is None or not take().chunks
+    clock.advance(1.0)              # the loop's timers run on the fake clock too
+
+    async def spin():
+        for _ in range(20):
+            await asyncio.sleep(0)
+    run(loop, spin())
+    assert not [t for t in asyncio.all_tasks(loop) if "_fetch_cover" in repr(t.get_coro())]
+
+
+def test_volume_mixer_lookup_stays_off_the_recorder_thread(monkeypatch):
+    """Its CoInitialize on the recorder's event loop thread stopped Windows Runtime reads from finishing."""
+    import threading
+
+    from mynaphone import sessions
+    seen = []
+    monkeypatch.setattr(sessions, "_app_session_volume",
+                        lambda name: seen.append(threading.get_ident()) or (1.0, False))
+    assert sessions.app_session_volume("Spotify.exe") == (1.0, False)
+    assert seen and seen[0] != threading.get_ident()
+
+
 def test_next_take_starts_before_the_last_one_is_written(recorder, clock, monkeypatch):
     """Writing a long song out takes seconds. The next take must not wait for it, because it can only
     reach preroll_seconds back into the ring buffer for its opening."""

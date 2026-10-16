@@ -45,6 +45,8 @@ START_LEAD_MAX_MS = 2500   # the most a song's first reading may run ahead of th
 NEAR_END_SECONDS = 10.0   # Spotify's buffering or pause this close to the end belongs to the next track
 END_TAIL_SECONDS = 3.0   # audio kept past a track change; Spotify's sound trails its clock by 1.3-2.2 s
 TIMELINE_LOG_SECONDS = 20.0   # log each timeline reading this far into a take, to diagnose seek and stall flags
+COVER_WAIT_SECONDS = 5.0   # a media-session thumbnail read that takes longer won't finish
+COVER_RETRY_SECONDS = 3.0   # Spotify attaches the thumbnail a moment after the track change
 
 
 class Recorder:
@@ -178,6 +180,7 @@ class Recorder:
             if self.bridge:
                 await self.bridge.stop()
             self._emit("stopped")
+            log.info("recorder stopped")
 
     async def _ticker(self) -> None:
         while True:
@@ -509,7 +512,7 @@ class Recorder:
                  meta.artist, meta.title, meta.album, meta.expected_ms / 1000, start_pos / 1000, meta.quality_tier)
         self._emit("recording", artist=meta.artist, title=meta.title, album=meta.album,
                    expected_ms=meta.expected_ms, tier=meta.quality_tier, t_event=self.active.t_event)
-        asyncio.create_task(self._fetch_cover(self.active))
+        asyncio.create_task(self._fetch_cover(session, snap.key, meta))
 
     def _check_volumes(self, app: str, flags: dict) -> None:
         """A take recorded below full volume is a quiet, degraded file; flag it so the verdict rejects it.
@@ -535,20 +538,26 @@ class Recorder:
                 flags["app_volume"] = 0 if yt.muted else int(round((yt.volume or 0) * 100))
                 log.info("YouTube player volume is at %s%%; the take will be rejected", flags["app_volume"])
 
-    async def _fetch_cover(self, a: ActiveTake) -> None:
-        """Grab the media-session thumbnail; Spotify attaches it a moment after the track change."""
+    async def _fetch_cover(self, session, key: tuple[str, str, str], meta: TakeMeta) -> None:
+        """Grab the media-session thumbnail; Spotify attaches it a moment after the track change.
+
+        The task keeps only the take's metadata, and each read has a time limit: reads that never finished once
+        held every song's audio until the app quit."""
         for attempt in range(4):
-            if self.active is not a:
+            if self.active is None or self.active.meta is not meta:
                 return
             try:
-                snap = await S.snapshot(a.session, with_thumbnail=True)
-                if snap.key == a.key and snap.thumbnail:
-                    a.meta.cover = snap.thumbnail
-                    self._emit("cover", artist=a.meta.artist, title=a.meta.title, data=snap.thumbnail)
+                snap = await asyncio.wait_for(S.snapshot(session, with_thumbnail=True), COVER_WAIT_SECONDS)
+                if snap.key == key and snap.thumbnail:
+                    meta.cover = snap.thumbnail
+                    self._emit("cover", artist=meta.artist, title=meta.title, data=snap.thumbnail)
                     return
+            except TimeoutError:
+                log.info("no cover from the media session for %s in %.0f s", meta.title, COVER_WAIT_SECONDS)
+                return
             except Exception as e:
                 log.debug("cover fetch failed: %s", e)
-            await asyncio.sleep(3.0)
+            await asyncio.sleep(COVER_RETRY_SECONDS)
 
     async def _finish(self, reason: str) -> None:
         ended = self._end_take(reason)
@@ -597,7 +606,10 @@ class Recorder:
         """Judge, write and index an ended take, off the event loop; this is the slow part."""
         if take.tail_until:
             await asyncio.sleep(max(0.0, take.tail_until - time.monotonic()) + 0.2)
-        await self.loop.run_in_executor(None, self._finalize, a, take, flags, wall_s)
+        try:
+            await self.loop.run_in_executor(None, self._finalize, a, take, flags, wall_s)
+        finally:
+            take.chunks = []        # written out; whatever still holds the take doesn't keep its audio
 
     def _finalize(self, a: ActiveTake, take: Take, flags: dict, wall_s: float) -> None:
         cfg = self.cfg

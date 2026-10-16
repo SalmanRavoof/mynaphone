@@ -256,6 +256,15 @@ def test_second_launch_talks_to_the_first(qapp, monkeypatch):
         server.close()
 
 
+def test_quitting_says_why_in_the_log(window, qapp, caplog, monkeypatch):
+    """Two stops in October left no trace of who quit the app."""
+    import logging
+    monkeypatch.setattr(qapp, "quit", lambda: None)
+    with caplog.at_level(logging.INFO, logger="mynaphone.gui"):
+        window.quit_app("Quit in the tray menu")
+    assert "quitting: Quit in the tray menu" in caplog.text
+
+
 def test_second_launch_lets_the_first_come_to_the_front(qapp, monkeypatch):
     """Windows lets only the app just clicked raise a window, so the second launch passes that right on."""
     from PySide6.QtNetwork import QLocalServer

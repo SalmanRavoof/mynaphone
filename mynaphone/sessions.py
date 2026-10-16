@@ -13,9 +13,15 @@ import math
 import os
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 
 log = logging.getLogger("mynaphone.sessions")
+
+# The Volume Mixer lookup gets a thread of its own. Its CoInitialize makes a thread single-threaded for COM, and
+# on the recorder's event loop that stopped Spotify's cover thumbnail from ever arriving; each stuck read kept
+# a whole song's audio in memory until the app quit.
+_mixer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="volume-mixer")
 
 
 @dataclass
@@ -44,6 +50,14 @@ class ForeignReport:
 
 def app_session_volume(process_name: str) -> tuple[float, bool] | None:
     """(volume 0..1, muted) of the app's slider in the Windows Volume Mixer, or None if no session."""
+    try:
+        return _mixer.submit(_app_session_volume, process_name).result(timeout=5.0)
+    except Exception as e:
+        log.debug("session volume lookup failed: %s", e)
+        return None
+
+
+def _app_session_volume(process_name: str) -> tuple[float, bool] | None:
     try:
         import comtypes
         from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume
