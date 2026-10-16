@@ -62,7 +62,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import __version__
+from .. import __version__, shortcuts
 from ..capture import list_devices
 from ..config import Config
 from ..store import Store, local_time
@@ -84,6 +84,11 @@ _user32.GetForegroundWindow.restype = wintypes.HWND
 _user32.IsWindowVisible.argtypes = [wintypes.HWND]
 _user32.IsIconic.argtypes = [wintypes.HWND]
 GA_ROOT = 2
+# and for _already_running, which lets the running copy bring its window to the front
+_user32.AllowSetForegroundWindow.argtypes = [wintypes.DWORD]
+_kernel32 = ctypes.WinDLL("kernel32")
+_kernel32.GetNamedPipeServerProcessId.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.ULONG)]
+ASFW_ANY = 0xFFFFFFFF
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_NAME = "Mynaphone"
@@ -717,6 +722,10 @@ class SettingsPage(QScrollArea):
         self.ck_minimized = self._check(form, "Open minimized to the tray", cfg.app.start_minimized)
         self.ck_login = self._check(form, "Start with Windows", win.login_item_present(),
                                     "Adds an entry to your user's startup list. Nothing is installed system-wide.")
+        self.ck_start_menu = self._check(form, "Shortcut in the Start menu", shortcuts.has_shortcut("start_menu"),
+                                         "Type Mynaphone in Start to find it. "
+                                         "Right-click it there to pin it to the taskbar.")
+        self.ck_desktop = self._check(form, "Shortcut on the desktop", shortcuts.has_shortcut("desktop"))
         self.ck_tooltips = self._check(form, "Show tooltips when the mouse rests on a control", cfg.app.show_tooltips,
                                        "Short explanations like this one, for every button and setting.")
         c.addLayout(form)
@@ -1148,6 +1157,8 @@ class MainWindow(QMainWindow):
         c.app.show_tooltips = s.ck_tooltips.isChecked()
         c.save()
         self._set_login_item(s.ck_login.isChecked())
+        self._set_shortcut("start_menu", s.ck_start_menu.isChecked())
+        self._set_shortcut("desktop", s.ck_desktop.isChecked())
         for d in (c.paths.inbox_dir, c.paths.library_dir):
             d.mkdir(parents=True, exist_ok=True)
         if self.worker is not None and self.worker.isRunning():
@@ -1156,9 +1167,7 @@ class MainWindow(QMainWindow):
             s.saved.setText("Saved.")
 
     def _login_command(self) -> str:
-        pyw = Path(sys.executable).with_name("pythonw.exe")
-        exe = pyw if pyw.exists() else Path(sys.executable)
-        return f'"{exe}" -m mynaphone --config "{self.config_path}" gui --minimized'
+        return shortcuts.login_command(self.config_path)
 
     def login_item_present(self) -> bool:
         try:
@@ -1180,6 +1189,17 @@ class MainWindow(QMainWindow):
                         pass
         except OSError as e:
             QMessageBox.warning(self, "Start with Windows", f"Could not update the startup entry: {e}")
+
+    def _set_shortcut(self, place: str, enabled: bool) -> None:
+        """Adding refreshes a shortcut that's already there, so it follows the app if its folder moved."""
+        try:
+            if enabled:
+                shortcuts.add_shortcut(place, self.config_path)
+            else:
+                shortcuts.remove_shortcut(place)
+        except OSError as e:
+            where = "Start menu" if place == "start_menu" else "desktop"
+            QMessageBox.warning(self, "Shortcuts", f"Could not update the {where} shortcut: {e}")
 
     # ------------------------------------------------------------------ recorder control
 
@@ -1576,13 +1596,29 @@ def _already_running() -> bool:
     sock.connectToServer(INSTANCE_NAME)
     if not sock.waitForConnected(300):
         return False
+    # Windows lets only the app you just clicked bring a window to the front. That's this launch, so it hands
+    # the right to the running copy, whose window would otherwise only flash on the taskbar.
+    _user32.AllowSetForegroundWindow(_running_copy_pid(sock))
     sock.write(b"show")
     sock.waitForBytesWritten(300)
     sock.disconnectFromServer()
     return True
 
 
+def _running_copy_pid(sock) -> int:
+    """The process at the other end of the instance pipe, or ASFW_ANY if Windows won't say."""
+    pid = wintypes.ULONG()
+    handle = int(sock.socketDescriptor())
+    if handle == -1 or not _kernel32.GetNamedPipeServerProcessId(handle, ctypes.byref(pid)):
+        return ASFW_ANY
+    return pid.value
+
+
 def run_gui(config_path: Path, minimized: bool = False) -> int:
+    try:
+        shortcuts.set_app_id()
+    except OSError as e:
+        log.warning("could not set the taskbar identity: %s", e)
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("Mynaphone")
     app.setApplicationDisplayName("Mynaphone")

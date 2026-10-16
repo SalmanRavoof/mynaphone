@@ -12,6 +12,7 @@ This page lists what Mynaphone can reach on your PC, what leaves it, and how to 
 - It writes only inside the folders you choose in Settings, plus its own log folder.
 - With "Start with Windows" ticked, it adds one value under your user's Run key in the registry and
   nothing elsewhere.
+- With a shortcut ticked in Settings, it also writes `Mynaphone.lnk` to your Start menu or desktop.
 
 ## Data that leaves your PC
 

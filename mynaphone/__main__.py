@@ -196,6 +196,21 @@ def cmd_gui(args) -> int:
     return run_gui(Path(args.config).resolve(), minimized=args.minimized)
 
 
+def cmd_shortcut(args) -> int:
+    from . import shortcuts
+    config = Path(args.config).resolve()
+    if not args.remove and not config.exists():
+        print(f"{config} doesn't exist, and the app won't open without it")
+        return 1
+    for place in ("start_menu", "desktop") if args.desktop or args.remove else ("start_menu",):
+        if args.remove:
+            path = shortcuts.shortcut_path(place)
+            print(f"removed {path}" if shortcuts.remove_shortcut(place) else f"no shortcut at {path}")
+        else:
+            print("created", shortcuts.add_shortcut(place, config))
+    return 0
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="mynaphone", description="always-on loopback song archiver")
     p.add_argument("--config", default=str(DEFAULT_CONFIG))
@@ -229,6 +244,10 @@ def main(argv=None) -> int:
     s = command("gui", help="open the desktop window (tray app)")
     s.add_argument("--minimized", action="store_true", help="start hidden in the tray")
     s.set_defaults(fn=cmd_gui)
+    s = command("shortcut", help="add Mynaphone to the Start menu, or remove it")
+    s.add_argument("--desktop", action="store_true", help="also put a shortcut on the desktop")
+    s.add_argument("--remove", action="store_true", help="remove the Start menu and desktop shortcuts")
+    s.set_defaults(fn=cmd_shortcut)
     s = command("install-spicetify", help="install the Spicetify bridge extension")
     s.add_argument("--apply", action="store_true", help="also run spicetify config + apply (restarts Spotify)")
     s.set_defaults(fn=cmd_install_spicetify)

@@ -249,8 +249,8 @@ until the connection returns, however long that takes, and nothing is lost in th
 ### Where does my data live?
 
 In the folders set in `config.toml`: the library, the inbox and discard folders, the database and
-the logs. The AcoustID key is in `config.toml`. The only trace elsewhere is the "Start with Windows"
-entry in your user's registry, if you ticked it.
+the logs. The AcoustID key is in `config.toml`. The only traces elsewhere are the "Start with Windows"
+entry in your user's registry and the Start menu and desktop shortcuts, if you ticked them.
 
 ### How do I back up or move the library?
 
@@ -259,8 +259,8 @@ continues where you left off, duplicates included.
 
 ### How do I delete everything?
 
-Quit the app, untick Start with Windows, delete the Mynaphone folder, and delete the library and
-working folders.
+Quit the app, untick Start with Windows and the shortcuts, delete the Mynaphone folder, and delete the
+library and working folders.
 
 ### Does it collect telemetry or usage data?
 

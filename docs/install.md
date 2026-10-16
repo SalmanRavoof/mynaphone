@@ -192,8 +192,14 @@ extension that didn't come from the store.
 1. Open **Settings** and scroll to **Application**.
 2. Tick **Start with Windows** to launch Mynaphone hidden in the tray when you sign in. This adds an
    entry to your user's startup list and nothing system-wide.
-3. Leave **Start recording when the app opens** ticked, so the recorder listens as soon as it starts.
-4. Select **Save settings**.
+3. Tick **Shortcut in the Start menu** to open Mynaphone without PowerShell: type Mynaphone in Start,
+   or right-click it there and select **Pin to taskbar**. **Shortcut on the desktop** adds a desktop
+   icon as well.
+4. Leave **Start recording when the app opens** ticked, so the recorder listens as soon as it starts.
+5. Select **Save settings**.
+
+Opening Mynaphone while it's running brings its window back. With **Open minimized to the tray**
+ticked, the shortcut starts it in the tray, and opening it a second time shows the window.
 
 You're ready. [Record your first song](first-song.md) shows what happens next.
 
@@ -214,8 +220,10 @@ Updates don't touch your `config.toml`, your library or the database.
 ## Uninstalling
 
 1. Quit Mynaphone.
-2. In **Settings**, untick **Start with Windows** and save, or delete the `Mynaphone` value under
-   `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` with Registry Editor.
+2. In **Settings**, untick **Start with Windows** and both shortcuts, and save. Or run
+   `.\.venv\Scripts\python -m mynaphone shortcut --remove` and delete the `Mynaphone` value under
+   `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` with Registry Editor. A taskbar
+   pin is separate: right-click it and select **Unpin from taskbar**.
 3. Remove the extension from `chrome://extensions`.
 4. To remove the Spotify bridge, run `spicetify config extensions mynaphone.js-` and then
    `spicetify apply`. `spicetify restore` removes Spicetify itself.

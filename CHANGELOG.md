@@ -31,7 +31,10 @@ All notable changes to Mynaphone are listed here. The format follows
 - Harvest mode, USB export, duplicate detection with quality-tier upgrades.
 - Desktop window with Status, Activity, Library, Settings and Setup check pages; tray icon; start
   with Windows.
-- `setup-tools`, `run`, `status`, `devices`, `refresh`, `export`, `install-spicetify` commands.
+- A Start menu shortcut, and one on the desktop if you like, from Settings or the `shortcut` command.
+  Type Mynaphone in Start to open it, or pin it to the taskbar; the running window shares the pinned
+  button. Opening Mynaphone while it runs brings its window to the front.
+- `setup-tools`, `run`, `status`, `devices`, `refresh`, `export`, `install-spicetify`, `shortcut` commands.
 - Library formats: AAC (default), MP3, Opus and FLAC with selectable bitrates; full tags, cover and
   lyrics in each.
 - Free-space estimate for the chosen library drive, in Settings, Set up and the Setup check.
@@ -46,7 +49,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (123 tests).
+- Test suite (130 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.

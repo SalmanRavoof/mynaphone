@@ -108,6 +108,7 @@ recorder depends on are Windows features. The library it produces plays on any d
 
    It opens on a **Set up** page that walks you through the rest: the free AcoustID key, the library
    folder with an estimate of how many songs fit, and the optional Spotify and browser bridges.
+   To open it later without PowerShell, tick **Shortcut in the Start menu** in Settings.
 
 The [install guide](docs/install.md) covers each step in full, with screenshots of the Set up and
 Setup check pages, plus updating and uninstalling.

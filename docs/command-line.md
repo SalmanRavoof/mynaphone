@@ -21,6 +21,7 @@ Installing the package also creates `.venv\Scripts\mynaphone.exe`, so
 | Command | What it does |
 |---|---|
 | [`gui`](#gui) | Open the window and the tray icon |
+| [`shortcut`](#shortcut) | Add Mynaphone to the Start menu or the desktop, or remove it |
 | [`run`](#run) | Run the recorder in the console, without the window |
 | [`status`](#status) | Print the archive counts and the latest takes |
 | [`devices`](#devices) | List the audio devices that device mode can record |
@@ -37,6 +38,16 @@ Installing the package also creates `.venv\Scripts\mynaphone.exe`, so
 
 Opens the window. `--minimized` starts it hidden in the tray, which is how **Start with Windows**
 launches it. If Mynaphone is already running, the command brings its window back instead.
+
+### shortcut
+
+```powershell
+.\.venv\Scripts\python -m mynaphone shortcut [--desktop] [--remove]
+```
+
+Adds Mynaphone to your Start menu, so you can open it like any other app or pin it to the taskbar.
+The shortcut opens the app with the settings file the command used. `--desktop` also puts one on the
+desktop, and `--remove` removes both. The same choices are under **Application** in Settings.
 
 ### run
 

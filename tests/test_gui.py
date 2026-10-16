@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Salman Ravoof
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""GUI tests, run offscreen: the theme, the mark, tooltips, page headers, state pills, tables and
-the single-instance guard. No recorder is started and no audio is touched."""
+"""GUI tests, run offscreen: the theme, the mark, tooltips, page headers, state pills, tables, shortcuts
+and the single-instance guard. No recorder is started and no audio is touched."""
 import os
 from pathlib import Path
 
@@ -256,6 +256,25 @@ def test_second_launch_talks_to_the_first(qapp, monkeypatch):
         server.close()
 
 
+def test_second_launch_lets_the_first_come_to_the_front(qapp, monkeypatch):
+    """Windows lets only the app just clicked raise a window, so the second launch passes that right on."""
+    from PySide6.QtNetwork import QLocalServer
+
+    import mynaphone.gui.app as A
+    name = f"mynaphone-test-front-{os.getpid()}"
+    monkeypatch.setattr(A, "INSTANCE_NAME", name)
+    allowed = []
+    monkeypatch.setattr(A._user32, "AllowSetForegroundWindow", allowed.append)
+    QLocalServer.removeServer(name)
+    server = QLocalServer()
+    assert server.listen(name)
+    try:
+        assert A._already_running() is True
+    finally:
+        server.close()
+    assert allowed == [os.getpid()]         # the server end of the pipe, here this same process
+
+
 # -- now-playing card ------------------------------------------------------------------------
 
 def test_recording_title_is_not_squeezed(window, qapp):
@@ -363,3 +382,56 @@ def test_start_with_windows_command_opens_the_window(window, monkeypatch):
     old = ["gui", "--config", str(window.config_path), "--minimized"]      # as earlier versions wrote it
     assert cli.main(old) == 0
     assert seen == [(str(window.config_path), True)] * 2
+
+
+def test_start_menu_shortcut_opens_the_window_and_shares_its_taskbar_button(window, tmp_path, monkeypatch):
+    import shlex
+
+    import mynaphone.__main__ as cli
+    from mynaphone import shortcuts
+    monkeypatch.setattr(shortcuts, "shortcut_path", lambda place: tmp_path / place / shortcuts.LINK_NAME)
+    monkeypatch.setattr(window, "_set_login_item", lambda enabled: None)      # leave the real startup list alone
+    s = window.settings
+    s.ck_start_menu.setChecked(True)
+    s.ck_desktop.setChecked(False)
+    window.save_settings()
+    link = shortcuts.read_link(tmp_path / "start_menu" / shortcuts.LINK_NAME)
+    assert not (tmp_path / "desktop" / shortcuts.LINK_NAME).exists()
+    assert link["app_id"] == shortcuts.APP_ID
+    assert Path(link["target"]) == shortcuts.interpreter() and Path(link["icon"]).exists()
+    seen = []
+    monkeypatch.setattr(cli, "cmd_gui", lambda args: seen.append((args.config, args.minimized)) or 0)
+    words = [w.strip('"') for w in shlex.split(link["arguments"], posix=False)]
+    assert words[:2] == ["-m", "mynaphone"]
+    assert cli.main(words[2:]) == 0
+    assert seen == [(str(window.config_path), False)]
+    s.ck_start_menu.setChecked(False)
+    window.save_settings()
+    assert not (tmp_path / "start_menu" / shortcuts.LINK_NAME).exists()
+
+
+def test_shortcut_command_adds_and_removes_shortcuts(gui_config, tmp_path, monkeypatch):
+    import mynaphone.__main__ as cli
+    from mynaphone import shortcuts
+    monkeypatch.setattr(shortcuts, "shortcut_path", lambda place: tmp_path / place / shortcuts.LINK_NAME)
+    assert cli.main(["--config", str(gui_config), "shortcut"]) == 0
+    assert (tmp_path / "start_menu" / shortcuts.LINK_NAME).exists() and not (tmp_path / "desktop").exists()
+    assert cli.main(["--config", str(gui_config), "shortcut", "--desktop"]) == 0
+    assert (tmp_path / "desktop" / shortcuts.LINK_NAME).exists()
+    assert cli.main(["--config", str(gui_config), "shortcut", "--remove"]) == 0
+    assert not list(tmp_path.glob("*/*.lnk"))
+    assert cli.main(["--config", str(tmp_path / "missing.toml"), "shortcut"]) == 1     # a shortcut that opens nothing
+
+
+def test_taskbar_identity_matches_the_shortcuts():
+    import ctypes
+
+    from mynaphone import shortcuts
+    shortcuts.set_app_id()
+    shell32 = ctypes.WinDLL("shell32")
+    out = ctypes.c_void_p()
+    assert shell32.GetCurrentProcessExplicitAppUserModelID(ctypes.byref(out)) == 0
+    try:
+        assert ctypes.wstring_at(out.value) == shortcuts.APP_ID
+    finally:
+        ctypes.WinDLL("ole32").CoTaskMemFree(out)
