@@ -326,10 +326,11 @@ class _OneLine(QLabel):
 
 def verdict_colour(verdict: str) -> QColor | None:
     return {"keep": QColor(theme.GREEN), "discard": QColor(theme.RED), "skip": QColor(theme.MUTED),
-            "filed": QColor(theme.ACCENT)}.get(verdict)
+            "filed": QColor(theme.ACCENT), "duplicate": QColor(theme.MUTED)}.get(verdict)
 
 
-VERDICT_LABELS = {"keep": "Kept", "discard": "Discarded", "skip": "Skipped", "filed": "Filed"}
+VERDICT_LABELS = {"keep": "Kept", "discard": "Discarded", "skip": "Skipped", "filed": "Filed",
+                  "duplicate": "Duplicate"}
 
 
 # ----------------------------------------------------------------------------- pages
@@ -1337,6 +1338,15 @@ class MainWindow(QMainWindow):
             st.tiles["inbox"].setText(str(max(0, int(st.tiles["inbox"].text() or 0) - 1)))
             st.tiles["library"].setText(str(int(st.tiles["library"].text() or 0) + 1))
             self.library.reload()
+        elif kind == "duplicate":
+            rel = ev.get("path", "")
+            try:
+                rel = str(Path(rel).relative_to(self.cfg.paths.library_dir))
+            except Exception:
+                pass
+            self.activity.add_row(time.strftime("%H:%M"), f"{ev.get('artist')} - {ev.get('title')}", "duplicate",
+                                  f"already in the library as {rel}; set aside")
+            st.tiles["inbox"].setText(str(max(0, int(st.tiles["inbox"].text() or 0) - 1)))
         elif kind in ("refreshed", "lyrics"):
             self.library.reload()
         elif kind == "deferred":

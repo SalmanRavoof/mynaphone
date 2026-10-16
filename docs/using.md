@@ -21,6 +21,11 @@ tags Spotify reported.
 A song that is already in the library is skipped, so replaying favorites is safe. Anything longer
 than 15 minutes is skipped too, which keeps podcasts out.
 
+The same song often sits on an album and on a single, under two Spotify ids. If both get recorded,
+the second is recognized when it's identified, shows as Duplicate, and goes to the discard folder
+instead of the library, unless it's at a higher tier. Its Spotify id is remembered from then on, so
+that version is skipped like any song in the library.
+
 ## Record YouTube Music in a browser
 
 This needs the browser extension from [step 9 of the install guide](install.md#step-9-optional-load-the-browser-extension-for-youtube).

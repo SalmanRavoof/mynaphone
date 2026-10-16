@@ -457,7 +457,8 @@ class Recorder:
             self._enrich_from_youtube(meta, self.bridge.youtube)
             meta.quality_tier = "youtube"
         start_pos = snap.expected_position_ms()
-        existing = self.store.find_archived(meta.artist, meta.title, meta.expected_ms, meta.source_uri or None)
+        existing = self.store.find_archived(meta.artist, meta.title, meta.expected_ms, meta.source_uri or None,
+                                            isrc=(meta.extra.get("track_info") or {}).get("isrc"))
         replace_id = None
         if existing is not None:
             better = (self.cfg.quality.upgrade_on_higher_tier

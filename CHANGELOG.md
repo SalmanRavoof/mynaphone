@@ -51,7 +51,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (133 tests).
+- Test suite (138 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -80,6 +80,12 @@ All notable changes to Mynaphone are listed here. The format follows
   `SUPPORT.md` says where to get help.
 
 ### Fixed
+- A song recorded from both its album and its single was filed twice: the second copy overwrote the
+  first file, and the library listed the song twice. A take that's the same recording as a library song
+  (the same MusicBrainz recording, or the same ISRC) is now set aside in the discard folder unless it's
+  at a higher tier, and its Spotify id is remembered so that version is skipped from then on. Songs
+  already listed twice are merged when the app starts. When Spotify reports a song's ISRC before it
+  starts, a song already in the library is recognized by it too.
 - Mynaphone kept every song it recorded in memory until it quit, about 80 MB a song: after a day of
   listening it held 16 GB. The volume check at the start of each song set up Windows' COM on the
   recorder's thread in a way that stopped Spotify's cover thumbnail from ever arriving, and each stuck

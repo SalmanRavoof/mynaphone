@@ -34,6 +34,48 @@ def test_store_picks_best_tier_among_duplicates(tmp_config):
     assert st.find_archived("X", "Y", 100_000)["quality_tier"] == "very_high"
 
 
+def test_store_knows_a_song_by_its_other_player_ids_and_its_isrc(tmp_config):
+    """Hukum – Thalaivar Alappara was recorded twice on 13 October 2026, from the Jailer album and its single."""
+    st = Store(tmp_config.paths.db_path)
+    tid = st.add_track(artist="Anirudh Ravichander", title="Hukum - Thalaivar Alappara", duration_ms=207_600,
+                       source_uri="spotify:track:album", quality_tier="high", file_path="f.m4a", state="library",
+                       identity_json='{"isrc": "QMBZ92351475", "mb_recording_id": "rec-1"}')
+    assert st.find_archived("x", "y", 1, uri="spotify:track:single") is None
+    st.add_alias("spotify:track:single", tid)
+    assert st.find_archived("x", "y", 1, uri="spotify:track:single")["id"] == tid
+    assert st.find_archived("x", "y", 1, isrc="QMBZ92351475")["id"] == tid
+    assert st.find_recording("rec-1", "")["id"] == tid
+    assert st.find_recording("", "QMBZ92351475")["id"] == tid
+    assert st.find_recording("rec-1", "QMBZ92351475", exclude_id=tid) is None
+
+
+def test_store_merges_rows_of_one_recording_that_share_a_file(tmp_config):
+    st = Store(tmp_config.paths.db_path)
+    for uri in ("spotify:track:album", "spotify:track:single"):
+        st.add_track(artist="A", title="Hukum", duration_ms=207_600, source_uri=uri, quality_tier="high",
+                     file_path="Soundtracks/Jailer (2023)/05 Hukum.m4a", state="library",
+                     identity_json='{"mb_recording_id": "rec-1"}')
+    for rec in ("rec-2", "rec-3"):          # two recordings under one name, such as dubbed versions: kept apart
+        st.add_track(artist="B", title="Intro", duration_ms=60_000, source_uri=f"spotify:track:{rec}",
+                     file_path="Soundtracks/Film (2020)/01 Intro.m4a", state="library",
+                     identity_json=f'{{"mb_recording_id": "{rec}"}}')
+    st = Store(tmp_config.paths.db_path)              # rows are merged when the store opens
+    rows = st.conn.execute("SELECT id, source_uri FROM tracks ORDER BY id").fetchall()
+    assert [r["source_uri"] for r in rows] == ["spotify:track:single", "spotify:track:rec-2", "spotify:track:rec-3"]
+    assert st.find_archived("x", "y", 1, uri="spotify:track:album")["id"] == rows[0]["id"]   # the newer take wrote it
+
+
+def test_upgrade_keeps_the_older_copys_player_ids(tmp_config):
+    st = Store(tmp_config.paths.db_path)
+    old = st.add_track(artist="A", title="B", duration_ms=1, source_uri="youtube:abc", quality_tier="youtube",
+                       file_path="o", state="library")
+    st.add_alias("spotify:track:single", old)
+    new = st.replace_track(old, artist="A", title="B", duration_ms=1, source_uri="spotify:track:x",
+                           quality_tier="high", file_path="n", state="inbox")
+    assert st.find_archived("x", "y", 1, uri="youtube:abc")["id"] == new
+    assert st.find_archived("x", "y", 1, uri="spotify:track:single")["id"] == new
+
+
 def test_store_migrates_columns_and_summarises(tmp_config):
     st = Store(tmp_config.paths.db_path)
     cols = {r[1] for r in st.conn.execute("PRAGMA table_info(tracks)")}

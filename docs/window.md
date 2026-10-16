@@ -54,8 +54,8 @@ Under the card, 4 counts:
 |---|---|
 | Time | When the take started |
 | Song | Artist and title as the source app reported them |
-| Result | Kept, Discarded, Skipped or Filed |
-| Detail | For Kept, the recorded length against the song's length and the quality tier. For Discarded or Skipped, the reason; rest the mouse on it for the full list. For Filed, the place in the library, how the song was identified and what's still missing |
+| Result | Kept, Discarded, Skipped, Filed or Duplicate |
+| Detail | For Kept, the recorded length against the song's length and the quality tier. For Discarded or Skipped, the reason; rest the mouse on it for the full list. For Filed, the place in the library, how the song was identified and what's still missing. For Duplicate, the library file that already holds the same recording |
 
 **Log** shows the recorder's log as it's written, for the current session. The full log is in the
 log folder, `D:\Music\mynaphone\logs` by default.

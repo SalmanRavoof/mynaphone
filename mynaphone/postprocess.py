@@ -20,7 +20,7 @@ from . import genres, identify, lyrics as lyr, tools
 from .config import Config
 from .library import file_take, resolve_cover, write_lyrics, write_lyrics_sidecar
 from .metadata import missing_fields, refresh_track
-from .store import Store
+from .store import Store, tier_rank
 
 log = logging.getLogger("mynaphone.post")
 
@@ -163,6 +163,11 @@ class PostProcessor(threading.Thread):
                               f"{side.get('capture', {}).get('bit_depth', '')}bit loopback",
         }
         ident, note = self.identify_take(path, meta)
+        row = self.store.conn.execute("SELECT id FROM tracks WHERE file_path=?", (str(path),)).fetchone()
+        twin = self.store.find_recording(ident.mb_recording_id, ident.isrc, int(row["id"]) if row else None)
+        if twin is not None and not (self.cfg.quality.upgrade_on_higher_tier
+                                     and tier_rank(capture["quality_tier"]) > tier_rank(twin["quality_tier"])):
+            return self._set_aside(path, meta, row, twin)
 
         text, lyr_state = "", "none"
         sp = (meta.get("extra") or {}).get("spotify_lyrics") or {}
@@ -190,7 +195,6 @@ class PostProcessor(threading.Thread):
         dst = file_take(path, self.cfg.paths.library_dir, ident, self.cfg.library.format,
                         self.cfg.library.aac_bitrate, text, capture, cover)
         missing = missing_fields(ident, cover is not None, lyr_state)
-        row = self.store.conn.execute("SELECT id FROM tracks WHERE file_path=?", (str(path),)).fetchone()
         if row:
             self.store.conn.execute(
                 "UPDATE tracks SET file_path=?, state='library', title=?, artist=?, album=?, album_artist=?, "
@@ -200,6 +204,8 @@ class PostProcessor(threading.Thread):
                  lyr_state, 1, json.dumps(ident.to_json(), ensure_ascii=False), json.dumps(missing),
                  dt.datetime.now(dt.timezone.utc).isoformat(), int(row["id"])))
             self.store.conn.commit()
+        if twin is not None:
+            self._retire(twin, dst, row)
         try:
             path.unlink()
             path.with_suffix(".json").unlink()
@@ -211,6 +217,48 @@ class PostProcessor(threading.Thread):
                    identified_by=ident.source, lyrics=bool(text), synced=lyr_state == "synced", note=note,
                    missing=missing)
         return dst
+
+    def _set_aside(self, path: Path, meta: dict, row, twin) -> Path:
+        """The take is a song already in the library, recorded again from its single or its album. Keep the filed
+        copy, remember this player id for it so the next play is skipped, and move the take to the discard folder
+        like any rejected take."""
+        self.store.add_alias(meta.get("source_uri", ""), int(twin["id"]))
+        if row is not None:
+            self.store.conn.execute("DELETE FROM tracks WHERE id=?", (int(row["id"]),))
+            self.store.conn.commit()
+        keep = self.cfg.rules.keep_discards_days > 0
+        target = self.cfg.paths.discard_dir / path.name
+        for p in (path, path.with_suffix(".json")):
+            try:
+                if keep:
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    p.replace(target.parent / p.name)
+                else:
+                    p.unlink()
+            except OSError as e:
+                log.warning("could not set %s aside: %s", p.name, e)
+        self.store.conn.execute("UPDATE takes SET file_path=? WHERE file_path=?",
+                                (str(target) if keep else None, str(path)))
+        self.store.conn.commit()
+        log.info("DUPLICATE %s is the same recording as %s; set aside", path.name, twin["file_path"])
+        self._emit("duplicate", title=meta.get("title", ""), artist=meta.get("artist", ""), path=twin["file_path"])
+        return Path(twin["file_path"])
+
+    def _retire(self, twin, dst: Path, row) -> None:
+        """A better copy of a song already filed takes its place and its player ids."""
+        old = Path(twin["file_path"]) if twin["file_path"] else None
+        if old is not None and old != dst:
+            for p in (old, old.with_suffix(".lrc")):
+                try:
+                    p.unlink(missing_ok=True)
+                except OSError as e:
+                    log.warning("could not remove the older copy %s: %s", p.name, e)
+        if row is not None:
+            self.store.conn.execute("UPDATE aliases SET track_id=? WHERE track_id=?", (int(row["id"]), int(twin["id"])))
+            self.store.add_alias(twin["source_uri"] or "", int(row["id"]))
+        self.store.conn.execute("DELETE FROM tracks WHERE id=?", (int(twin["id"]),))
+        self.store.conn.commit()
+        log.info("replaced the %s copy of %s - %s with this one", twin["quality_tier"], twin["artist"], twin["title"])
 
     # -- retry incomplete songs ------------------------------------------------------------
 

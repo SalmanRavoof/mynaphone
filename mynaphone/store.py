@@ -5,9 +5,12 @@ from __future__ import annotations
 
 import datetime as dt
 import json
+import logging
 import re
 import sqlite3
 from pathlib import Path
+
+log = logging.getLogger("mynaphone.store")
 
 # Ordered quality tiers. Higher index = better. Unknown tiers rank as "unknown" (0).
 TIERS = ["unknown", "low", "youtube", "normal", "high", "very_high", "hifi", "hifi24"]
@@ -56,6 +59,10 @@ CREATE TABLE IF NOT EXISTS takes (
     expected_ms INTEGER, captured_ms INTEGER, wall_ms INTEGER,
     verdict TEXT, reasons TEXT, file_path TEXT, quality_tier TEXT
 );
+CREATE TABLE IF NOT EXISTS aliases (
+    uri TEXT PRIMARY KEY,                  -- another player id for a song in tracks: its single, its album track
+    track_id INTEGER NOT NULL
+);
 """
 
 
@@ -73,15 +80,27 @@ class Store:
             if col not in have:
                 self.conn.execute(f"ALTER TABLE tracks ADD COLUMN {col} {typ}")
         self.conn.commit()
+        self.merge_shared_files()
 
     # -- dedup -----------------------------------------------------------------------------
 
     def find_archived(self, artist: str, title: str, duration_ms: int, uri: str | None = None,
-                      tolerance_ms: int = 2000) -> sqlite3.Row | None:
-        """Best existing copy of this song, matched by source uri or normalized artist/title + duration."""
+                      tolerance_ms: int = 2000, isrc: str | None = None) -> sqlite3.Row | None:
+        """Best existing copy of this song, matched by source uri or one of its aliases, by ISRC, or by
+        normalized artist/title + duration."""
         if uri:
             row = self.conn.execute(
                 "SELECT * FROM tracks WHERE source_uri=? ORDER BY id DESC LIMIT 1", (uri,)).fetchone()
+            if row is None:
+                row = self.conn.execute(
+                    "SELECT t.* FROM aliases a JOIN tracks t ON t.id = a.track_id WHERE a.uri=?", (uri,)).fetchone()
+            if row:
+                return row
+        if isrc:
+            row = self.conn.execute(
+                "SELECT * FROM tracks WHERE json_extract(identity_json, '$.isrc') = ? "
+                "OR json_extract(meta_json, '$.extra.track_info.isrc') = ? ORDER BY id DESC LIMIT 1",
+                (isrc, isrc)).fetchone()
             if row:
                 return row
         rows = self.conn.execute(
@@ -106,8 +125,62 @@ class Store:
         return int(cur.lastrowid)
 
     def replace_track(self, old_id: int, **fields) -> int:
+        old = self.conn.execute("SELECT source_uri FROM tracks WHERE id=?", (old_id,)).fetchone()
         self.conn.execute("DELETE FROM tracks WHERE id=?", (old_id,))
-        return self.add_track(**fields)
+        new_id = self.add_track(**fields)
+        self.conn.execute("UPDATE aliases SET track_id=? WHERE track_id=?", (new_id, old_id))
+        if old and old["source_uri"] and old["source_uri"] != fields.get("source_uri"):
+            self.add_alias(old["source_uri"], new_id)
+        self.conn.commit()
+        return new_id
+
+    # -- one song, several player ids ------------------------------------------------------
+
+    def find_recording(self, recording_id: str, isrc: str, exclude_id: int | None = None) -> sqlite3.Row | None:
+        """A library song that is the same recording: the same MusicBrainz recording, or else the same ISRC."""
+        for path, value in (("$.mb_recording_id", recording_id), ("$.isrc", isrc)):
+            if value:
+                row = self.conn.execute(
+                    "SELECT * FROM tracks WHERE state='library' AND id IS NOT ? AND json_extract(identity_json, ?) = ? "
+                    "ORDER BY id LIMIT 1", (exclude_id, path, value)).fetchone()
+                if row:
+                    return row
+        return None
+
+    def add_alias(self, uri: str, track_id: int) -> None:
+        if uri:
+            self.conn.execute("INSERT OR REPLACE INTO aliases (uri, track_id) VALUES (?, ?)", (uri, track_id))
+            self.conn.commit()
+
+    def merge_shared_files(self) -> int:
+        """Library rows of the same recording that share one file are one song filed twice, from an album and its
+        single say, before duplicates were caught at filing. Keep the newest row, whose take wrote the file, with
+        the others' player ids as its aliases. Rows that aren't known to be the same recording stay."""
+        merged = 0
+        groups = self.conn.execute(
+            "SELECT file_path FROM tracks WHERE state='library' AND file_path IS NOT NULL "
+            "GROUP BY file_path HAVING COUNT(*) > 1").fetchall()
+        for (file_path,) in groups:
+            rows = self.conn.execute(
+                "SELECT id, source_uri, artist, title, json_extract(identity_json, '$.mb_recording_id') AS rec, "
+                "json_extract(identity_json, '$.isrc') AS isrc FROM tracks WHERE file_path=? ORDER BY id",
+                (file_path,)).fetchall()
+            keep = rows[-1]
+            for r in rows[:-1]:
+                if not ((r["rec"] and r["rec"] == keep["rec"]) or (r["isrc"] and r["isrc"] == keep["isrc"])):
+                    log.warning("%s - %s and %s - %s share %s but may be different recordings; both rows kept",
+                                r["artist"], r["title"], keep["artist"], keep["title"], file_path)
+                    continue
+                if r["source_uri"] and r["source_uri"] != keep["source_uri"]:
+                    self.conn.execute("INSERT OR REPLACE INTO aliases (uri, track_id) VALUES (?, ?)",
+                                      (r["source_uri"], keep["id"]))
+                self.conn.execute("UPDATE aliases SET track_id=? WHERE track_id=?", (keep["id"], r["id"]))
+                self.conn.execute("DELETE FROM tracks WHERE id=?", (r["id"],))
+                merged += 1
+                log.info("merged a duplicate row of %s - %s, which shared its file", keep["artist"], keep["title"])
+        if merged:
+            self.conn.commit()
+        return merged
 
     # -- take log --------------------------------------------------------------------------
 
