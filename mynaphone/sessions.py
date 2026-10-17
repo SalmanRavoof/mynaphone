@@ -11,17 +11,34 @@ from __future__ import annotations
 import logging
 import math
 import os
+import queue
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import Future
 from dataclasses import dataclass, field
 
 log = logging.getLogger("mynaphone.sessions")
 
 # The Volume Mixer lookup gets a thread of its own. Its CoInitialize makes a thread single-threaded for COM, and
 # on the recorder's event loop that stopped Spotify's cover thumbnail from ever arriving; each stuck read kept
-# a whole song's audio in memory until the app quit.
-_mixer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="volume-mixer")
+# a whole song's audio in memory until the app quit. It's a daemon thread, so a lookup that never returns, as
+# on a PC without sound devices, can't keep the app from exiting; while one is stuck, the next is skipped.
+_mixer_jobs: queue.Queue = queue.Queue()
+_mixer_busy = threading.Event()
+_mixer_thread: threading.Thread | None = None
+_mixer_start = threading.Lock()
+
+
+def _serve_mixer() -> None:
+    while True:
+        fn, arg, fut = _mixer_jobs.get()
+        _mixer_busy.set()
+        try:
+            fut.set_result(fn(arg))
+        except BaseException as e:
+            fut.set_exception(e)
+        finally:
+            _mixer_busy.clear()
 
 
 @dataclass
@@ -48,10 +65,20 @@ class ForeignReport:
         return max((e.peak_db for e in self.events), default=-120.0)
 
 
-def app_session_volume(process_name: str) -> tuple[float, bool] | None:
-    """(volume 0..1, muted) of the app's slider in the Windows Volume Mixer, or None if no session."""
+def app_session_volume(process_name: str, timeout: float = 2.0) -> tuple[float, bool] | None:
+    """(volume 0..1, muted) of the app's slider in the Windows Volume Mixer, or None if no session or no answer."""
+    global _mixer_thread
+    if _mixer_busy.is_set():
+        log.debug("the last Volume Mixer lookup hasn't returned; skipping this one")
+        return None
+    with _mixer_start:
+        if _mixer_thread is None:
+            _mixer_thread = threading.Thread(target=_serve_mixer, name="volume-mixer", daemon=True)
+            _mixer_thread.start()
+    fut: Future = Future()
+    _mixer_jobs.put((_app_session_volume, process_name, fut))
     try:
-        return _mixer.submit(_app_session_volume, process_name).result(timeout=5.0)
+        return fut.result(timeout=timeout)
     except Exception as e:
         log.debug("session volume lookup failed: %s", e)
         return None

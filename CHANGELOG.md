@@ -51,7 +51,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (140 tests).
+- Test suite (141 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -93,8 +93,9 @@ All notable changes to Mynaphone are listed here. The format follows
 - Mynaphone kept every song it recorded in memory until it quit, about 80 MB a song: after a day of
   listening it held 16 GB. The volume check at the start of each song set up Windows' COM on the
   recorder's thread in a way that stopped Spotify's cover thumbnail from ever arriving, and each stuck
-  request held on to its song. The check now runs on a thread of its own, a cover request gives up
-  after 5 seconds, and a song's audio is let go as soon as it's saved.
+  request held on to its song. The check now runs on a thread of its own, which can't hold up quitting
+  if it hangs, a cover request gives up after 5 seconds, and a song's audio is let go as soon as it's
+  saved.
 - **Start with Windows** now starts the app. Its startup entry put `--config` after `gui`, which the
   command line refused, so the app quit at sign-in without a word. Entries already saved that way
   work too.

@@ -69,7 +69,9 @@ def snap(title, artist="Artist", album="Album", status=S.PLAYING, pos_ms=0, end_
 
 
 @pytest.fixture
-def recorder(tmp_config, clock):
+def recorder(tmp_config, clock, monkeypatch):
+    import mynaphone.daemon as d
+    monkeypatch.setattr(d, "app_session_volume", lambda app: None)     # not this PC's real Volume Mixer
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     rec = Recorder(tmp_config, loop)
@@ -282,6 +284,27 @@ def test_volume_mixer_lookup_stays_off_the_recorder_thread(monkeypatch):
                         lambda name: seen.append(threading.get_ident()) or (1.0, False))
     assert sessions.app_session_volume("Spotify.exe") == (1.0, False)
     assert seen and seen[0] != threading.get_ident()
+
+
+def test_stuck_volume_lookup_neither_stalls_takes_nor_holds_up_exit(monkeypatch):
+    """Without sound devices the lookup may never return: GitHub's test runner waited on it forever at exit."""
+    import threading
+
+    from mynaphone import sessions
+    release = threading.Event()
+    monkeypatch.setattr(sessions, "_app_session_volume", lambda name: release.wait())
+    try:
+        assert sessions.app_session_volume("Spotify.exe", timeout=0.1) is None      # gave up waiting
+        started = time.perf_counter()
+        assert sessions.app_session_volume("Spotify.exe", timeout=5.0) is None      # skipped, not queued
+        assert time.perf_counter() - started < 1.0
+        assert [t.daemon for t in threading.enumerate() if t.name == "volume-mixer"] == [True]
+    finally:
+        release.set()
+        for _ in range(200):
+            if not sessions._mixer_busy.is_set():
+                break
+            time.sleep(0.01)
 
 
 def test_next_take_starts_before_the_last_one_is_written(recorder, clock, monkeypatch):
