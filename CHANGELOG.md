@@ -51,7 +51,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (138 tests).
+- Test suite (140 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -80,6 +80,10 @@ All notable changes to Mynaphone are listed here. The format follows
   `SUPPORT.md` says where to get help.
 
 ### Fixed
+- Songs of 45 to 65 seconds that AcoustID didn't know stayed in the inbox for good. The second
+  fingerprint started 45 seconds in, where such a song has almost nothing left, and the error was
+  taken as identification being unavailable. A short song's second fingerprint now starts a third of
+  the way in, and if a second try still fails, the song is filed with Spotify's tags.
 - A song recorded from both its album and its single was filed twice: the second copy overwrote the
   first file, and the library listed the song twice. A take that's the same recording as a library song
   (the same MusicBrainz recording, or the same ISRC) is now set aside in the discard folder unless it's

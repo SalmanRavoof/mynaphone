@@ -148,20 +148,40 @@ def fingerprint(path: str, offset_s: float = 0.0, length_s: int = 120) -> tuple[
     return duration, d["fingerprint"]
 
 
+def second_offset(duration_s: float) -> float | None:
+    """Where the second fingerprint starts: 45 s in, past a music video's spoken opening, or a third of the way
+    into a shorter recording. 45 s in on a 45 s song left nothing to fingerprint, and the error held the song in
+    the inbox for good. None when the recording is too short for a second try."""
+    if duration_s >= 45.0 + 20.0:
+        return 45.0
+    return duration_s / 3 if duration_s >= 30.0 else None
+
+
 def lookup_with_retry(key: str, path: str, hints: dict) -> tuple[Identity | None, str]:
-    """Fingerprint from the start, then from 45 s in, returning the first confident match."""
-    last_fp = ""
-    for offset in (0.0, 45.0):
-        dur, fp = fingerprint(path, offset)
-        last_fp = fp
-        res = acoustid_lookup(key, dur, fp)
-        if res.get("status") != "ok":
-            raise RuntimeError(f"acoustid: {res.get('error', {}).get('message', res.get('status'))}")
-        res["_fingerprint"] = fp if offset == 0 else last_fp
-        ident = choose(res, **hints)
-        if ident is not None:
-            return ident, "" if offset == 0 else "matched from the middle of the recording"
+    """Fingerprint from the start, then from further in, returning the first confident match."""
+    dur, fp = fingerprint(path)
+    ident = _lookup(key, dur, fp, hints)
+    if ident is not None:
+        return ident, ""
+    later = second_offset(dur)
+    if later is not None:
+        try:
+            dur, fp = fingerprint(path, later)
+        except RuntimeError as e:      # the first fingerprint worked, so the song can be filed without a match
+            log.info("no second fingerprint for %s: %s", path, e)
+        else:
+            ident = _lookup(key, dur, fp, hints)
+            if ident is not None:
+                return ident, "matched from the middle of the recording"
     return None, "no AcoustID match"
+
+
+def _lookup(key: str, duration: int, fp: str, hints: dict) -> Identity | None:
+    res = acoustid_lookup(key, duration, fp)
+    if res.get("status") != "ok":
+        raise RuntimeError(f"acoustid: {res.get('error', {}).get('message', res.get('status'))}")
+    res["_fingerprint"] = fp
+    return choose(res, **hints)
 
 
 def acoustid_lookup(key: str, duration: int, fp: str, timeout: float = 20.0) -> dict:

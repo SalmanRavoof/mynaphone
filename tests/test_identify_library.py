@@ -233,6 +233,37 @@ def test_clean_video_title():
     assert clean_video_title("Dilbara - Lyrical Video") == "Dilbara"
 
 
+def test_second_fingerprint_fits_short_songs():
+    from mynaphone.identify import second_offset
+    assert second_offset(240) == 45.0 and second_offset(65) == 45.0      # past a music video's spoken opening
+    assert second_offset(46.5) == 15.5                                     # 45 s in left nothing of a 46 s song
+    assert second_offset(29) is None
+
+
+def test_short_song_without_a_match_is_still_filed(monkeypatch):
+    """Molaga (45 s) and two other short songs sat in the inbox from 15 October 2026: the second fingerprint started
+    45 s in, fpcalc found nothing there, and the error was taken as identification being unavailable."""
+    import mynaphone.identify as I
+    offsets = []
+
+    def fake_fingerprint(path, offset_s=0.0, length_s=120):
+        offsets.append(offset_s)
+        if offset_s >= 45.0:
+            raise RuntimeError("fpcalc failed: ERROR: Empty fingerprint")
+        return 46, "fp"
+    monkeypatch.setattr(I, "fingerprint", fake_fingerprint)
+    monkeypatch.setattr(I, "acoustid_lookup", lambda key, duration, fp: {"status": "ok", "results": []})
+    assert I.lookup_with_retry("key", "Molaga.flac", {}) == (None, "no AcoustID match")
+    assert offsets == [0.0, 46 / 3]
+
+    def failing_second(path, offset_s=0.0, length_s=120):
+        if offset_s:
+            raise RuntimeError("fpcalc failed")
+        return 200, "fp"
+    monkeypatch.setattr(I, "fingerprint", failing_second)
+    assert I.lookup_with_retry("key", "x.flac", {}) == (None, "no AcoustID match")
+
+
 def test_unidentified_songs_go_to_unsorted():
     i = Identity(title="Some Title", artist="", album="")
     assert classify(i) == "unsorted" and place(i).rel_dir == Path("Unsorted") and place(i).filename == "Some Title"
