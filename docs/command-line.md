@@ -37,7 +37,8 @@ Installing the package also creates `.venv\Scripts\mynaphone.exe`, so
 ```
 
 Opens the window. `--minimized` starts it hidden in the tray, which is how **Start with Windows**
-launches it. If Mynaphone is already running, the command brings its window back instead.
+launches it while **When Windows starts it, open in the tray** is ticked. If Mynaphone is already
+running, the command brings its window back instead.
 
 ### shortcut
 

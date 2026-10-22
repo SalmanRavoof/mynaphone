@@ -107,8 +107,8 @@ These are set on the **Set up** page or in the file.
 |---|---|---|---|
 | **Start recording when the app opens** | `autostart_recording` | `true` | Start listening as soon as the app opens. |
 | **Closing the window keeps it running in the tray** | `close_to_tray` | `true` | Closing the window keeps the recorder running in the tray. |
-| **Open minimized to the tray** | `start_minimized` | `false` | Open hidden in the tray. |
 | **Start with Windows** | None | Off | Adds or removes a value named `Mynaphone` under your user's `Run` key in the registry. It isn't stored in the file. |
+| **When Windows starts it, open in the tray** | `start_minimized` | `true` | At sign-in, open hidden in the tray instead of showing the window. Opening Mynaphone yourself always shows the window. Available with **Start with Windows** ticked. |
 | **Shortcut in the Start menu** | None | Off | Adds or removes `Mynaphone.lnk` in your Start menu. Type Mynaphone in Start to open the app, or right-click it there to pin it to the taskbar. It isn't stored in the file. |
 | **Shortcut on the desktop** | None | Off | Adds or removes `Mynaphone.lnk` on your desktop. It isn't stored in the file. |
 | **Show tooltips when the mouse rests on a control** | `show_tooltips` | `true` | Show a short explanation when the mouse rests on a button or setting. |

@@ -385,12 +385,50 @@ def test_start_with_windows_command_opens_the_window(window, monkeypatch):
     import mynaphone.__main__ as cli
     seen = []
     monkeypatch.setattr(cli, "cmd_gui", lambda args: seen.append((args.config, args.minimized)) or 0)
-    words = [w.strip('"') for w in shlex.split(window._login_command(), posix=False)]
-    assert words[1:3] == ["-m", "mynaphone"]
-    assert cli.main(words[3:]) == 0
+    for in_tray in (True, False):           # "When Windows starts it, open in the tray"
+        window.cfg.app.start_minimized = in_tray
+        words = [w.strip('"') for w in shlex.split(window._login_command(), posix=False)]
+        assert words[1:3] == ["-m", "mynaphone"]
+        assert cli.main(words[3:]) == 0
     old = ["gui", "--config", str(window.config_path), "--minimized"]      # as earlier versions wrote it
     assert cli.main(old) == 0
-    assert seen == [(str(window.config_path), True)] * 2
+    assert seen == [(str(window.config_path), True), (str(window.config_path), False),
+                    (str(window.config_path), True)]
+
+
+def test_opening_the_app_by_hand_shows_the_window(qapp, gui_config, monkeypatch):
+    """With "Open minimized to the tray" ticked, the desktop shortcut started Mynaphone hidden, and opening it
+    showed nothing (21 October 2026). Only Start with Windows, which passes --minimized, opens it in the tray."""
+    from PySide6.QtCore import QObject
+
+    import mynaphone.gui.app as A
+    gui_config.write_text(gui_config.read_text(encoding="utf-8").replace("start_minimized = false",
+                                                                         "start_minimized = true"), encoding="utf-8")
+    opened = []
+
+    class FakeWindow(QObject):
+        def __init__(self, config_path, start_minimized=False):
+            super().__init__()
+            opened.append(start_minimized)
+
+        def show_from_tray(self):
+            pass
+
+    monkeypatch.setattr(A, "MainWindow", FakeWindow)
+    monkeypatch.setattr(qapp, "exec", lambda: 0)
+    for minimized in (False, True):
+        # a name of its own, so the test never reaches the Mynaphone running on this PC
+        monkeypatch.setattr(A, "INSTANCE_NAME", f"mynaphone-test-open-{os.getpid()}-{minimized}")
+        assert A.run_gui(gui_config, minimized=minimized) == 0
+    assert opened == [False, True]
+
+
+def test_tray_at_sign_in_is_a_start_with_windows_option(window):
+    s = window.settings
+    s.ck_login.setChecked(True)
+    assert s.ck_minimized.isEnabled()
+    s.ck_login.setChecked(False)
+    assert not s.ck_minimized.isEnabled()
 
 
 def test_start_menu_shortcut_opens_the_window_and_shares_its_taskbar_button(window, tmp_path, monkeypatch):

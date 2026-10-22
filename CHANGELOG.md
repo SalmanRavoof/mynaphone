@@ -51,7 +51,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (141 tests).
+- Test suite (143 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -80,6 +80,11 @@ All notable changes to Mynaphone are listed here. The format follows
   `SUPPORT.md` says where to get help.
 
 ### Fixed
+- Opening Mynaphone from its shortcut could show nothing. With **Open minimized to the tray** ticked
+  it started hidden in the tray, where Windows had tucked its icon under the ^ arrow by the clock.
+  Opening it yourself now always shows the window; the setting, renamed **When Windows starts it,
+  open in the tray**, applies only to Start with Windows. When the window first closes to the tray,
+  the message says the icon may be under the ^ arrow.
 - Songs of 45 to 65 seconds that AcoustID didn't know stayed in the inbox for good. The second
   fingerprint started 45 seconds in, where such a song has almost nothing left, and the error was
   taken as identification being unavailable. A short song's second fingerprint now starts a third of

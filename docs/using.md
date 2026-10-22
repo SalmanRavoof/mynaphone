@@ -73,11 +73,14 @@ and discards the take.
 
 ## Keep it in the tray
 
-Closing the window hides it, and recording continues. Click the tray icon to bring it back.
+Closing the window hides it, and recording continues. Click the tray icon to bring it back. If you
+don't see the icon by the clock, it's under the **^** arrow; drag it next to the clock to keep it in
+view.
 
 - To stop completely, right-click the tray icon and select **Quit**.
-- To open hidden on start, tick **Open minimized to the tray** in Settings.
-- To launch with Windows, tick **Start with Windows** in Settings.
+- To launch with Windows, tick **Start with Windows** in Settings. It opens hidden in the tray unless
+  you untick **When Windows starts it, open in the tray**.
+- Opening Mynaphone yourself, from a shortcut or PowerShell, always shows the window.
 
 Only one copy runs at a time. Starting Mynaphone again while it's in the tray brings its window back
 instead of opening a second recorder.

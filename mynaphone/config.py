@@ -80,7 +80,7 @@ class Identify:
 
 @dataclass
 class App:
-    start_minimized: bool = False
+    start_minimized: bool = True        # when Windows starts the app; opened by hand, the window always shows
     close_to_tray: bool = True
     autostart_recording: bool = True
     show_tooltips: bool = True
@@ -249,6 +249,7 @@ lastfm_api_key = {lastfm_api_key}
 apple_country = {apple_country}
 
 [app]
+# With Start with Windows on, open hidden in the tray at sign-in. Opening it yourself always shows the window.
 start_minimized = {start_minimized}
 close_to_tray = {close_to_tray}
 autostart_recording = {autostart_recording}

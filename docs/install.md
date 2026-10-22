@@ -190,16 +190,18 @@ extension that didn't come from the store.
 ## Step 10: Choose how it starts
 
 1. Open **Settings** and scroll to **Application**.
-2. Tick **Start with Windows** to launch Mynaphone hidden in the tray when you sign in. This adds an
-   entry to your user's startup list and nothing system-wide.
+2. Tick **Start with Windows** to launch Mynaphone when you sign in. This adds an entry to your
+   user's startup list and nothing system-wide. With **When Windows starts it, open in the tray**
+   ticked, as it is at first, it starts hidden in the tray.
 3. Tick **Shortcut in the Start menu** to open Mynaphone without PowerShell: type Mynaphone in Start,
    or right-click it there and select **Pin to taskbar**. **Shortcut on the desktop** adds a desktop
    icon as well.
 4. Leave **Start recording when the app opens** ticked, so the recorder listens as soon as it starts.
 5. Select **Save settings**.
 
-Opening Mynaphone while it's running brings its window back. With **Open minimized to the tray**
-ticked, the shortcut starts it in the tray, and opening it a second time shows the window.
+Opening Mynaphone yourself always shows its window, and brings the window back if it's already
+running. Closing the window keeps it running in the tray. Windows may tuck the tray icon under the
+**^** arrow by the clock; drag it next to the clock to keep it in view.
 
 You're ready. [Record your first song](first-song.md) shows what happens next.
 

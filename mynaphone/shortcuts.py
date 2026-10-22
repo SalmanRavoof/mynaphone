@@ -79,9 +79,9 @@ def gui_arguments(config_path: Path, minimized: bool = False) -> str:
     return f"{args} --minimized" if minimized else args
 
 
-def login_command(config_path: Path) -> str:
-    """The Start with Windows entry, which opens the app in the tray."""
-    return f'"{interpreter()}" {gui_arguments(config_path, minimized=True)}'
+def login_command(config_path: Path, minimized: bool = True) -> str:
+    """The Start with Windows entry, which opens the app in the tray unless told otherwise."""
+    return f'"{interpreter()}" {gui_arguments(config_path, minimized=minimized)}'
 
 
 def set_app_id() -> None:

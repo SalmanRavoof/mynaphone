@@ -720,9 +720,12 @@ class SettingsPage(QScrollArea):
         form = self._form()
         self.ck_autostart = self._check(form, "Start recording when the app opens", cfg.app.autostart_recording)
         self.ck_tray = self._check(form, "Closing the window keeps it running in the tray", cfg.app.close_to_tray)
-        self.ck_minimized = self._check(form, "Open minimized to the tray", cfg.app.start_minimized)
         self.ck_login = self._check(form, "Start with Windows", win.login_item_present(),
                                     "Adds an entry to your user's startup list. Nothing is installed system-wide.")
+        self.ck_minimized = self._check(form, "When Windows starts it, open in the tray", cfg.app.start_minimized,
+                                        "Opening Mynaphone yourself always shows the window.")
+        self.ck_minimized.setEnabled(self.ck_login.isChecked())
+        self.ck_login.toggled.connect(self.ck_minimized.setEnabled)
         self.ck_start_menu = self._check(form, "Shortcut in the Start menu", shortcuts.has_shortcut("start_menu"),
                                          "Type Mynaphone in Start to find it. "
                                          "Right-click it there to pin it to the taskbar.")
@@ -1168,7 +1171,7 @@ class MainWindow(QMainWindow):
             s.saved.setText("Saved.")
 
     def _login_command(self) -> str:
-        return shortcuts.login_command(self.config_path)
+        return shortcuts.login_command(self.config_path, minimized=self.cfg.app.start_minimized)
 
     def login_item_present(self) -> bool:
         try:
@@ -1551,8 +1554,10 @@ class MainWindow(QMainWindow):
         self.hide()
         if not self._tray_hint_shown:
             self._tray_hint_shown = True
-            self.tray.showMessage("Mynaphone", "Still running. Click the tray icon to open the window.",
-                                  QSystemTrayIcon.Information, 3000)
+            # Windows hides new tray icons under the ^ by the clock, so say where this one went
+            self.tray.showMessage("Mynaphone is still running",
+                                  "Its tray icon may be under the ^ arrow by the clock. Drag it next to the clock "
+                                  "to keep it in view.", QSystemTrayIcon.Information, 5000)
 
     def closeEvent(self, event) -> None:
         if self._quitting:
@@ -1646,8 +1651,8 @@ def run_gui(config_path: Path, minimized: bool = False) -> int:
     dev_shots = bool(os.environ.get("MYNAPHONE_SHOT_DIR"))
     if not dev_shots and _already_running():
         return 0
-    cfg = Config.load(config_path)
-    win = MainWindow(config_path, start_minimized=minimized or cfg.app.start_minimized)
+    # only Start with Windows asks for the tray; opened by hand, the window shows (it used to open hidden too)
+    win = MainWindow(config_path, start_minimized=minimized)
     if not dev_shots:
         from PySide6.QtNetwork import QLocalServer
         QLocalServer.removeServer(INSTANCE_NAME)

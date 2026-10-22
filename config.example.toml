@@ -76,6 +76,7 @@ lastfm_api_key = ""
 apple_country = "US"
 
 [app]
+# With Start with Windows on, open hidden in the tray at sign-in. Opening it yourself always shows the window.
 start_minimized = true
 close_to_tray = true
 autostart_recording = true
