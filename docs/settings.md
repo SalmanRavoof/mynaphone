@@ -91,6 +91,7 @@ These are set on the **Set up** page or in the file.
 | Last.fm API key | `lastfm_api_key` | Empty | Optional. With it, Last.fm's tags give a genre to songs that Apple and MusicBrainz have none for. |
 | None | `musicbrainz_contact` | Empty | The contact [MusicBrainz asks API clients to send](https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting), an email address or URL. Left empty, the project URL is sent. |
 | None | `apple_country` | `US` | The Apple store searched for genres, as a 2-letter country code. The US store covers Indian film songs too. |
+| **Fill in Indian film credits from JioSaavn** | `jiosaavn_credits` | `false` | When MusicBrainz has no lyricist or composer for a film song, ask JioSaavn, and take a name only when its copies of the song agree. JioSaavn's web API isn't published, and its terms forbid automated use. |
 
 ## Spotify bridge (`[bridge]`)
 

@@ -200,6 +200,8 @@ Only while a kept take is identified and filed, and only for these requests:
 - The Cover Art Archive receives a release id.
 - Apple's iTunes Search API receives the artist and title, to find the genre.
 - Last.fm receives the artist, title and your API key, only when you've added a key.
+- JioSaavn receives a search for the song's title with its film or first artist, only when you've
+  turned on **Fill in Indian film credits from JioSaavn**, at most 2 searches per song and 200 a day.
 - For a YouTube capture, YouTube Music's catalog receives a search for the song or film, and
   youtube.com receives a request for the video's public page when the browser extension didn't send
   the description.

@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import films, genres, identify, lyrics as lyr, playlists, tools
+from . import films, genres, identify, jiosaavn, lyrics as lyr, playlists, tools
 from .config import Config
 from .library import classify, file_take, resolve_cover, write_lyrics, write_lyrics_sidecar
 from .metadata import identity_from_row, missing_fields, refresh_track
@@ -92,6 +92,8 @@ class PostProcessor(threading.Thread):
                             self.retry_incomplete()
                         if not self._interrupted:
                             self.repair_artists()
+                        if not self._interrupted and self.cfg.identify.jiosaavn_credits:
+                            self.fill_indian_credits()
                         # a run cut short for a new song picks up again soon; otherwise every half hour
                         self._next_jobs = time.monotonic() + (120 if self._interrupted else 1800)
             except Exception:
@@ -377,6 +379,64 @@ class PostProcessor(threading.Thread):
         if fixed:
             log.info("put back the artist of %d songs", fixed)
         return fixed
+
+    # -- Indian film credits ---------------------------------------------------------------
+
+    def fill_indian_credits(self, limit: int = 20) -> int:
+        """Lyricist and composer from JioSaavn for Indian film songs that have none (jiosaavn.py). Each song is
+        asked about once a month at most; JioSaavn being unreachable isn't counted as an answer."""
+        cutoff = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=30)).isoformat()
+        rows = self.store.conn.execute(
+            "SELECT * FROM tracks WHERE state='library' AND COALESCE(lyrics_state,'') != 'instrumental' "
+            "AND (missing_json LIKE '%lyricists%' OR missing_json LIKE '%composers%') "
+            "AND (credits_tried_at IS NULL OR credits_tried_at < ?) ORDER BY credits_tried_at IS NOT NULL, id",
+            (cutoff,)).fetchall()
+        filled = asked = 0
+        for r in rows:
+            if asked >= limit or self._stop.is_set() or self._new_song_waiting():
+                break
+            ident = identity_from_row(r)
+            played = self.store.played_artist(r)
+            indian = (classify(ident) == "soundtrack"
+                      or jiosaavn.language_hint(ident.title, ident.album, ident.language))
+            if not indian:
+                continue
+            artists = list(dict.fromkeys([*(ident.artists or []), *identify._names_list(ident.artist),
+                                          *identify._names_list(played)]))
+            asked += 1
+            try:
+                found = jiosaavn.credits_for(ident.title, artists, ident.album, (r["duration_ms"] or 0) / 1000.0,
+                                             ident.language)
+            except jiosaavn.Unavailable as e:
+                log.info("Indian film credits paused: %s", e)
+                break
+            now = dt.datetime.now(dt.timezone.utc).isoformat()
+            self.store.conn.execute("UPDATE tracks SET credits_tried_at=? WHERE id=?", (now, int(r["id"])))
+            self.store.conn.commit()
+            if found is None:
+                continue
+            gained = []
+            if found.lyricists and not ident.lyricists:
+                ident.lyricists = list(found.lyricists)
+                gained.append("lyricist")
+            if found.composers and not ident.composers:
+                ident.composers = list(found.composers)
+                gained.append("composer")
+            if not gained:
+                continue
+            ident.credits_from = f"JioSaavn {found.song_id} ({found.copies} copies, vcode {found.vcode})"
+            self.store.conn.execute("UPDATE tracks SET identity_json=? WHERE id=?",
+                                    (json.dumps(ident.to_json(), ensure_ascii=False), int(r["id"])))
+            self.store.conn.commit()
+            try:
+                refresh_track(self.cfg, self.store, self.store.track(int(r["id"])), lookup=False, move=False)
+            except Exception as e:
+                log.warning("could not re-tag %s: %s", Path(r["file_path"] or "").name, e)
+                continue
+            filled += 1
+            log.info("%s for %s - %s from JioSaavn: %s", " and ".join(gained), r["artist"], r["title"],
+                     "; ".join(ident.lyricists + ident.composers))
+        return filled
 
     # -- instrumentals ---------------------------------------------------------------------
 

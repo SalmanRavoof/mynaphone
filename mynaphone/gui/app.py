@@ -730,6 +730,12 @@ class SettingsPage(QScrollArea):
                                       "so a long queue records only what's new. "
                                       "Turn it off while you listen yourself, or songs you own will jump away. "
                                       "Also on the Status page and in the tray menu.")
+        self.ck_jiosaavn = self._check(form, "Fill in Indian film credits from JioSaavn",
+                                       cfg.identify.jiosaavn_credits,
+                                       "When MusicBrainz has no lyricist or composer for a film song, Mynaphone asks "
+                                       "JioSaavn, and takes a name only when its copies of the song agree. JioSaavn's "
+                                       "web API isn't published and its terms forbid automated use, so it's off unless "
+                                       "you turn it on.")
         self.sp_keep = no_wheel(QSpinBox())
         self.sp_keep.setRange(0, 60)
         self.sp_keep.setSuffix(" days")
@@ -1203,6 +1209,7 @@ class MainWindow(QMainWindow):
         c.rules.discard_on_seek = s.ck_seek.isChecked()
         c.rules.discard_on_foreign_audio = s.ck_foreign.isChecked()
         c.rules.harvest_mode = s.ck_harvest.isChecked()
+        c.identify.jiosaavn_credits = s.ck_jiosaavn.isChecked()
         c.rules.keep_discards_days = s.sp_keep.value()
         if self.status.btn_harvest.isChecked() != c.rules.harvest_mode:
             self.status.btn_harvest.setChecked(c.rules.harvest_mode)

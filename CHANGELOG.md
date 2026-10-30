@@ -6,6 +6,10 @@ All notable changes to Mynaphone are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- Indian film credits from JioSaavn, off unless you turn it on in Settings. When MusicBrainz has
+  no lyricist or composer for a film song, Mynaphone asks JioSaavn, reads its copies of the
+  recording together, and takes a name only when 2 copies agree or the film's own album names it.
+  JioSaavn's web API isn't published and its terms forbid automated use.
 - Record a playlist. On the Status page, pick one of your Spotify playlists, Liked Songs, or a link to
   any playlist or album. Mynaphone says how much of it your library has, then plays it in Spotify from
   the first missing song, in order, and jumps past the songs you already have. A song that doesn't

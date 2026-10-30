@@ -27,6 +27,7 @@ Only while a kept take is identified and filed, and only to these services:
 | Spotify's or YouTube's image server | The cover address the player reported | The full-size cover |
 | [Apple's iTunes Search API](https://performance-partners.apple.com/search-api) | Artist and title | A genre |
 | [Last.fm](https://www.last.fm/api), only with your key | Artist, title and your API key | Listener tags, used for the genre |
+| [JioSaavn](https://www.jiosaavn.com), only when you turn it on | A song's title with its film or first artist | Its copies of the song, with lyricist and composer credits |
 | YouTube Music, for YouTube captures | A search for the song or film | Album, year and track number |
 | youtube.com, for YouTube captures without the extension's description | The video id | The public watch page, for the song credits |
 

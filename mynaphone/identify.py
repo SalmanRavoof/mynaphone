@@ -57,6 +57,7 @@ class Identity:
     lyricists: list[str] = field(default_factory=list)
     vocals: list[str] = field(default_factory=list)
     credit: str = ""                    # the recording's own MusicBrainz artist credit, before singers replace it
+    credits_from: str = ""              # where lyricist or composer came from when MusicBrainz had none
     performers: list[str] = field(default_factory=list)
     producers: list[str] = field(default_factory=list)
     isrc: str = ""
@@ -661,6 +662,11 @@ def from_youtube(meta: dict) -> Identity | None:
     except Exception as e:
         log.info("youtube music lookup failed: %s", e)
         return None
+
+
+def _names_list(text: str) -> list[str]:
+    """The people in an artist credit, as written: "Sonu Nigam, Jayesh Gandhi & Amrita Kak" is three."""
+    return [n.strip() for n in re.split(r",|&| and | feat\.? | ft\.? | x ", text or "") if n.strip()]
 
 
 def _names(text: str) -> set[str]:

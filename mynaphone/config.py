@@ -76,6 +76,7 @@ class Identify:
     musicbrainz_contact: str = ""   # email or URL MusicBrainz asks clients to send in User-Agent
     lastfm_api_key: str = ""        # optional, from last.fm/api/account/create; used for genres
     apple_country: str = "US"       # Apple storefront searched for genres (a two-letter country code)
+    jiosaavn_credits: bool = False  # fill Indian film songs' lyricist and composer from JioSaavn (unofficial API)
 
 
 @dataclass
@@ -153,6 +154,7 @@ class Config:
             lib_format=_s(self.library.format), aac_bitrate=self.library.aac_bitrate,
             acoustid_key=_s(self.identify.acoustid_key), musicbrainz_contact=_s(self.identify.musicbrainz_contact),
             lastfm_api_key=_s(self.identify.lastfm_api_key), apple_country=_s(self.identify.apple_country),
+            jiosaavn_credits=_b(self.identify.jiosaavn_credits),
             start_minimized=_b(self.app.start_minimized), close_to_tray=_b(self.app.close_to_tray),
             autostart_recording=_b(self.app.autostart_recording), show_tooltips=_b(self.app.show_tooltips),
         ), encoding="utf-8")
@@ -247,6 +249,9 @@ musicbrainz_contact = {musicbrainz_contact}
 lastfm_api_key = {lastfm_api_key}
 # The Apple store searched for genres, as a two-letter country code. US covers Indian film songs too.
 apple_country = {apple_country}
+# Fill in the lyricist and composer of Indian film songs from JioSaavn when MusicBrainz has none. Its web API isn't
+# published and its terms forbid automated use, so it's off unless you turn it on.
+jiosaavn_credits = {jiosaavn_credits}
 
 [app]
 # With Start with Windows on, open hidden in the tray at sign-in. Opening it yourself always shows the window.
