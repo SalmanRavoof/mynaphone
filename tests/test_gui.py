@@ -502,6 +502,14 @@ def test_coming_back_from_the_taskbar_or_waking_up_checks_the_window(window, cap
     assert "Windows woke up from sleep" in [r.getMessage() for r in caplog.records]
 
 
+def test_numpy_keeps_one_maths_thread():
+    """With one thread per CPU, importing numpy set aside 490 MB of Windows' memory on a 16-thread PC."""
+    code = "import os, mynaphone.takes; print(os.environ['OPENBLAS_NUM_THREADS'])"
+    env = {k: v for k, v in os.environ.items() if k != "OPENBLAS_NUM_THREADS"}
+    out = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env)
+    assert out.stdout.strip() == "1", out.stderr
+
+
 def test_every_reason_the_recorder_gives_has_words():
     """A skip or discard reason shows up raw in the Takes table unless _humanize knows it."""
     import re

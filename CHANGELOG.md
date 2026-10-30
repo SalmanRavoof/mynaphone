@@ -115,6 +115,9 @@ All notable changes to Mynaphone are listed here. The format follows
   when the window opened from the tray. It now also runs when the window comes back from the
   taskbar, moves to another screen, or the PC wakes up or changes its screens. When it can't tell,
   the log says why, and waking up and screen changes leave a line too.
+- Mynaphone set aside nearly 500 MB of Windows' memory that it never used. numpy's maths library
+  reserves memory for every CPU thread as it loads, and Mynaphone's audio arithmetic never uses
+  those threads, so it now gets one.
 - Band songs were tagged with their singers as the artist: Metallica's as James Hetfield, Queen's
   as Brian May and Freddie Mercury, and Bowie's "“Heroes”" as David Bowie and Tony Visconti, who
   sang backing vocals. The rule meant for film songs, where MusicBrainz credits the music director
