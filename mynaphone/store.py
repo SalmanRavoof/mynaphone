@@ -222,14 +222,21 @@ class Store:
     def played_title(self, row) -> str:
         """The title the player showed when the song was recorded. Filing replaces the row's title with
         MusicBrainz's, which can drop words such as Instrumental. Older rows find it in their kept take."""
+        return self._played(row, "title")
+
+    def played_artist(self, row) -> str:
+        """The artist the player showed when the song was recorded, before MusicBrainz's credit replaced it."""
+        return self._played(row, "artist")
+
+    def _played(self, row, field: str) -> str:
         try:
-            title = json.loads(row["meta_json"] or "{}").get("played_title")
+            value = json.loads(row["meta_json"] or "{}").get(f"played_{field}")
         except (TypeError, ValueError, AttributeError):
-            title = None
-        if title:
-            return title
+            value = None
+        if value:
+            return value
         if row["source_uri"]:
-            r = self.conn.execute("SELECT title FROM takes WHERE source_uri=? AND verdict='keep' ORDER BY id DESC "
+            r = self.conn.execute(f"SELECT {field} FROM takes WHERE source_uri=? AND verdict='keep' ORDER BY id DESC "
                                   "LIMIT 1", (row["source_uri"],)).fetchone()
             if r and r[0]:
                 return r[0]

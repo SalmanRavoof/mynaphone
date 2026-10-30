@@ -117,3 +117,40 @@ def test_scores_and_wordless_albums_are_marked_instrumental(tmp_config):
     assert state[sung] == "none" and state[kept_vocal] == "none"       # a credited singer, and your own edit
     assert state[film[0]] == "none"                                     # a film album with words isn't a score
     assert json.loads(store.track(score[0])["missing_json"]) == ["isrc"]
+
+
+def test_repair_puts_back_a_bands_artist(tmp_config, monkeypatch):
+    import mynaphone.musicbrainz as mb
+    store = Store(tmp_config.paths.db_path)
+    pp = PostProcessor(tmp_config, store)
+
+    def song(title, artist, album_artist, rec, played):
+        f = tmp_config.paths.library_dir / f"{title}.m4a"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(b"m4a")
+        ident = {"title": title, "artist": artist, "artists": [artist], "album_artist": album_artist,
+                 "vocals": [artist], "mb_recording_id": rec}
+        return store.add_track(artist=artist, title=title, album="A", album_artist=album_artist, duration_ms=1,
+                               file_path=str(f), state="library", identity_json=json.dumps(ident),
+                               meta_json=json.dumps({"played_artist": played}))
+
+    band = song("Enter Sandman", "James Hetfield", "Metallica", "es", "Metallica")
+    film = song("Rote Hue Aate Hai Sab", "Kishore Kumar", "Laxmikant–Pyarelal", "hum", "Kishore Kumar")
+    credits = {"es": ("Metallica", ["James Hetfield"]), "hum": ("Laxmikant–Pyarelal", ["Kishore Kumar"])}
+    asked = []
+
+    def recording(rid):
+        asked.append(rid)
+        artist, vocals = credits[rid]
+        return {"artist": artist, "artist_names": [artist], "vocals": vocals}
+
+    tagged = []
+    monkeypatch.setattr(mb, "recording", recording)
+    monkeypatch.setattr(P, "refresh_track",
+                        lambda cfg, st, row, lookup, move: tagged.append((json.loads(row["identity_json"])["artist"],
+                                                                           lookup, move)))
+    assert pp.repair_artists() == 1
+    assert tagged == [("Metallica", False, False)]              # re-tagged from the record, no lookups, not moved
+    assert json.loads(store.track(band)["identity_json"])["credit"] == "Metallica"
+    assert json.loads(store.track(film)["identity_json"])["artist"] == "Kishore Kumar"
+    assert pp.repair_artists() == 0 and sorted(asked) == ["es", "hum"]      # each song is read once

@@ -85,6 +85,8 @@ class PostProcessor(threading.Thread):
                         self.backfill_lyrics()
                         if not self._interrupted:
                             self.retry_incomplete()
+                        if not self._interrupted:
+                            self.repair_artists()
                         # a run cut short for a new song picks up again soon; otherwise every half hour
                         self._next_jobs = time.monotonic() + (120 if self._interrupted else 1800)
             except Exception:
@@ -152,7 +154,7 @@ class PostProcessor(threading.Thread):
                 note = (note + "; " if note else "") + "YouTube Music catalogue"
         else:
             try:
-                identify.enrich_from_musicbrainz(ident, self.cfg.identify.musicbrainz_contact)
+                identify.enrich_from_musicbrainz(ident, self.cfg.identify.musicbrainz_contact, meta.get("artist", ""))
             except OSError as e:
                 # the network or MusicBrainz is down: the song stays in the inbox for another try
                 raise OSError(f"musicbrainz unavailable: {e}") from e
@@ -300,6 +302,56 @@ class PostProcessor(threading.Thread):
                 log.info("retry failed for %s: %s", row["title"], e)
                 break
         return done
+
+    # -- artist credits --------------------------------------------------------------------
+
+    def repair_artists(self, limit: int = 50) -> int:
+        """Put back the artist of songs that got their singers instead: Metallica's songs as James Hetfield, Queen's
+        as Brian May and Freddie Mercury. Until October 30 the singers replaced any recording credit that matched the
+        album artist, which every band's album does. A song qualifies when its artist is its singers and it has no
+        stored MusicBrainz credit; it gets the credit read again, the corrected rule applied, and its file re-tagged.
+        The credit is stored then, so each song is read once."""
+        from . import musicbrainz as mb
+        mb.set_contact(self.cfg.identify.musicbrainz_contact)
+        fixed = 0
+        rows = self.store.conn.execute(
+            "SELECT * FROM tracks WHERE state='library' AND identity_json LIKE '%\"vocals\": [\"%'").fetchall()
+        for r in rows:
+            if fixed >= limit or self._stop.is_set() or self._new_song_waiting():
+                break
+            ident = identity_from_row(r)
+            if (ident.credit or not ident.mb_recording_id or not ident.vocals
+                    or ident.artist != ", ".join(ident.vocals)):
+                continue
+            try:
+                rec = mb.recording(ident.mb_recording_id)
+            except Exception as e:
+                log.info("artist repair paused (%s)", e)
+                break
+            before = ident.artist
+            if rec is None:
+                ident.credit = ident.artist     # gone from MusicBrainz: leave the song as it is, and don't ask again
+            else:
+                ident.credit = rec["artist"] or ident.artist
+                ident.artist = ident.credit
+                ident.artists = [n for n in rec.get("artist_names") or [] if n] or [ident.credit]
+                ident.vocals = list(dict.fromkeys(rec["vocals"]))
+                identify.prefer_vocals(ident, self.store.played_artist(r), rec.get("artist_names"))
+            self.store.conn.execute("UPDATE tracks SET identity_json=? WHERE id=?",
+                                    (json.dumps(ident.to_json(), ensure_ascii=False), int(r["id"])))
+            self.store.conn.commit()
+            if ident.artist == before:
+                continue
+            try:
+                refresh_track(self.cfg, self.store, self.store.track(int(r["id"])), lookup=False, move=False)
+            except Exception as e:
+                log.warning("could not re-tag %s: %s", Path(r["file_path"] or "").name, e)
+                continue
+            fixed += 1
+            log.info("artist of %s: %s -> %s", ident.title, before, ident.artist)
+        if fixed:
+            log.info("put back the artist of %d songs", fixed)
+        return fixed
 
     # -- instrumentals ---------------------------------------------------------------------
 

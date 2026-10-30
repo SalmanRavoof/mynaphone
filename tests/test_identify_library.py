@@ -272,16 +272,55 @@ def test_unidentified_songs_go_to_unsorted():
 
 
 def test_singers_shown_as_artist_when_recording_credits_the_composer():
+    """MusicBrainz credits Indian film recordings to the music director, while Spotify names the singers."""
     from mynaphone.identify import prefer_vocals
     i = Identity(title="T", artist="A. R. Rahman", artists=["A. R. Rahman"], album_artist="A. R. Rahman",
                  composers=["A. R. Rahman"], vocals=["Sonu Nigam", "Shreya Ghoshal"])
-    prefer_vocals(i)
+    prefer_vocals(i, "Sonu Nigam, Shreya Ghoshal", ["A. R. Rahman"])
     assert (i.artist == "Sonu Nigam, Shreya Ghoshal" and i.album_artist == "A. R. Rahman"
             and i.composers == ["A. R. Rahman"])
     j = Identity(title="T", artist="Sonu Nigam", artists=["Sonu Nigam"], album_artist="A. R. Rahman",
                  vocals=["Sonu Nigam"])
-    prefer_vocals(j)
+    prefer_vocals(j, "Sonu Nigam", ["Sonu Nigam"])
     assert j.artist == "Sonu Nigam"
+
+
+def test_a_bands_singer_is_not_its_artist():
+    """Metallica's songs were filed under James Hetfield and Queen's under Brian May and Freddie Mercury: the band
+    is both the recording's credit and the album artist, which the old rule took for a music director."""
+    from mynaphone.identify import prefer_vocals
+    band = Identity(title="Enter Sandman", artist="Metallica", album_artist="Metallica", vocals=["James Hetfield"])
+    prefer_vocals(band, "Metallica", ["Metallica"])
+    assert band.artist == "Metallica"
+    guest = Identity(title="Godzilla", artist="Eminem feat. Juice WRLD", album_artist="Eminem", vocals=["Juice WRLD"])
+    prefer_vocals(guest, "Eminem", ["Eminem", "Juice WRLD"])
+    assert guest.artist == "Eminem feat. Juice WRLD"
+    film = Identity(title="Rote Hue Aate Hai Sab", artist="Laxmikant–Pyarelal", album_artist="Laxmikant–Pyarelal",
+                    vocals=["Kishore Kumar", "Kishore Kumar"])
+    prefer_vocals(film, "Kishore Kumar", ["Laxmikant–Pyarelal"])
+    assert film.artist == "Kishore Kumar"            # once, though MusicBrainz lists him twice
+    unknown = Identity(title="T", artist="A. R. Rahman", vocals=["Sonu Nigam"])
+    prefer_vocals(unknown)                          # no player artist to go by, so the credit stays
+    assert unknown.artist == "A. R. Rahman"
+
+
+def test_backing_singers_are_kept_apart(monkeypatch):
+    """Bowie's “Heroes” was tagged "David Bowie, Tony Visconti": the producer sang backing vocals."""
+    import mynaphone.musicbrainz as mb
+
+    def fake_get(path, inc="", timeout=20.0):
+        return {"title": "“Heroes”", "artist-credit": [{"name": "David Bowie", "artist": {"id": "b", "name": "Bowie"}}],
+                "relations": [
+                    {"type": "vocal", "target-type": "artist", "attributes": ["lead vocals"],
+                     "artist": {"name": "David Bowie"}},
+                    {"type": "vocal", "target-type": "artist", "attributes": ["background vocals"],
+                     "artist": {"name": "Tony Visconti"}},
+                    {"type": "vocal", "target-type": "artist", "attributes": [], "artist": {"name": "David Bowie"}}]}
+
+    monkeypatch.setattr(mb, "_get", fake_get)
+    rec = mb.recording("r")
+    assert rec["vocals"] == ["David Bowie"] and rec["backing_vocals"] == ["Tony Visconti"]
+    assert rec["artist_names"] == ["David Bowie"]
 
 
 def test_catalogue_match_rejects_covers():

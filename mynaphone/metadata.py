@@ -156,7 +156,7 @@ def refresh_track(cfg: Config, store: Store, row, lookup: bool = True, manual: d
                     ident = yt
                     note = note or "YouTube credits and catalogue"
             if ident.mb_recording_id or ident.mb_release_id:
-                identify.enrich_from_musicbrainz(ident, cfg.identify.musicbrainz_contact)
+                identify.enrich_from_musicbrainz(ident, cfg.identify.musicbrainz_contact, store.played_artist(row))
             if not ident.is_soundtrack and identify.looks_like_soundtrack(ident.album, ident.title):
                 ident.secondary_types.append("Soundtrack")
             identify.apply_spotify(ident, meta)

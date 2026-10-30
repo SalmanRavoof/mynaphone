@@ -56,6 +56,7 @@ class Identity:
     composers: list[str] = field(default_factory=list)
     lyricists: list[str] = field(default_factory=list)
     vocals: list[str] = field(default_factory=list)
+    credit: str = ""                    # the recording's own MusicBrainz artist credit, before singers replace it
     performers: list[str] = field(default_factory=list)
     producers: list[str] = field(default_factory=list)
     isrc: str = ""
@@ -662,21 +663,30 @@ def from_youtube(meta: dict) -> Identity | None:
         return None
 
 
-def prefer_vocals(ident: Identity) -> None:
-    """When a recording is credited to its music director, show the singers as the artist.
+def _names(text: str) -> set[str]:
+    """The people in an artist credit, normalized: "Sonu Nigam, Jayesh Gandhi & Amrita Kak" is three."""
+    return {norm(n) for n in re.split(r",|&| and | feat\.? | ft\.? | x ", text or "") if norm(n)}
 
-    Indian film releases on MusicBrainz often credit the composer on the recording and name the
-    singers only as vocal performers. The composer keeps the album-artist and composer tags.
+
+def prefer_vocals(ident: Identity, shown: str = "", credited: list[str] | None = None) -> None:
+    """Show the singers as the artist when the player names one of them and none of the recording's credited artists.
+
+    Indian film releases on MusicBrainz often credit the music director on the recording and name the singers only
+    as vocal performers, while Spotify shows the singers. The composer keeps the album-artist and composer tags.
+    When the player agrees with the credit, it stays: a band's singer isn't the band (James Hetfield isn't
+    Metallica), and a guest on a track isn't its artist. `shown` is the player's artist, `credited` the names in the
+    recording's credit. Without the player's artist nothing changes.
     """
     if not ident.vocals:
         return
-    credit = norm(ident.artist)
-    composers = {norm(c) for c in ident.composers} | {norm(ident.album_artist)}
-    if not credit or credit in composers or all(norm(a) in composers for a in ident.artists):
-        if not ident.composers and ident.artist:
-            ident.composers = [ident.artist]
-        ident.artists = list(ident.vocals)
-        ident.artist = ", ".join(ident.vocals)
+    player = _names(shown)
+    names = {norm(n) for n in credited or [] if norm(n)} | _names(ident.artist)
+    if not player or player & names or not player & {norm(v) for v in ident.vocals}:
+        return
+    if not ident.composers and ident.artist:
+        ident.composers = [ident.artist]
+    ident.artists = list(dict.fromkeys(ident.vocals))
+    ident.artist = ", ".join(ident.artists)
 
 
 def prefer_original_year(ident: Identity) -> None:
@@ -693,8 +703,9 @@ def prefer_original_year(ident: Identity) -> None:
     ident.date = orig
 
 
-def enrich_from_musicbrainz(ident: Identity, contact: str = "") -> None:
-    """Fill composer/lyricist/singers/ISRC/label/genres/... from MusicBrainz. Best effort."""
+def enrich_from_musicbrainz(ident: Identity, contact: str = "", shown_artist: str = "") -> None:
+    """Fill composer/lyricist/singers/ISRC/label/genres/... from MusicBrainz. Best effort. `shown_artist` is the
+    artist the player named, which decides whether the singers stand in for the recording's credit."""
     from . import musicbrainz as mb
     mb.set_contact(contact)
     if ident.mb_release_id:
@@ -736,9 +747,10 @@ def enrich_from_musicbrainz(ident: Identity, contact: str = "") -> None:
             ident.artist_sort = rec["artist_sort"]
             ident.mb_artist_ids = rec["artist_ids"] or ident.mb_artist_ids
             ident.isrc = rec["isrcs"][0] if rec["isrcs"] else ident.isrc
-            ident.vocals = rec["vocals"]
+            ident.credit = rec["artist"] or ""
+            ident.vocals = list(dict.fromkeys(rec["vocals"]))
             ident.performers = rec["performers"]
-            prefer_vocals(ident)
+            prefer_vocals(ident, shown_artist, rec.get("artist_names"))
             ident.producers = rec["producers"]
             if not ident.genres:
                 ident.genres = rec["genres"]

@@ -80,6 +80,13 @@ All notable changes to Mynaphone are listed here. The format follows
   `SUPPORT.md` says where to get help.
 
 ### Fixed
+- Band songs were tagged with their singers as the artist: Metallica's as James Hetfield, Queen's
+  as Brian May and Freddie Mercury, and Bowie's "“Heroes”" as David Bowie and Tony Visconti, who
+  sang backing vocals. The rule meant for film songs, where MusicBrainz credits the music director
+  and the player names the singers, also caught every recording credited to its album artist. The
+  singers now stand in only when the player names one of them and none of the credited artists,
+  backing and choir singers are left out, and each name appears once. Songs filed before the fix
+  get their MusicBrainz credit read again and their files re-tagged, a few dozen per run.
 - Game and film scores counted as songs missing their lyrics and lyricist. A song is now taken as
   instrumental when MusicBrainz gives it its "no lyrics" language, when its title (the one the
   player showed too) or its album says Instrumental, when its album is a film's or a game's score,

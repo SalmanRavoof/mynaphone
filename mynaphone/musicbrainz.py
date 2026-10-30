@@ -126,9 +126,11 @@ def recording(mbid: str) -> dict | None:
         "artist": credit_string(r.get("artist-credit")),
         "artist_sort": credit_sort(r.get("artist-credit")),
         "artist_ids": [c.get("artist", {}).get("id", "") for c in r.get("artist-credit", []) or [] if c.get("artist")],
+        "artist_names": [c.get("name") or c.get("artist", {}).get("name", "")
+                         for c in r.get("artist-credit", []) or [] if isinstance(c, dict)],
         "isrcs": r.get("isrcs", []) or [],
         "genres": _genres(r),
-        "performers": [], "vocals": [], "producers": [], "works": [],
+        "performers": [], "vocals": [], "backing_vocals": [], "producers": [], "works": [],
         "length": r.get("length"),
     }
     for rel in r.get("relations", []) or []:
@@ -138,7 +140,11 @@ def recording(mbid: str) -> dict | None:
             if not name:
                 continue
             if t in ("vocal",):
-                out["vocals"].append(name)
+                # lead and unnamed vocal parts are the singers; backing and choir vocalists aren't the artist
+                attrs = " ".join(str(a).lower() for a in rel.get("attributes") or [])
+                key = "backing_vocals" if ("background" in attrs or "choir" in attrs) else "vocals"
+                if name not in out[key]:
+                    out[key].append(name)
             elif t in ("producer",):
                 out["producers"].append(name)
             elif t in ("instrument", "performer", "performing orchestra", "conductor"):
