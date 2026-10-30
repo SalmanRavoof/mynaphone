@@ -177,13 +177,24 @@ def safe_name(s: str, limit: int = 80) -> str:
     return (s or "untitled")[:limit]
 
 
+FLAC_BLOCK_SECONDS = 10    # written a block at a time: the whole song at once took 1.3 GB for 7 minutes
+
+
 def write_flac(path: Path, audio: np.ndarray, rate: int, bit_depth: int) -> None:
+    """Write the take as FLAC. A 16-bit file gets TPDF dither before the float samples are truncated. Both go a
+    block at a time in 32-bit floats: done on the whole song in 64-bit floats, a 7-minute take needed about 1.3 GB,
+    and on October 30 this PC, with 68 of its 69 GB of memory committed, couldn't find 84 MB for a short one."""
     subtype = "PCM_24" if bit_depth == 24 else "PCM_16"
-    if bit_depth == 16:
-        # TPDF dither before truncating float32 to 16-bit
-        audio = audio + (np.random.random(audio.shape) + np.random.random(audio.shape) - 1.0) / 32768.0
-    audio = np.clip(audio, -1.0, 1.0)
-    sf.write(str(path), audio, rate, subtype=subtype)
+    channels = audio.shape[1] if audio.ndim > 1 else 1
+    rng = np.random.default_rng()
+    block = max(1, int(rate * FLAC_BLOCK_SECONDS))
+    with sf.SoundFile(str(path), "w", samplerate=rate, channels=channels, subtype=subtype, format="FLAC") as f:
+        for i in range(0, len(audio), block):
+            part = np.asarray(audio[i:i + block], dtype=np.float32)
+            if bit_depth == 16:
+                part = part + ((rng.random(part.shape, dtype=np.float32) + rng.random(part.shape, dtype=np.float32)
+                                - 1.0) / 32768.0)
+            f.write(np.clip(part, -1.0, 1.0))
 
 
 def tag_flac(path: Path, meta: TakeMeta, verdict: Verdict, rate: int, bit_depth: int) -> None:
