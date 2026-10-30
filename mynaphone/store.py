@@ -91,7 +91,19 @@ class Store:
             if col not in have:
                 self.conn.execute(f"ALTER TABLE tracks ADD COLUMN {col} {typ}")
         self.conn.commit()
+        self._migrate()
         self.merge_shared_files()
+
+    def _migrate(self) -> None:
+        """One-time changes to the index, counted in SQLite's user_version."""
+        version = self.conn.execute("PRAGMA user_version").fetchone()[0]
+        if version < 1:
+            # Until October 30 every LRCLIB lookup asked its overloaded /api/get and searched with the whole artist
+            # credit. Songs that spent their 10 tries that way get 10 more with the fixed lookup, which found
+            # Woh Ladki Jo, Aap Ki Kashish and Just Chill.
+            self.conn.execute("UPDATE tracks SET lyrics_tries=0 WHERE lyrics_state='none' AND lyrics_tries >= 10")
+            self.conn.execute("PRAGMA user_version=1")
+            self.conn.commit()
 
     # -- dedup -----------------------------------------------------------------------------
 

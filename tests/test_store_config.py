@@ -154,3 +154,18 @@ def test_songs_to_play_again(tmp_path):
     tere = songs[1]
     assert tere["tries"] == 2 and tere["reasons"] == ["paused", "stopped"] and tere["last_try"].startswith("2026-10-05")
     assert songs[2]["key"] == "lost acapulco|mercury"
+
+
+def test_songs_that_spent_their_lyrics_tries_on_the_broken_lookup_get_more_once(tmp_path):
+    from mynaphone.store import Store
+    db = tmp_path / "db.sqlite"
+    st = Store(db)
+    st.conn.execute("PRAGMA user_version=0")
+    tid = st.add_track(artist="Sonu Nigam", title="Just Chill", state="library", lyrics_state="none", lyrics_tries=10)
+    done = st.add_track(artist="A", title="Has lyrics", state="library", lyrics_state="synced", lyrics_tries=10)
+    st.conn.commit()
+    st = Store(db)
+    assert st.track(tid)["lyrics_tries"] == 0 and st.track(done)["lyrics_tries"] == 10
+    st.conn.execute("UPDATE tracks SET lyrics_tries=10 WHERE id=?", (tid,))
+    st.conn.commit()
+    assert Store(db).track(tid)["lyrics_tries"] == 10              # once only
