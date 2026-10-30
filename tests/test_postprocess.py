@@ -64,3 +64,16 @@ def test_better_copy_of_a_recording_replaces_the_filed_one(tmp_config, monkeypat
     assert [(r["source_uri"], r["quality_tier"]) for r in rows] == [("spotify:track:album", "high")]
     assert pp.store.find_archived("x", "y", 1, uri="youtube:abc")["source_uri"] == "spotify:track:album"
     assert [e["kind"] for e in events] == ["filed", "filed"]
+
+
+def test_a_lyrics_lookup_without_an_answer_is_not_a_try(tmp_config, monkeypatch):
+    """Songs used to file with one of their 10 lyrics tries spent even when LRCLIB answered 503."""
+    pp, events = _processor(tmp_config, monkeypatch)
+
+    def busy(*args, **kwargs):
+        raise P.lyr.Unavailable("LRCLIB answered 503 Service Unavailable", 900)
+
+    monkeypatch.setattr(P.lyr, "fetch", busy)
+    pp.process(_inbox_take(tmp_config, pp.store, "Hukum", "spotify:track:album"))
+    row = pp.store.conn.execute("SELECT lyrics_state, lyrics_tries, lyrics_tried_at FROM tracks").fetchone()
+    assert tuple(row) == ("none", 0, None)

@@ -43,7 +43,8 @@ class PostProcessor(threading.Thread):
         self._kick = threading.Event()
         self.pending: dict[str, Pending] = {}
         self.paused = False
-        self._last_backfill = 0.0
+        self._next_jobs = 0.0           # when the lyrics backfill and the retry of incomplete songs run next
+        self._interrupted = False       # a job stopped early so a new song could be filed
 
     def stop(self) -> None:
         self._stop.set()
@@ -51,6 +52,13 @@ class PostProcessor(threading.Thread):
 
     def kick(self) -> None:
         self._kick.set()
+
+    def _new_song_waiting(self) -> bool:
+        """The recorder kept a song: the slow jobs stop so it's filed without waiting for them."""
+        if self._kick.is_set():
+            self._interrupted = True
+            return True
+        return False
 
     def _emit(self, kind: str, **data) -> None:
         if self.on_event:
@@ -67,10 +75,13 @@ class PostProcessor(threading.Thread):
                 if not self.paused:
                     self._scan()
                     self._work()
-                    if time.monotonic() - self._last_backfill > 1800:
-                        self._last_backfill = time.monotonic()
+                    if time.monotonic() >= self._next_jobs:
+                        self._interrupted = False
                         self.backfill_lyrics()
-                        self.retry_incomplete()
+                        if not self._interrupted:
+                            self.retry_incomplete()
+                        # a run cut short for a new song picks up again soon; otherwise every half hour
+                        self._next_jobs = time.monotonic() + (120 if self._interrupted else 1800)
             except Exception:
                 log.exception("post-processor loop failed")
             self._kick.wait(60.0)
@@ -179,9 +190,11 @@ class PostProcessor(threading.Thread):
                 ident.language = sp["language"]
         if not text and identify.is_instrumental(ident.title or meta.get("title", ""), ident.album):
             lyr_state = "instrumental"      # nothing to look up
+        tried = False
         if lyr_state not in ("synced", "instrumental"):
             try:
                 got = lyr.fetch(ident.title, ident.artist or meta.get("artist", ""), ident.album, duration_s)
+                tried = True
                 if got and got.instrumental and not text:
                     lyr_state = "instrumental"
                 elif got and got.synced:
@@ -195,14 +208,15 @@ class PostProcessor(threading.Thread):
         dst = file_take(path, self.cfg.paths.library_dir, ident, self.cfg.library.format,
                         self.cfg.library.aac_bitrate, text, capture, cover)
         missing = missing_fields(ident, cover is not None, lyr_state)
+        now = dt.datetime.now(dt.timezone.utc).isoformat()
         if row:
             self.store.conn.execute(
                 "UPDATE tracks SET file_path=?, state='library', title=?, artist=?, album=?, album_artist=?, "
-                "track_number=?, lyrics_state=?, lyrics_tries=?, identity_json=?, missing_json=?, last_lookup=?, "
-                "lookup_tries=1 WHERE id=?",
+                "track_number=?, lyrics_state=?, lyrics_tries=?, lyrics_tried_at=?, identity_json=?, missing_json=?, "
+                "last_lookup=?, lookup_tries=1 WHERE id=?",
                 (str(dst), ident.title, ident.artist, ident.album, ident.album_artist, ident.track_number,
-                 lyr_state, 1, json.dumps(ident.to_json(), ensure_ascii=False), json.dumps(missing),
-                 dt.datetime.now(dt.timezone.utc).isoformat(), int(row["id"])))
+                 lyr_state, 1 if tried else 0, now if tried else None, json.dumps(ident.to_json(), ensure_ascii=False),
+                 json.dumps(missing), now, int(row["id"])))
             self.store.conn.commit()
         if twin is not None:
             self._retire(twin, dst, row)
@@ -266,7 +280,7 @@ class PostProcessor(threading.Thread):
         """Look up again songs that still have gaps, at most once a week each. Manual edits are kept."""
         done = 0
         for row in self.store.incomplete_for_retry(limit=limit):
-            if self._stop.is_set():
+            if self._stop.is_set() or self._new_song_waiting():
                 break
             try:
                 before = json.loads(row["missing_json"] or "[]")
@@ -285,26 +299,39 @@ class PostProcessor(threading.Thread):
     # -- lyrics backfill -------------------------------------------------------------------
 
     def backfill_lyrics(self, limit: int = 20) -> int:
-        """Retry lyrics for library songs that have none (up to 10 tries, spaced by the scan interval)."""
+        """Look again for lyrics for library songs that have none, up to 10 tries each, at most `limit` songs a run.
+
+        A song whose last try failed goes to the back of the line, so it can't hold up the rest. The run stops when
+        LRCLIB asks for a pause (it answered 503 to every run for weeks while each run sent dozens of requests back
+        to back) or when a new song is waiting to be filed."""
+        if lyr.paused_for():
+            return 0
         rows = self.store.conn.execute(
             "SELECT id, file_path, title, artist, album, duration_ms, lyrics_tries FROM tracks "
             "WHERE state='library' AND (lyrics_state IS NULL OR lyrics_state='none') AND COALESCE(lyrics_tries,0) < 10 "
-            "ORDER BY id LIMIT ?", (limit,)).fetchall()
-        done = 0
+            "ORDER BY lyrics_tried_at IS NOT NULL, lyrics_tried_at, id LIMIT ?", (limit,)).fetchall()
+        done = checked = 0
         for r in rows:
-            if self._stop.is_set():
+            if self._stop.is_set() or self._new_song_waiting():
                 break
             path = Path(r["file_path"] or "")
             if not path.exists():
                 continue
+            now = dt.datetime.now(dt.timezone.utc).isoformat()
             if identify.is_instrumental(r["title"], r["album"] or ""):
                 got = lyr.Lyrics(instrumental=True)     # the title says so; no lookup needed
             else:
                 try:
                     got = lyr.fetch(r["title"], r["artist"], r["album"] or "", (r["duration_ms"] or 0) / 1000.0)
+                except lyr.Unavailable as e:
+                    log.info("lyrics backfill paused: %s; trying again in %.0f min", e, e.retry_after / 60)
+                    self._lyrics_tried(int(r["id"]), now)
+                    break
                 except Exception as e:
                     log.info("lyrics backfill paused (%s)", e)
+                    self._lyrics_tried(int(r["id"]), now)
                     break
+            checked += 1
             state = "none"
             if got and got.instrumental:
                 state = "instrumental"
@@ -325,7 +352,14 @@ class PostProcessor(threading.Thread):
             if state == "instrumental":
                 miss = [m for m in miss if m != "lyricists"]
             self.store.conn.execute(
-                "UPDATE tracks SET lyrics_state=?, lyrics_tries=COALESCE(lyrics_tries,0)+1, missing_json=? WHERE id=?",
-                (state, json.dumps(miss), int(r["id"])))
+                "UPDATE tracks SET lyrics_state=?, lyrics_tries=COALESCE(lyrics_tries,0)+1, lyrics_tried_at=?, "
+                "missing_json=? WHERE id=?", (state, now, json.dumps(miss), int(r["id"])))
             self.store.conn.commit()
+        if checked:
+            log.info("lyrics backfill: %d songs checked, %d got lyrics", checked, done)
         return done
+
+    def _lyrics_tried(self, track_id: int, when: str) -> None:
+        """A try that got no answer doesn't count against the song, but sends it to the back of the line."""
+        self.store.conn.execute("UPDATE tracks SET lyrics_tried_at=? WHERE id=?", (when, track_id))
+        self.store.conn.commit()

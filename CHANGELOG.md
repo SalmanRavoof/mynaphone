@@ -80,6 +80,13 @@ All notable changes to Mynaphone are listed here. The format follows
   `SUPPORT.md` says where to get help.
 
 ### Fixed
+- Lyrics from LRCLIB had stopped arriving since mid-October. For a song LRCLIB doesn't have, its
+  exact lookup also asks other sites, and that part answered "The server is busy" (503), which
+  stopped every lyrics run at its first song. Mynaphone now asks LRCLIB's own database and its
+  search, and when a long artist credit makes the search busy, it searches under the first name in
+  the credit. Requests go out at least a second apart, a pause LRCLIB asks for is kept, a lookup
+  that got no answer doesn't count as one of a song's 10 tries, and a song whose lookup failed moves
+  to the back of the line. The lyrics run also stops when a new song is waiting to be filed.
 - While a finished song was written out, the recorder read nothing from the player for 5 to 9
   seconds, so the next song's first updates arrived late. Songs are now saved in the background, one
   at a time on their own thread and database connection.

@@ -78,7 +78,7 @@ class Store:
         have = {r[1] for r in self.conn.execute("PRAGMA table_info(tracks)")}
         for col, typ in (("lyrics_state", "TEXT"), ("lyrics_tries", "INTEGER DEFAULT 0"), ("identity_json", "TEXT"),
                          ("manual_json", "TEXT"), ("missing_json", "TEXT"), ("last_lookup", "TEXT"),
-                         ("lookup_tries", "INTEGER DEFAULT 0")):
+                         ("lookup_tries", "INTEGER DEFAULT 0"), ("lyrics_tried_at", "TEXT")):
             if col not in have:
                 self.conn.execute(f"ALTER TABLE tracks ADD COLUMN {col} {typ}")
         self.conn.commit()
