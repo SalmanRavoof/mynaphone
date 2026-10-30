@@ -180,3 +180,24 @@ def test_artist_variants():
     assert L._artist_variants("Parra for Cuva feat. Anna Naklab") == [
         "Parra for Cuva feat. Anna Naklab", "Parra for Cuva"]
     assert L._artist_variants("Metallica") == ["Metallica"]
+
+
+def test_a_song_lrclib_is_busy_with_doesnt_stop_the_run(tmp_config, monkeypatch):
+    """The first live run after the fix stopped at one song whose search LRCLIB was busy with."""
+    store = Store(tmp_config.paths.db_path)
+    pp = PostProcessor(tmp_config, store)
+    ids = [_library_song(store, tmp_config.paths.library_dir, t) for t in ("Just Chill", "Enter Sandman")]
+    asked = []
+
+    def fetch(title, artist, album, duration):
+        asked.append(title)
+        if title == "Just Chill":
+            raise L.Unavailable("LRCLIB answered 503 Service Unavailable", 1)
+        return None
+
+    monkeypatch.setattr(L, "fetch", fetch)
+    monkeypatch.setattr(L, "paused_for", lambda: 0.0)
+    monkeypatch.setattr("mynaphone.postprocess.time.sleep", lambda s: None)
+    pp.backfill_lyrics()
+    assert asked == ["Just Chill", "Enter Sandman"]
+    assert [store.track(i)["lyrics_tries"] for i in ids] == [0, 1]

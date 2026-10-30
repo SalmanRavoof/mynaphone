@@ -509,8 +509,12 @@ class PostProcessor(threading.Thread):
                 try:
                     got = lyr.fetch(r["title"], r["artist"], r["album"] or "", (r["duration_ms"] or 0) / 1000.0)
                 except lyr.Unavailable as e:
-                    log.info("lyrics backfill paused: %s; trying again in %.0f min", e, e.retry_after / 60)
                     self._lyrics_tried(int(r["id"]), now)
+                    if e.retry_after <= lyr.SHORT_WAIT_SECONDS:
+                        # busy with this song's searches only (its first live run stopped at one): try the next
+                        time.sleep(e.retry_after)
+                        continue
+                    log.info("lyrics backfill paused: %s; trying again in %.0f min", e, e.retry_after / 60)
                     break
                 except Exception as e:
                     log.info("lyrics backfill paused (%s)", e)
