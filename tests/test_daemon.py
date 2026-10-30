@@ -189,8 +189,9 @@ def test_spotify_start_up_delay_is_not_a_stall(recorder, clock):
     run(loop, rec._handle(snap("One"), "media", None))
     clock.advance(4.5)
     run(loop, rec._handle(snap("One", pos_ms=2_600), "timeline", None))    # 1.9 s behind, as on O Sanam
-    # readings are brought up to the wall clock, which the fake clock doesn't stop; a slow runner adds ms
-    assert not rec.active.flags.get("buffering") and 1_650 <= rec.active.flags["start_lag_ms"] <= 1_900
+    # readings are brought up to the wall clock, which the fake clock doesn't stop, so a slow runner moves the
+    # lag both ways (a first reading that waited starts the take that much earlier)
+    assert not rec.active.flags.get("buffering") and 1_650 <= rec.active.flags["start_lag_ms"] <= 1_950
     clock.advance(60.0)
     run(loop, rec._handle(snap("One", pos_ms=62_600), "timeline", None))
     assert not rec.active.flags.get("buffering")
@@ -220,8 +221,9 @@ def test_small_lead_at_the_start_is_not_a_seek(recorder, clock):
     run(loop, rec._handle(snap("One"), "media", None))
     clock.advance(4.5)
     run(loop, rec._handle(snap("One", pos_ms=6_400), "timeline", None))    # 1.9 s ahead
-    # -1943 on a slow runner: the reading is brought up to the wall clock, which keeps running
-    assert not rec.active.flags.get("seek") and -2_150 <= rec.active.flags["start_lag_ms"] <= -1_900
+    # each reading is brought up to the wall clock, which keeps running, so a slow runner moves the lag both
+    # ways: -1943 when the timeline reading waited, -1899 when the first reading did (the take starts that early)
+    assert not rec.active.flags.get("seek") and -2_150 <= rec.active.flags["start_lag_ms"] <= -1_850
     clock.advance(60.0)
     run(loop, rec._handle(snap("One", pos_ms=66_400), "timeline", None))
     assert not rec.active.flags.get("seek") and not rec.active.flags.get("buffering")
