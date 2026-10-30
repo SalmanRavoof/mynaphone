@@ -75,7 +75,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (189 tests).
+- Test suite (198 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -111,10 +111,13 @@ All notable changes to Mynaphone are listed here. The format follows
 - Opening Mynaphone while it was quitting brought back the window of the copy that was quitting,
   which then closed with it, so nothing kept recording. The new launch now waits for that copy to
   close and then opens.
-- The window could still come up as a blank white frame, and the check that repairs it only ran
-  when the window opened from the tray. It now also runs when the window comes back from the
-  taskbar, moves to another screen, or the PC wakes up or changes its screens. When it can't tell,
-  the log says why, and waking up and screen changes leave a line too.
+- The window could still turn into a blank white frame, and the check that repairs it only ran
+  when the window opened from the tray. It now also runs when you switch to the window, every 30
+  seconds while it's in front, and when the window comes back from the taskbar, moves to another
+  screen, or the PC wakes up or changes its screens. When it can't tell, the log says why, and
+  waking up and screen changes leave a line too. The log line for a blank window also says how much
+  of Windows' memory was in use. When the window stops answering for 5 seconds, the log says where
+  Mynaphone's code was stuck, and when it answers again.
 - Mynaphone set aside nearly 500 MB of Windows' memory that it never used. numpy's maths library
   reserves memory for every CPU thread as it loads, and Mynaphone's audio arithmetic never uses
   those threads, so it now gets one.

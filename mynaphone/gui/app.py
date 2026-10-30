@@ -8,7 +8,9 @@ import json
 import logging
 import os
 import sys
+import threading
 import time
+import traceback
 import winreg
 from ctypes import wintypes
 from pathlib import Path
@@ -101,6 +103,30 @@ _kernel32.WaitForSingleObject.restype = wintypes.DWORD
 _kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
 SYNCHRONIZE, WAIT_OBJECT_0 = 0x00100000, 0
 
+
+# and for the memory facts logged with a blank or frozen window
+class _MemoryStatus(ctypes.Structure):
+    _fields_ = [("dwLength", wintypes.DWORD), ("dwMemoryLoad", wintypes.DWORD),
+                ("ullTotalPhys", ctypes.c_ulonglong), ("ullAvailPhys", ctypes.c_ulonglong),
+                ("ullTotalPageFile", ctypes.c_ulonglong), ("ullAvailPageFile", ctypes.c_ulonglong),
+                ("ullTotalVirtual", ctypes.c_ulonglong), ("ullAvailVirtual", ctypes.c_ulonglong),
+                ("ullAvailExtendedVirtual", ctypes.c_ulonglong)]
+
+
+class _ProcessMemory(ctypes.Structure):
+    _fields_ = [("cb", wintypes.DWORD), ("PageFaultCount", wintypes.DWORD),
+                ("PeakWorkingSetSize", ctypes.c_size_t), ("WorkingSetSize", ctypes.c_size_t),
+                ("QuotaPeakPagedPoolUsage", ctypes.c_size_t), ("QuotaPagedPoolUsage", ctypes.c_size_t),
+                ("QuotaPeakNonPagedPoolUsage", ctypes.c_size_t), ("QuotaNonPagedPoolUsage", ctypes.c_size_t),
+                ("PagefileUsage", ctypes.c_size_t), ("PeakPagefileUsage", ctypes.c_size_t),
+                ("PrivateUsage", ctypes.c_size_t)]
+
+
+_kernel32.GlobalMemoryStatusEx.argtypes = [ctypes.POINTER(_MemoryStatus)]
+_kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+_kernel32.K32GetProcessMemoryInfo.argtypes = [wintypes.HANDLE, ctypes.POINTER(_ProcessMemory), wintypes.DWORD]
+WATCH_MS = 30_000               # how often the window is looked at while it's open and in front
+STALL_SECONDS = 5.0             # Windows marks a window Not Responding after 5 s without an answer
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_NAME = "Mynaphone"
@@ -1121,6 +1147,9 @@ class MainWindow(QMainWindow):
         self._paint_timer = QTimer(self)
         self._paint_timer.setSingleShot(True)
         self._paint_timer.timeout.connect(self._check_painted)
+        self._watch_timer = QTimer(self)
+        self._watch_timer.timeout.connect(self._look_while_open)
+        self._watch_timer.start(WATCH_MS)
         if start_minimized and not first_run:
             QTimer.singleShot(0, self.hide)
         else:
@@ -1610,17 +1639,29 @@ class MainWindow(QMainWindow):
         self.activateWindow()
         self.check_painted_soon()
 
-    def check_painted_soon(self, ms: int = 600) -> None:
+    def check_painted_soon(self, ms: int = 600, quiet: bool = False) -> None:
         """Look at the window shortly: after it opens, comes back from the taskbar, moves to another screen, or the
-        PC wakes up or changes its screens. Any of these has come back as a blank white frame."""
-        self._look_logged = False
+        PC wakes up or changes its screens. Any of these has come back as a blank white frame. A quiet look, made
+        when you switch to the window or while it's in front, logs nothing when it can't see the window."""
+        if not quiet:
+            self._look_logged = False
+        elif not self._paint_timer.isActive():
+            self._look_logged = True
         self._paint_timer.start(ms)
+
+    def _look_while_open(self) -> None:
+        """The window has also gone blank while it was open, with nothing done to it."""
+        if (self.isVisible() and not self.isMinimized() and not self._paint_timer.isActive()
+                and _user32.GetForegroundWindow() == int(self.winId())):
+            self.check_painted_soon(0, quiet=True)
 
     def changeEvent(self, event) -> None:
         super().changeEvent(event)
         if (event.type() == QEvent.WindowStateChange and not self.isMinimized()
                 and event.oldState() & Qt.WindowMinimized):
             self.check_painted_soon()
+        elif event.type() == QEvent.ActivationChange and self.isActiveWindow():
+            self.check_painted_soon(quiet=True)
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -1657,11 +1698,14 @@ class MainWindow(QMainWindow):
         if any(c.lightness() < 128 for c in seen):      # the sidebar is near-black, so the pages are there
             if self._blank_heals:
                 log.info("the window filled in after minimizing and restoring it")
+            self._blank_heals = 0
             return
-        if self._blank_heals:
+        if self._blank_heals == 1:
             log.warning("the window is still blank after minimizing and restoring it (%s)", self._window_facts(seen))
+            self._blank_heals = 2           # said once, so the looks while it's open keep quiet until it fills in
+        if self._blank_heals:
             return
-        log.warning("the window came up blank, minimizing and restoring it (%s)", self._window_facts(seen))
+        log.warning("the window is blank, minimizing and restoring it (%s)", self._window_facts(seen))
         self._blank_heals += 1
         self.showMinimized()
         QTimer.singleShot(300, self._show_and_check)
@@ -1699,7 +1743,7 @@ class MainWindow(QMainWindow):
                 f"{len(QApplication.screens())} screens; window {self.geometry().getRect()}, "
                 f"{self.windowState()}, exposed {handle.isExposed() if handle else None}; Windows says visible "
                 f"{bool(_user32.IsWindowVisible(hwnd))}, minimized {bool(_user32.IsIconic(hwnd))}, "
-                f"in front {_user32.GetForegroundWindow() == hwnd}")
+                f"in front {_user32.GetForegroundWindow() == hwnd}; {_memory_facts()}")
 
     @Slot()
     def hide_to_tray(self) -> None:
@@ -1753,6 +1797,71 @@ class MainWindow(QMainWindow):
 def _screen_facts(screen) -> str:
     g = screen.geometry()
     return f"{screen.name()} at {g.x()},{g.y()} {g.width()}x{g.height()} {screen.devicePixelRatio():g}x"
+
+
+def _memory_facts() -> str:
+    """How much memory Windows has left to hand out, and this app's share. Windows ran at 68 of its 69 GB on
+    October 30, 2026, which can leave a window too little memory to draw itself."""
+    status = _MemoryStatus(dwLength=ctypes.sizeof(_MemoryStatus))
+    mine = _ProcessMemory(cb=ctypes.sizeof(_ProcessMemory))
+    facts = []
+    if _kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+        gb = 1 << 30
+        facts.append(f"Windows memory {(status.ullTotalPageFile - status.ullAvailPageFile) / gb:.1f} of "
+                     f"{status.ullTotalPageFile / gb:.1f} GB in use")
+    if _kernel32.K32GetProcessMemoryInfo(_kernel32.GetCurrentProcess(), ctypes.byref(mine), mine.cb):
+        facts.append(f"Mynaphone {mine.PrivateUsage / (1 << 20):.0f} MB")
+    return ", ".join(facts) or "memory unknown"
+
+
+class StallWatch:
+    """Logs when the window stops answering for `stall_seconds`, with where its thread was and the memory facts,
+    and again when it answers. Windows fades a window that stops answering, which can pass for the white screen,
+    and none of the window's own looks can run while it's stuck."""
+
+    def __init__(self, parent, stall_seconds: float = STALL_SECONDS, beat_ms: int = 500, poll_seconds: float = 1.0):
+        self.stall_seconds, self.poll_seconds = stall_seconds, poll_seconds
+        self.beat = self._last = time.monotonic()
+        self._since: float | None = None
+        self._gui_thread = threading.get_ident()
+        self._timer = QTimer(parent)
+        self._timer.timeout.connect(self._tick)
+        self._timer.start(beat_ms)
+        self._stop = threading.Event()
+        threading.Thread(target=self._watch, name="mynaphone-stall-watch", daemon=True).start()
+
+    def _tick(self) -> None:
+        self.beat = time.monotonic()
+
+    def stop(self) -> None:
+        self._stop.set()
+        self._timer.stop()
+
+    def _watch(self) -> None:
+        while not self._stop.wait(self.poll_seconds):
+            self.check(time.monotonic())
+
+    def check(self, now: float) -> None:
+        # when this thread was held up as long as the window, the PC was asleep
+        asleep = now - self._last > self.poll_seconds + self.stall_seconds
+        self._last = now
+        if asleep:
+            self.beat = now
+            return
+        quiet = now - self.beat
+        if self._since is None and quiet >= self.stall_seconds:
+            self._since = self.beat
+            log.warning("the window hasn't answered for %.0f s (%s). Its thread is at\n%s", quiet, _memory_facts(),
+                        self._where())
+        elif self._since is not None and quiet < self.stall_seconds:
+            log.info("the window answered again after %.0f s", self.beat - self._since)
+            self._since = None
+
+    def _where(self) -> str:
+        frame = sys._current_frames().get(self._gui_thread)
+        if frame is None:
+            return "  (its stack couldn't be read)"
+        return "".join(traceback.format_stack(frame, limit=15)).rstrip()
 
 
 def _log_qt_messages() -> None:
@@ -1895,6 +2004,8 @@ def run_gui(config_path: Path, minimized: bool = False) -> int:
         return 0
     # only Start with Windows asks for the tray; opened by hand, the window shows (it used to open hidden too)
     win = MainWindow(config_path, start_minimized=minimized)
+    watch = StallWatch(win)
+    app.aboutToQuit.connect(watch.stop)
     app.screenAdded.connect(lambda s: win.check_painted_soon(1500))
     app.screenRemoved.connect(lambda s: win.check_painted_soon(1500))
     if not dev_shots:

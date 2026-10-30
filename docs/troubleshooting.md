@@ -10,6 +10,7 @@ Then find your symptom below.
 - [No lyrics or no cover](#no-lyrics-or-no-cover)
 - ["Spotify bridge not connected"](#spotify-bridge-not-connected)
 - [Browser extension problems](#the-browser-extension-connects-and-disconnects)
+- [The window turns white](#the-window-turns-white)
 - [The capture helper won't build](#the-capture-helper-wont-build)
 - [Where the logs are](#where-the-logs-are) and [reporting a bug](#reporting-a-bug)
 
@@ -22,7 +23,7 @@ Then find your symptom below.
 | Spotify is not reporting to Windows. | Restart Spotify. The Spotify line in Setup check should show the current song. |
 | The app is not in the sources list. | For YouTube, tick the YouTube option in Settings, save, then select **Stop** and **Start** on the Status page. |
 | Per-app capture could not attach. | The log shows "no live capture". Stop and start the recorder. If it repeats, run `setup-tools --force` to rebuild the helper, or switch **Capture method** to Whole output device in Settings. |
-| The song is shorter than 45 seconds or longer than 15 minutes. | Those are treated as ads or podcasts. Change **Minimum length** in Settings, or `max_duration_seconds` in `config.toml`. |
+| The song is shorter than 10 seconds or longer than 15 minutes. | Those are taken as stray clips, podcasts, or mixes. Change **Minimum length** in Settings, or `max_duration_seconds` in `config.toml`. |
 
 ## Every take is discarded
 
@@ -124,10 +125,19 @@ running, or was restarting. Chrome records every refused attempt.
 Nothing is broken, and the extension tries less often the longer the recorder stays off. Select
 **Clear all** once Mynaphone is running again. Any other entry is worth reporting.
 
+## The window turns white
+
+Minimize the window and restore it, and the pages come back. Mynaphone checks its window when it
+opens, when you switch to it, and every 30 seconds while it's in front, and it does the same when it
+finds the window white. The [log](#where-the-logs-are) then says what it saw and how much of
+Windows' memory was in use. If the window stops answering for 5 seconds, the log also says where
+Mynaphone's code was stuck. Please [report a bug](#reporting-a-bug) with those lines.
+
 ## The window keeps appearing in front
 
-Mynaphone's window has no stay-on-top setting; it comes to the front only when launched. Tick **Open
-minimized to the tray** in Settings if you never want to see it on start.
+Mynaphone's window comes to the front only when it opens, since it has no stay-on-top setting. To
+keep it in the tray when Windows starts it, tick **When Windows starts it, open in the tray** in
+Settings.
 
 ## The capture helper won't build
 

@@ -451,14 +451,19 @@ def test_blank_window_is_minimized_and_restored_once(window, monkeypatch, caplog
     with caplog.at_level(logging.INFO, logger="mynaphone"):
         window._check_painted()
         window._check_painted()                 # still white after the restore: logged, not repeated
+        window._check_painted()
         monkeypatch.setattr(window, "_sidebar_on_screen", lambda: [QColor("#1c1b19")] * 3)
         window._check_painted()
-    assert calls == ["minimized"]
+        monkeypatch.setattr(window, "_sidebar_on_screen", lambda: [QColor("#ffffff")] * 3)
+        window._check_painted()                 # white again later, while open: tried again
+    assert calls == ["minimized", "minimized"]
     said = [r.getMessage() for r in caplog.records if r.name.startswith("mynaphone")]
-    assert len(said) == 3
-    assert said[0].startswith("the window came up blank") and "sidebar shows #ffffff" in said[0]
+    assert len(said) == 4
+    assert said[0].startswith("the window is blank") and "sidebar shows #ffffff" in said[0]
+    assert "Windows memory" in said[0] and "Mynaphone" in said[0]
     assert said[1].startswith("the window is still blank")
     assert said[2] == "the window filled in after minimizing and restoring it"
+    assert said[3].startswith("the window is blank")
 
 
 def test_painted_or_covered_window_is_left_alone(window, monkeypatch, caplog):
@@ -500,6 +505,57 @@ def test_coming_back_from_the_taskbar_or_waking_up_checks_the_window(window, cap
         window.nativeEvent(b"windows_generic_MSG", ctypes.addressof(msg))
     assert window._paint_timer.isActive()
     assert "Windows woke up from sleep" in [r.getMessage() for r in caplog.records]
+
+
+def test_the_window_is_looked_at_when_you_switch_to_it_and_while_in_front(window, monkeypatch, caplog):
+    """The window also went white while it was open, with nothing done to it (reported October 30, 2026)."""
+    import logging
+
+    from mynaphone.gui import app as A
+    window._paint_timer.stop()
+    monkeypatch.setattr(window, "isActiveWindow", lambda: True)
+    window.changeEvent(QEvent(QEvent.ActivationChange))
+    assert window._paint_timer.isActive()
+    window._paint_timer.stop()
+    monkeypatch.setattr(A._user32, "GetForegroundWindow", lambda: 0)
+    window._look_while_open()
+    assert not window._paint_timer.isActive()           # behind another window: switching to it looks
+    monkeypatch.setattr(A._user32, "GetForegroundWindow", lambda: int(window.winId()))
+    window._look_while_open()
+    assert window._paint_timer.isActive()
+    with caplog.at_level(logging.INFO, logger="mynaphone"):
+        window._paint_timer.stop()
+        window._check_painted()                  # offscreen, so it can't see the window, and these looks keep quiet
+    assert not [r for r in caplog.records if r.name.startswith("mynaphone")]
+
+
+def test_a_window_that_stops_answering_is_logged_with_where_it_was(qapp, caplog):
+    """Windows fades a window that stops answering, and none of the window's own looks can run then."""
+    import logging
+
+    from PySide6.QtCore import QObject
+
+    from mynaphone.gui import app as A
+    holder = QObject()
+    watch = A.StallWatch(holder, stall_seconds=5, poll_seconds=3600)    # its own thread stays out of the way
+    try:
+        t = time.monotonic()
+        watch.beat = watch._last = t
+        with caplog.at_level(logging.INFO, logger="mynaphone"):
+            watch.check(t + 1)
+            watch.check(t + 6)                   # 6 s without a beat
+            watch.check(t + 7)                   # said once
+            watch.beat = t + 7.5
+            watch.check(t + 8)
+            watch.check(t + 9000)                # this thread was held up for hours too: the PC slept
+            watch.check(t + 9001)
+    finally:
+        watch.stop()
+    said = [r.getMessage() for r in caplog.records if r.name.startswith("mynaphone")]
+    assert len(said) == 2
+    assert said[0].startswith("the window hasn't answered for 6 s (Windows memory ")
+    assert "test_a_window_that_stops_answering_is_logged_with_where_it_was" in said[0]   # where its thread was
+    assert said[1] == "the window answered again after 8 s"
 
 
 def test_numpy_keeps_one_maths_thread():
