@@ -353,13 +353,38 @@ def test_painted_or_covered_window_is_left_alone(window, monkeypatch, caplog):
     calls = []
     monkeypatch.setattr(window, "showMinimized", lambda: calls.append("minimized"))
     window._blank_heals = 0
+    window.check_painted_soon()
     with caplog.at_level(logging.INFO, logger="mynaphone"):
         assert window._sidebar_on_screen() is None      # offscreen: no real window to find on the desktop
         window._check_painted()
+        window._check_painted()                 # why it couldn't look is said once each time it looks
         monkeypatch.setattr(window, "_sidebar_on_screen", lambda: [QColor("#1c1b19"), QColor("#ffffff")] * 2)
         window._check_painted()                 # one dark spot is enough: a tooltip may cover another
     assert calls == []
-    assert not [r for r in caplog.records if r.name.startswith("mynaphone")]
+    said = [r.getMessage() for r in caplog.records if r.name.startswith("mynaphone")]
+    assert len(said) == 1 and said[0].startswith("couldn't check the window: ")
+
+
+def test_coming_back_from_the_taskbar_or_waking_up_checks_the_window(window, caplog):
+    """The white window seen in late October came back some other way than from the tray."""
+    import ctypes
+    import logging
+    from ctypes import wintypes
+
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QWindowStateChangeEvent
+
+    from mynaphone.gui import app as A
+    window._paint_timer.stop()
+    window.changeEvent(QWindowStateChangeEvent(Qt.WindowMinimized))
+    assert window._paint_timer.isActive()
+    window._paint_timer.stop()
+    msg = wintypes.MSG()
+    msg.message, msg.wParam = A.WM_POWERBROADCAST, A.PBT_APMRESUMEAUTOMATIC
+    with caplog.at_level(logging.INFO, logger="mynaphone"):
+        window.nativeEvent(b"windows_generic_MSG", ctypes.addressof(msg))
+    assert window._paint_timer.isActive()
+    assert "Windows woke up from sleep" in [r.getMessage() for r in caplog.records]
 
 
 def test_every_reason_the_recorder_gives_has_words():

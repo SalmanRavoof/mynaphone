@@ -80,6 +80,10 @@ All notable changes to Mynaphone are listed here. The format follows
   `SUPPORT.md` says where to get help.
 
 ### Fixed
+- The window could still come up as a blank white frame, and the check that repairs it only ran
+  when the window opened from the tray. It now also runs when the window comes back from the
+  taskbar, moves to another screen, or the PC wakes up or changes its screens. When it can't tell,
+  the log says why, and waking up and screen changes leave a line too.
 - Band songs were tagged with their singers as the artist: Metallica's as James Hetfield, Queen's
   as Brian May and Freddie Mercury, and Bowie's "“Heroes”" as David Bowie and Tony Visconti, who
   sang backing vocals. The rule meant for film songs, where MusicBrainz credits the music director

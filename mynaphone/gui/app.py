@@ -84,6 +84,9 @@ _user32.GetForegroundWindow.restype = wintypes.HWND
 _user32.IsWindowVisible.argtypes = [wintypes.HWND]
 _user32.IsIconic.argtypes = [wintypes.HWND]
 GA_ROOT = 2
+# Windows messages after which the window may come back blank: waking from sleep, and the screens changing
+WM_POWERBROADCAST, PBT_APMRESUMESUSPEND, PBT_APMRESUMEAUTOMATIC = 0x0218, 0x0007, 0x0012
+WM_DISPLAYCHANGE = 0x007E
 # and for _already_running, which lets the running copy bring its window to the front
 _user32.AllowSetForegroundWindow.argtypes = [wintypes.DWORD]
 _kernel32 = ctypes.WinDLL("kernel32")
@@ -1062,11 +1065,18 @@ class MainWindow(QMainWindow):
         if self.cfg.app.autostart_recording and not first_run:
             QTimer.singleShot(300, self.start_recorder)
         self._blank_heals = 0
+        self._look_logged = False
+        self._last_look = ""
+        # every reason to look at the window goes through one timer, so a restore that also changes screens is
+        # checked once
+        self._paint_timer = QTimer(self)
+        self._paint_timer.setSingleShot(True)
+        self._paint_timer.timeout.connect(self._check_painted)
         if start_minimized and not first_run:
             QTimer.singleShot(0, self.hide)
         else:
             self.show()
-            QTimer.singleShot(600, self._check_painted)
+            self.check_painted_soon()
 
     def _set_page_head(self, i: int) -> None:
         title, sub = self._page_heads.get(i, ("", ""))
@@ -1495,15 +1505,51 @@ class MainWindow(QMainWindow):
         self.showNormal()
         self.raise_()
         self.activateWindow()
-        QTimer.singleShot(600, self._check_painted)
+        self.check_painted_soon()
+
+    def check_painted_soon(self, ms: int = 600) -> None:
+        """Look at the window shortly: after it opens, comes back from the taskbar, moves to another screen, or the
+        PC wakes up or changes its screens. Any of these has come back as a blank white frame."""
+        self._look_logged = False
+        self._paint_timer.start(ms)
+
+    def changeEvent(self, event) -> None:
+        super().changeEvent(event)
+        if (event.type() == QEvent.WindowStateChange and not self.isMinimized()
+                and event.oldState() & Qt.WindowMinimized):
+            self.check_painted_soon()
+
+    def showEvent(self, event) -> None:
+        super().showEvent(event)
+        handle = self.windowHandle()
+        if handle is not None and not getattr(self, "_watching_screen", False):
+            self._watching_screen = True
+            handle.screenChanged.connect(lambda screen: self.check_painted_soon(800))
+
+    def nativeEvent(self, event_type, message):
+        try:
+            msg = wintypes.MSG.from_address(int(message))
+            if msg.message == WM_POWERBROADCAST and msg.wParam in (PBT_APMRESUMESUSPEND, PBT_APMRESUMEAUTOMATIC):
+                log.info("Windows woke up from sleep")
+                self.check_painted_soon(2000)
+            elif msg.message == WM_DISPLAYCHANGE:
+                log.info("the screens changed")
+                self.check_painted_soon(1500)
+        except (TypeError, ValueError, OverflowError):
+            pass
+        return False, 0                 # only watching: Qt and Windows handle the message as usual
 
     def _check_painted(self) -> None:
-        """Now and then the window comes back from the tray as a blank white frame, and minimizing and restoring
-        it brings the pages back. When the sidebar isn't on screen, this does that once and logs what it saw."""
+        """Now and then the window comes back as a blank white frame, and minimizing and restoring it brings the
+        pages back. When the sidebar isn't on screen, this does that once and logs what it saw. When it can't
+        tell, it says why, once each time it looks."""
         if not self.isVisible() or self.isMinimized():
             return
         seen = self._sidebar_on_screen()
-        if seen is None:                 # another window covers the spot
+        if seen is None:
+            if not self._look_logged:
+                self._look_logged = True
+                log.info("couldn't check the window: %s", self._last_look or "no reason given")
             return
         if any(c.lightness() < 128 for c in seen):      # the sidebar is near-black, so the pages are there
             if self._blank_heals:
@@ -1526,15 +1572,18 @@ class MainWindow(QMainWindow):
             p = self.sidebar.mapToGlobal(QPoint(4, round(self.sidebar.height() * frac)))
             screen = QApplication.screenAt(p)
             if screen is None:
+                self._last_look = f"no screen at {p.x()},{p.y()} of {len(QApplication.screens())} screens"
                 return None
             g, dpr = screen.geometry(), screen.devicePixelRatio()
             # Qt keeps each screen's top-left corner in physical pixels and scales from there
             phys = wintypes.POINT(round(g.x() + (p.x() - g.x()) * dpr), round(g.y() + (p.y() - g.y()) * dpr))
             hit = _user32.WindowFromPoint(phys)
             if not hit or _user32.GetAncestor(hit, GA_ROOT) != hwnd:
+                self._last_look = f"another window is over the sidebar on {_screen_facts(screen)}"
                 return None
             img = screen.grabWindow(0, p.x() - g.x(), p.y() - g.y(), 1, 1).toImage()
             if img.isNull():
+                self._last_look = f"the screen couldn't be read on {_screen_facts(screen)}"
                 return None
             seen.append(img.pixelColor(0, 0))
         return seen
@@ -1655,6 +1704,8 @@ def run_gui(config_path: Path, minimized: bool = False) -> int:
         return 0
     # only Start with Windows asks for the tray; opened by hand, the window shows (it used to open hidden too)
     win = MainWindow(config_path, start_minimized=minimized)
+    app.screenAdded.connect(lambda s: win.check_painted_soon(1500))
+    app.screenRemoved.connect(lambda s: win.check_painted_soon(1500))
     if not dev_shots:
         from PySide6.QtNetwork import QLocalServer
         QLocalServer.removeServer(INSTANCE_NAME)
