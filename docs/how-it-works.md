@@ -54,8 +54,10 @@ pauses and seeks. Mynaphone reads it through Windows'
 The Spotify bridge adds what Windows doesn't know. It is optional and needs [Spicetify](https://spicetify.app)
 installed. A Spicetify extension inside Spotify, [`spicetify/mynaphone.js`](../spicetify/mynaphone.js), reports the
 exact track id and album id, the track and disc numbers, and the quality tier the song played at.
-It also passes on buffering, Spotify's own synced lyrics, and album facts such as the release date
-and label, all over a local WebSocket.
+It also passes on buffering, Spotify's own synced lyrics, album facts such as the release date
+and label, and whether the item playing is an ad, all over a local WebSocket. The app can ask the
+extension for your playlists and their songs, and, when you record a playlist, have it play the
+playlist from a given song and pause it at the end.
 
 YouTube gets the same treatment from the browser extension in [`browser-extension/`](../browser-extension/),
 which is loaded into Chrome or Edge by hand. On a YouTube page it reports the video id,
@@ -112,9 +114,12 @@ artist, album and duration. Synced lyrics go into the file's lyrics tag and into
 to it, because some players read one and some read the other. Cover art comes from the capture,
 which includes Spotify's 640 px image, and failing that from the [Cover Art Archive](https://musicbrainz.org/doc/Cover_Art_Archive/API).
 
-A song whose title or album says "Instrumental" has no words, so the app doesn't look up lyrics
-for it, and lyrics and lyricist don't count as missing. LRCLIB also marks some songs as
-instrumental, and those are treated the same way.
+A song has no words, so the app doesn't look up lyrics for it and lyrics and lyricist don't count
+as missing, when its title or album says "Instrumental", when MusicBrainz gives it its "no lyrics"
+language, when its album is a film's or a game's score, or when nobody is credited for its lyrics or
+its singing and at least 3 in 4 of the 5 or more songs from its album in your library have no words
+either. LRCLIB also marks some songs as instrumental, and those are treated the same way. Choosing
+**No, it has vocals** in the Library editor overrides all of these.
 
 ## A song from YouTube that the fingerprint does not know
 
@@ -158,6 +163,25 @@ Metallica, not James Hetfield. Backing and choir singers never go into the artis
 
 Tags follow [MusicBrainz Picard's tag mapping](https://picard-docs.musicbrainz.org/en/latest/appendices/tag_mapping.html),
 so other players and taggers understand them. [mutagen](https://github.com/quodlibet/mutagen) writes them.
+
+## Playlist files
+
+A playlist or album you record or save from the **Status** page becomes an M3U8 file in the library's
+`Playlists` folder, named after the playlist, so the USB export copies it along with the songs. Each line
+is the song's path from that folder, such as `../Soundtracks/Leo (2023)/Ratata.m4a`, so the playlist
+plays wherever the whole library goes: another drive, a stick, or a phone.
+
+Each Spotify song in the playlist is matched to your file by its Spotify id first, then by the ids of
+its other releases that the library knows (its single and its album track, for example), then by
+artist, title and length. A song the library doesn't have yet stays in the file as a note line,
+`# not in your library yet: Artist - Title`, in the playlist's order, which players skip. The
+playlist's song list is kept in the index, and the files are written again whenever a song is filed
+or moved, so a line never points at an old path.
+
+A car's player may want something else. Mazda Connect, as its owners describe it in a
+[Mazda3Revolution how-to](https://www.mazda3revolution.com/threads/how-to-your-music-library-on-a-usb-drive.199522/),
+reads playlist paths from the stick's root, with a leading backslash and no drive letter, which these
+files don't use yet.
 
 ## Tracking what is still missing
 

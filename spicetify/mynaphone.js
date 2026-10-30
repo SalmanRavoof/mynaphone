@@ -3,6 +3,8 @@
 // mynaphone bridge: streams Spotify's own player state to the local mynaphone recorder.
 // Sends exact track uri, duration, position, paused/buffering flags and the playback quality tier
 // over a WebSocket to ws://127.0.0.1:8765. Reconnects automatically; harmless when mynaphone is off.
+// It also answers the app's commands: list your playlists, read one's songs, play it from a song,
+// pause, and look up track details for songs recorded earlier.
 (function mynaphone() {
   if (!window.Spicetify || !Spicetify.Player || !Spicetify.Player.addEventListener) {
     setTimeout(mynaphone, 500);
@@ -67,7 +69,6 @@
     }
     return clean(parts.join(" "));
   }
-  const JSON_HEADERS = { Accept: "application/json" };
   // The authorization state holds the token Spotify keeps refreshed, the one Spicetify's own requests use.
   // The session's copy is the token from start-up: an hour later every request with it fails with 401.
   function accessTokens() {
@@ -78,12 +79,18 @@
   }
   // The metadata service answers JSON when asked, but through CosmosAsync the Accept header is often
   // lost and the reply is protobuf. Fetch it with the client's token and read either form.
+  function clientHeaders(token) {
+    const h = { Authorization: "Bearer " + token, Accept: "application/json" };
+    try { h["Spotify-App-Version"] = Spicetify.Platform.version; } catch (e) {}
+    try { h["App-Platform"] = Spicetify.Platform.PlatformData.app_platform; } catch (e) {}
+    return h;
+  }
   async function getWithToken(url, label) {
     const tokens = accessTokens();
     if (!tokens.length) throw new Error(label + ": no access token");
     let r;
     for (const token of tokens) {
-      r = await fetch(url, { headers: { Authorization: "Bearer " + token, Accept: "application/json" } });
+      r = await fetch(url, { headers: clientHeaders(token) });
       if (r.status !== 401) break;
     }
     if (!r.ok) throw new Error(label + ": HTTP " + r.status);
@@ -159,12 +166,6 @@
       "https://spclient.wg.spotify.com/metadata/4/track/" + idToHex(id) + "?market=from_token", "metadata service");
     return r.json ? trackFromJson(r.json) : trackFromProto(r.bytes);
   }
-  // the old route, kept in case the client's fetch is refused: answers JSON now and then
-  async function trackFromCosmos(id) {
-    return trackFromJson(await Spicetify.CosmosAsync.get(
-      "https://spclient.wg.spotify.com/metadata/4/track/" + idToHex(id) + "?market=from_token", undefined,
-      JSON_HEADERS));
-  }
   async function trackFromWebApi(id) {
     const t = (await getWithToken("https://api.spotify.com/v1/tracks/" + id, "web API")).json;
     if (!t || t.error || !t.id) throw new Error("web API: " + errorText(t));
@@ -175,10 +176,10 @@
     };
   }
   async function albumFromSpclient(id) {
-    const a = await Spicetify.CosmosAsync.get(
-      "https://spclient.wg.spotify.com/metadata/4/album/" + idToHex(id) + "?market=from_token", undefined,
-      JSON_HEADERS);
-    if (!a || a.error || !a.name) throw new Error("metadata service: " + errorText(a));
+    const r = await getWithToken(
+      "https://spclient.wg.spotify.com/metadata/4/album/" + idToHex(id) + "?market=from_token", "metadata service");
+    const a = r.json;
+    if (!a || a.error || !a.name) throw new Error("metadata service: " + (r.json ? errorText(a) : "protobuf reply"));
     const d = isoDate(a.date);
     return {
       release_date: d.date, release_date_precision: d.precision,
@@ -243,6 +244,13 @@
     return null;
   }
 
+  // Spotify builds an ad as { type: "ad", uri: "spotify:ad:..." }; some builds flag it in the metadata instead
+  function isAd(it) {
+    const md = (it && it.metadata) || {};
+    return !!it && (it.type === "ad" || it.provider === "ad" || (it.uri || "").startsWith("spotify:ad:")
+      || md.is_advertisement === "true" || !!md.ad_id);
+  }
+
   function snapshot() {
     const d = Spicetify.Player.data;
     if (!d || !d.item) return null;
@@ -278,7 +286,11 @@
         is_explicit: md.is_explicit,
         is_local: md.is_local,
       },
-      next: (d.nextItems || []).slice(0, 3).map(n => ({ uri: n.uri, name: n.name })),
+      next: (d.nextItems || []).slice(0, 3).map(n => ({ uri: n.uri, uid: n.uid, name: n.name })),
+      isAd: isAd(it),
+      context: (d.context && d.context.uri) || "",
+      uid: it.uid || "",
+      provider: it.provider || (md.provider || ""),
       albumInfo: null,
       trackInfo: null,
     };
@@ -321,7 +333,7 @@
       s.albumInfo = details(albumUri, albumCache, [albumFromSpclient, albumFromGraphql, albumFromWebApi]);
     }
     if (s.uri && s.uri.startsWith("spotify:track:")) {
-      s.trackInfo = details(s.uri, trackCache, [trackFromSpclient, trackFromCosmos, trackFromWebApi]);
+      s.trackInfo = details(s.uri, trackCache, [trackFromSpclient, trackFromWebApi]);
     }
     // lyrics travel once per track, as their own message, since they are large
     if (s.uri && !lyricsSent.has(s.uri)) {
@@ -340,6 +352,153 @@
     try { ws.send(JSON.stringify(s)); } catch (e) { report("sending state", e); }
   }
 
+  // -- commands from the app --------------------------------------------------------------
+
+  function names(artists) {
+    return (artists || []).map(a => a.name || (a.profile && a.profile.name) || "").filter(Boolean);
+  }
+  function playlistTrack(x, index) {
+    return {
+      index: index, uri: x.uri || "", uid: x.uid || "", name: x.name || "", artists: names(x.artists),
+      album: x.album ? { name: x.album.name || "", uri: x.album.uri || "" } : null,
+      duration_ms: (x.duration && x.duration.milliseconds) || 0,
+      playable: x.isPlayable !== false && !x.isLocal, local: !!x.isLocal, episode: x.type === "episode",
+    };
+  }
+  async function listPlaylists() {
+    const root = await Spicetify.Platform.RootlistAPI.getContents();
+    const out = [];
+    const walk = (node, folder) => {
+      for (const it of (node && node.items) || []) {
+        if (it.type === "folder") walk(it, it.name || folder);
+        else if (it.type === "playlist") {
+          out.push({ uri: it.uri, name: it.name || "", total: it.totalLength || 0, own: !!it.isOwnedBySelf,
+                     owner: (it.owner && (it.owner.displayName || it.owner.username)) || "", folder: folder || "" });
+        }
+      }
+    };
+    walk(root, "");
+    let liked = null;
+    try {
+      const lib = Spicetify.Platform.LibraryAPI;
+      const t = await lib.getTracks({ offset: 0, limit: 0 });
+      liked = { uri: lib._likedSongsUri || "spotify:collection:tracks", name: "Liked Songs",
+                total: (t && t.totalLength) || 0, own: true, owner: "", folder: "" };
+    } catch (e) {}
+    return { playlists: out, liked: liked };
+  }
+  async function contextTracks(uri) {
+    const out = [];
+    if (uri.includes(":album:")) {
+      const q = Spicetify.GraphQL.Definitions.queryAlbumTracks;
+      for (let offset = 0; offset < 2000; offset += 100) {
+        const r = await Spicetify.GraphQL.Request(q, { uri: uri, offset: offset, limit: 100 });
+        const page = r && r.data && r.data.albumUnion && r.data.albumUnion.tracksV2;
+        const items = (page && page.items) || [];
+        for (const x of items) {
+          const t = x.track || {};
+          out.push({
+            index: out.length, uri: t.uri || "", uid: x.uid || "", name: t.name || "",
+            artists: names(t.artists && t.artists.items), album: { name: "", uri: uri },
+            duration_ms: (t.duration && t.duration.totalMilliseconds) || 0,
+            playable: !(t.playability && t.playability.playable === false), local: false, episode: false,
+          });
+        }
+        if (items.length < 100 || (page && out.length >= page.totalCount)) break;
+      }
+      return out;
+    }
+    const liked = !uri.includes(":playlist:");
+    for (let offset = 0; offset < 20000; offset += 500) {
+      const r = liked ? await Spicetify.Platform.LibraryAPI.getTracks({ offset: offset, limit: 500 })
+                      : await Spicetify.Platform.PlaylistAPI.getContents(uri, { offset: offset, limit: 500 });
+      const items = (r && r.items) || [];
+      for (const x of items) out.push(playlistTrack(x, out.length));
+      // the reply's own offset is always 0, so pages are counted here
+      if (items.length < 500 || out.length >= ((r && r.totalLength) || 0)) break;
+    }
+    return out;
+  }
+  function waitFor(test, ms) {
+    return new Promise(resolve => {
+      const started = Date.now();
+      const tick = () => {
+        let ok = false;
+        try { ok = test(); } catch (e) {}
+        if (ok || Date.now() - started > ms) resolve(ok);
+        else setTimeout(tick, 250);
+      };
+      tick();
+    });
+  }
+  async function play(cmd) {
+    const P = Spicetify.Platform.PlayerAPI;
+    const devices = Spicetify.Platform.ConnectDevicesAPI;
+    const active = devices && devices.getActiveDevice ? devices.getActiveDevice() : null;
+    if (active && active.isLocal === false) throw new Error("Spotify is playing on another device");
+    const SH = Spicetify.Platform.ShuffleAPI;
+    let shuffleWas = null;
+    // for playlists, play() takes the shuffle mode saved for the playlist, so that one is turned off first
+    try { if (SH && SH.getShuffle) shuffleWas = await SH.getShuffle(cmd.context); } catch (e) {}
+    try { if (SH && SH.setShuffle) await SH.setShuffle(cmd.context, 0); } catch (e) {}
+    const feature = cmd.context.includes(":album:") ? "album" : cmd.context.includes(":playlist:") ? "playlist"
+      : "your_library";
+    const skipTo = cmd.uid ? { uri: cmd.uri, uid: cmd.uid } : (cmd.uri ? { uri: cmd.uri } : { index: cmd.index || 0 });
+    await P.play({ uri: cmd.context }, { featureIdentifier: feature }, { skipTo: skipTo, shuffle: false, repeat: 0 });
+    const started = await waitFor(() => {
+      const st = P.getState();
+      return st && st.item && (!cmd.uri || st.item.uri === cmd.uri) && st.context && st.context.uri === cmd.context;
+    }, 10000);
+    try {
+      const st = P.getState();
+      if (st && (st.shuffle || st.smartShuffle)) await P.setShuffle(false);
+      if (st && st.repeat) await P.setRepeat(0);
+    } catch (e) {}
+    if (!started) throw new Error("Spotify didn't start the song within 10 seconds");
+    return { started: true, shuffle_was: shuffleWas };
+  }
+  async function restoreShuffle(cmd) {
+    const SH = Spicetify.Platform.ShuffleAPI;
+    if (SH && SH.setShuffle && cmd.mode !== null && cmd.mode !== undefined) await SH.setShuffle(cmd.context, cmd.mode);
+    return {};
+  }
+  async function pause() {
+    await Spicetify.Platform.PlayerAPI.pause();
+    return {};
+  }
+  // details for songs recorded before the bridge could read them, one a second
+  async function trackDetails(cmd) {
+    let n = 0;
+    for (const uri of cmd.uris || []) {
+      if (!uri.startsWith("spotify:track:")) continue;
+      let msg;
+      try { msg = { type: "track_details", uri: uri, info: await trackFromSpclient(uri.split(":")[2]) }; }
+      catch (e) { msg = { type: "track_details", uri: uri, error: describe(e) }; }
+      if (!ws || ws.readyState !== 1) break;
+      try { ws.send(JSON.stringify(msg)); } catch (e) {}
+      n++;
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    return { done: n };
+  }
+  const COMMANDS = { playlists: listPlaylists, tracks: cmd => contextTracks(cmd.uri).then(t => ({ tracks: t })),
+                     play: play, pause: pause, restore_shuffle: restoreShuffle, track_details: trackDetails };
+  async function onCommand(cmd) {
+    const reply = { type: "reply", id: cmd.id };
+    try {
+      const fn = COMMANDS[cmd.do];
+      if (!fn) throw new Error("no command " + cmd.do);
+      reply.ok = true;
+      reply.result = await fn(cmd);
+    } catch (e) {
+      reply.ok = false;
+      reply.error = describe(e);
+    }
+    if (ws && ws.readyState === 1) {
+      try { ws.send(JSON.stringify(reply)); } catch (e) {}
+    }
+  }
+
   function connect() {
     try {
       ws = new WebSocket("ws://127.0.0.1:" + PORT + "/spotify");
@@ -348,6 +507,11 @@
       return;
     }
     ws.onopen = () => send(true);
+    ws.onmessage = ev => {
+      let msg = null;
+      try { msg = JSON.parse(ev.data); } catch (e) { return; }
+      if (msg && msg.type === "command") onCommand(msg);
+    };
     ws.onclose = () => { ws = null; setTimeout(connect, 5000); };
     ws.onerror = () => { try { ws.close(); } catch (e) {} };
   }

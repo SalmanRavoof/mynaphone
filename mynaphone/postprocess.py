@@ -17,7 +17,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import films, genres, identify, lyrics as lyr, tools
+from . import films, genres, identify, lyrics as lyr, playlists, tools
 from .config import Config
 from .library import classify, file_take, resolve_cover, write_lyrics, write_lyrics_sidecar
 from .metadata import identity_from_row, missing_fields, refresh_track
@@ -49,6 +49,7 @@ class PostProcessor(threading.Thread):
         self.paused = False
         self._next_jobs = 0.0           # when the lyrics backfill and the retry of incomplete songs run next
         self._interrupted = False       # a job stopped early so a new song could be filed
+        self._playlists_stale = False   # a song was filed or moved, so the playlist files need writing again
 
     def stop(self) -> None:
         self._stop.set()
@@ -79,6 +80,9 @@ class PostProcessor(threading.Thread):
                 if not self.paused:
                     self._scan()
                     self._work()
+                    if self._playlists_stale:
+                        self._playlists_stale = False
+                        playlists.rewrite_all(self.store, self.cfg.paths.library_dir)
                     if time.monotonic() >= self._next_jobs:
                         self._interrupted = False
                         self.fold_film_folders()
@@ -114,6 +118,7 @@ class PostProcessor(threading.Thread):
             try:
                 self.process(p.path)
                 self.pending.pop(key, None)
+                self._playlists_stale = True
             except (identify.ToolMissing, OSError) as e:
                 p.attempts += 1
                 p.last_error = str(e)
@@ -320,6 +325,7 @@ class PostProcessor(threading.Thread):
         done = films.apply(self.store, moves, self.cfg.paths.db_path.parent / "folder-moves.json")
         if done:
             log.info("gathered %d songs into their films' folders", done)
+            playlists.rewrite_all(self.store, self.cfg.paths.library_dir)
         return done
 
     # -- artist credits --------------------------------------------------------------------

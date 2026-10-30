@@ -29,8 +29,8 @@ sources = ["Spotify.exe", "chrome.exe", "msedge.exe"]
 # A take is kept only if its length is within this many seconds of the track's reported duration,
 # and only if wall-clock time from start to end also matches (catches buffering stalls).
 duration_tolerance_seconds = 1.5
-# Tracks shorter than this are never recorded (ads, jingles, stray clips).
-min_duration_seconds = 45
+# Tracks shorter than this are never recorded (stray clips). The Spotify bridge tells ads apart.
+min_duration_seconds = 10
 # Items longer than this are never recorded (podcasts, audiobooks, DJ mixes).
 max_duration_seconds = 900.0
 # Discard a take if playback was paused during it.

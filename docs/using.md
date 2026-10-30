@@ -39,10 +39,36 @@ This needs the browser extension from [step 9 of the install guide](install.md#s
 Ordinary YouTube videos are ignored; only tracks YouTube itself marks as music are recorded. A change
 of playback speed, a seek or a pause discards the take, the same as for Spotify.
 
+## Record a Spotify playlist or album
+
+Mynaphone can play a playlist or album in Spotify for you and record the songs your library doesn't
+have. It needs the [Spotify bridge](install.md) connected.
+
+1. On the **Status** page, press **Record a playlist**.
+2. Pick one of your playlists, or **Liked Songs**, or paste a link to any Spotify playlist or album.
+   The dialog says how many of its songs are in your library, how many are left to record, and how
+   many Spotify can't play where you are.
+3. Press **Record the missing songs**. Spotify starts the playlist at the first song you don't have,
+   in order, with shuffle and repeat off.
+4. Leave the PC alone. The **Status** page shows how many songs are saved and how many are left.
+
+When a song you already have comes up, Mynaphone jumps to the next one you're missing, so it plays as
+little as it can of what you have. A song that doesn't record all the way through gets one more try at
+the end, and if it fails again it's on the list of songs to play again. At the end Spotify pauses and
+the playlist's own shuffle setting comes back. Pick something else in Spotify, or press **Stop the
+playlist**, and it stops.
+
+**Save the playlist file** writes the playlist to your library without recording anything. The
+[playlist files](how-it-works.md#playlist-files) section explains where they go and how they stay
+pointed at the right songs.
+
+The warning below about sleep applies here too.
+
 ## Record a playlist unattended with harvest mode
 
 Harvest mode tells Spotify to skip any song that is already archived, so a long playlist captures
-only what is new.
+only what is new. Recording a playlist from the **Status** page does that for one playlist; harvest
+mode works with whatever you start in Spotify yourself.
 
 1. On the **Status** page, tick **Skip songs already in the library, so an unattended playlist
    records only new ones**. The same switch is in the tray menu and in Settings.

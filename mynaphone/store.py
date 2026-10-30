@@ -67,6 +67,10 @@ CREATE TABLE IF NOT EXISTS hidden_retries (
     key TEXT PRIMARY KEY,                  -- a song taken off the list to play again: its player id, or artist|title
     hidden_at TEXT
 );
+CREATE TABLE IF NOT EXISTS playlists (
+    uri TEXT PRIMARY KEY,                  -- a Spotify playlist or album saved as an M3U8 in the library
+    name TEXT, tracks_json TEXT, file TEXT, updated_at TEXT
+);
 """
 
 
@@ -246,6 +250,21 @@ class Store:
                           "source_uri": t["source_uri"] or "", "last_try": t["started_at"] or "", "reasons": reasons,
                           "tries": 1}
         return list(songs.values())
+
+    def missing_track_details(self, limit: int = 200) -> list[str]:
+        """Spotify ids of library songs without Spotify's track details (ISRC, numbers), which the bridge couldn't
+        read before October 12: its old token expired after an hour."""
+        out = []
+        for r in self.conn.execute("SELECT source_uri, meta_json FROM tracks WHERE source_uri LIKE 'spotify:track:%'"):
+            try:
+                extra = (json.loads(r["meta_json"] or "{}").get("extra") or {})
+            except ValueError:
+                extra = {}
+            if not (extra.get("track_info") or {}).get("source"):
+                out.append(r["source_uri"])
+            if len(out) >= limit:
+                break
+        return out
 
     def hide_retry(self, key: str) -> None:
         """Take a song off the list to play again, for good: you skipped it on purpose, say."""

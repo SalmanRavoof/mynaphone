@@ -24,7 +24,10 @@ time on it.
 ## What will not be merged
 
 - Anything that downloads audio from a service, decrypts or bypasses copy protection, or automates a
-  service's account or player beyond the ordinary "next track" control.
+  service's account.
+- Anything that drives a service's player beyond recording a playlist or album you picked. For that,
+  Mynaphone plays it in order at normal speed, jumps to the next song your library is missing, and
+  pauses at the end.
 - Anything that sends audio, library contents or listening data off the user's PC.
 - Features that evade a service's detection of misuse.
 

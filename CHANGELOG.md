@@ -6,6 +6,15 @@ All notable changes to Mynaphone are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- Record a playlist. On the Status page, pick one of your Spotify playlists, Liked Songs, or a link to
+  any playlist or album. Mynaphone says how much of it your library has, then plays it in Spotify from
+  the first missing song, in order, and jumps past the songs you already have. A song that doesn't
+  record gets one more try, and at the end Spotify pauses and gets its shuffle setting back.
+- Playlist files: a recorded or saved playlist becomes an M3U8 in the library's `Playlists` folder,
+  with paths relative to that folder, so it plays wherever the library goes. Songs you don't have yet
+  are note lines, and the files are written again whenever songs are filed or moved.
+- Spotify's track details (ISRC, track and disc numbers) are fetched once for older songs that
+  missed them while the bridge's token kept expiring.
 - One folder per film. A film's singles, such as `Ratata (From "Leo")`, a second spelling of its
   album name, and a single released the year before its album now join the folder of the film's
   album. Dubbed albums, background scores and films of the same name years apart keep their own
@@ -72,6 +81,10 @@ All notable changes to Mynaphone are listed here. The format follows
 - An updated logo brief for a designer, with what the current mark still gets wrong.
 
 ### Changed
+- The shortest song recorded is now 10 seconds, down from 45, so film themes and interludes record.
+  The Spotify bridge reports ads, which are never recorded. On Spotify 1.2.93 the bridge reads track
+  and album details with the client's own token and headers; its older route always failed.
+- The Status page scrolls, like Settings, so its cards keep their size at the window's default size.
 - License: GNU GPL v3 or later.
 - The Mynaphone name, mark and wordmark are reserved by their owner and aren't covered by the GPL
   or CC BY 4.0.

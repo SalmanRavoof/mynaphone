@@ -25,6 +25,7 @@ from PySide6.QtCore import (
     Qt,
     QTimer,
     QtMsgType,
+    Signal,
     Slot,
     qInstallMessageHandler,
 )
@@ -146,6 +147,7 @@ def _humanize(reason: str) -> str:
         "stopped": "playback stopped", "session_gone": "player closed", "shutdown": "recorder stopped",
         "overrun": "no track change seen", "capture_not_ready": "audio capture not running yet",
         "not_music": "not a music video", "browser_unverified": "couldn't confirm the browser tab's song",
+        "advertisement": "an ad, not a song",
     }.get(key, key)
 
 
@@ -419,6 +421,17 @@ class StatusPage(QWidget):
                                     "Turn it off while you are listening yourself.")
         self.btn_harvest.toggled.connect(win.set_harvest)
         c.addWidget(self.btn_harvest)
+        job_row = QHBoxLayout()
+        job_row.setSpacing(8)
+        self.btn_playlist = QPushButton("Record a playlist")
+        self.btn_playlist.setToolTip("Pick a Spotify playlist or album. Mynaphone plays it in Spotify and records the "
+                                     "songs your library doesn't have.")
+        self.btn_playlist.clicked.connect(win.playlist_button)
+        self.job_line = label("", "small")
+        self.job_line.setWordWrap(True)
+        job_row.addWidget(self.btn_playlist)
+        job_row.addWidget(self.job_line, 1)
+        c.addLayout(job_row)
         lay.addWidget(self.card)
 
         # counts
@@ -695,7 +708,9 @@ class SettingsPage(QScrollArea):
         self.sp_min.setButtonSymbols(QSpinBox.NoButtons)
         self.sp_min.setValue(int(cfg.rules.min_duration_seconds))
         self.sp_min.setToolTip("Anything shorter than this is never recorded.")
-        self._row(form, "Minimum length", self.sp_min, "Anything shorter is ignored: ads, jingles, stray clips.")
+        self._row(form, "Minimum length", self.sp_min,
+                  "Anything shorter is ignored, such as a stray clip. The Spotify bridge tells ads apart, so a "
+                  "27-second film theme still records.")
         self.ck_pause = self._check(form, "Discard a take if playback was paused", cfg.rules.discard_on_pause,
                                     "A pause leaves a gap in the recording, so the take can't be trusted.")
         self.ck_seek = self._check(form, "Discard a take if you seeked within the song", cfg.rules.discard_on_seek,
@@ -963,8 +978,11 @@ class SetupPage(QScrollArea):
 # ----------------------------------------------------------------------------- window
 
 class MainWindow(QMainWindow):
+    worker_answer = Signal(int, object, str)     # the recorder's answers to the window's questions
+
     def __init__(self, config_path: Path, start_minimized: bool = False):
         super().__init__()
+        self.job: dict | None = None            # the playlist being recorded, as the recorder last reported it
         self.config_path = Path(config_path)
         self.cfg = Config.load(self.config_path)
         self.worker: RecorderWorker | None = None
@@ -1049,7 +1067,14 @@ class MainWindow(QMainWindow):
         self.settings = SettingsPage(self)
         self.setup = SetupPage(self)
         self.firstrun = FirstRunPage(self)
-        for p in (self.status, self.activity, self.library, self.settings, self.setup, self.firstrun):
+        # the Status page scrolls like Settings: at the window's default size its cards need more height than
+        # the page has, and without scrolling Qt squeezed the cover under the Start button
+        status_scroll = QScrollArea()
+        status_scroll.setWidgetResizable(True)
+        status_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.status.layout().setContentsMargins(0, 0, 8, 0)
+        status_scroll.setWidget(self.status)
+        for p in (status_scroll, self.activity, self.library, self.settings, self.setup, self.firstrun):
             self.pages.addWidget(p)
         cl.addWidget(self.pages)
         root.addWidget(content, 1)
@@ -1247,6 +1272,8 @@ class MainWindow(QMainWindow):
         self.cfg = Config.load(self.config_path)
         self.worker = RecorderWorker(str(self.config_path), self)
         self.worker.event.connect(self.on_event)
+        self.worker.answer.connect(self.worker_answer)
+        self.worker.answer.connect(self._job_failed)
         self.worker.log.connect(self.activity.log.appendPlainText)
         self.worker.failed.connect(self.on_failed)
         self.worker.finished.connect(self.on_finished)
@@ -1294,9 +1321,53 @@ class MainWindow(QMainWindow):
         self._refresh_state_labels()
 
     @Slot(dict)
+    # ------------------------------------------------------------------ playlists
+
+    def ask_recorder(self, make, token: int) -> bool:
+        """Put a question to the running recorder; the answer arrives on worker_answer. False when it isn't running."""
+        return self.worker is not None and self.worker.isRunning() and self.worker.ask(make, token)
+
+    @Slot()
+    def playlist_button(self) -> None:
+        if self.job is not None:
+            self.ask_recorder(lambda rec: rec.stop_job(), 0)
+            return
+        from .playlist_dialog import PlaylistDialog
+        PlaylistDialog(self).exec()
+
+    def start_playlist(self, uri: str, name: str) -> None:
+        self.status.job_line.setText(f"Starting {name} in Spotify...")
+        if not self.ask_recorder(lambda rec: rec.start_job(uri, name), -1):
+            self.status.job_line.setText("Start the recorder first.")
+
+    def _job_failed(self, token: int, result, error: str) -> None:
+        if token == -1 and error:
+            self.status.job_line.setText(f"Couldn't start the playlist: {error}")
+
+    def _show_job(self, ev: dict) -> None:
+        st = self.status
+        done = ev.get("done")
+        self.job = None if done else ev
+        st.btn_playlist.setText("Record a playlist" if done else "Stop the playlist")
+        saved, left, failed = int(ev.get("saved") or 0), int(ev.get("left") or 0), int(ev.get("failed") or 0)
+        name = ev.get("name") or "The playlist"
+        if not done:
+            now = f", now {ev['current']}" if ev.get("current") else ""
+            st.job_line.setText(f"Recording {name}: {saved} saved, {left} to go{now}.")
+            return
+        why = ev.get("why") or "done"
+        text = f"{name}: {why}. {saved} {'song' if saved == 1 else 'songs'} saved"
+        if failed:
+            text += f", {failed} didn't record (they're on the list to play again)"
+        st.job_line.setText(text + ".")
+        self._load_recent()
+
     def on_event(self, ev: dict) -> None:
         kind = ev.get("kind")
         st = self.status
+        if kind == "job":
+            self._show_job(ev)
+            return
         if kind == "started":
             name = str(ev.get("device", "")).replace(" [Loopback]", "")
             rate = int(ev.get("rate") or 0)

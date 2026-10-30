@@ -23,6 +23,9 @@ you what is or is not permitted in your country.
   decoded audio that Windows is sending to your output device.
 - It does not log in to any service on your behalf, play content faster than normal speed, or interfere
   with the services' features. Harvest mode uses the same "next track" control you would press yourself.
+  When you ask it to record a playlist or album, it uses Spotify's own player the way you would: it plays
+  the playlist in order at normal speed, jumps to the next song your library is missing, and pauses at
+  the end.
 - It does not include any means to share, publish or distribute recordings.
 
 ## Who it is for

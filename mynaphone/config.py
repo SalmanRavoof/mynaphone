@@ -30,7 +30,7 @@ class Capture:
 class Rules:
     sources: list[str] = field(default_factory=lambda: ["Spotify.exe"])
     duration_tolerance_seconds: float = 1.5
-    min_duration_seconds: float = 45.0
+    min_duration_seconds: float = 10.0               # ads are told apart by the Spotify bridge, not by length
     max_duration_seconds: float = 900.0          # longer items (podcasts, mixes) are never recorded
     discard_on_pause: bool = True
     discard_on_seek: bool = True
@@ -202,7 +202,7 @@ sources = {sources}
 # A take is kept only if its length is within this many seconds of the track's reported duration,
 # and only if wall-clock time from start to end also matches (catches buffering stalls).
 duration_tolerance_seconds = {tolerance}
-# Tracks shorter than this are never recorded (ads, jingles, stray clips).
+# Tracks shorter than this are never recorded (stray clips). The Spotify bridge tells ads apart.
 min_duration_seconds = {min_duration}
 # Items longer than this are never recorded (podcasts, audiobooks, DJ mixes).
 max_duration_seconds = {max_duration}

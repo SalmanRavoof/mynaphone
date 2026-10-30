@@ -32,6 +32,7 @@ The top card shows the song being recorded.
 | **Pause** / **Resume** | Keeps listening but starts no new take until you resume. A take already running carries on |
 | Capture line | The capture method, the sample rate, and whether the Spotify bridge is connected |
 | **Skip songs already in the library** | Harvest mode. When an archived song starts, Spotify is told to skip to the next one |
+| **Record a playlist** | Opens the dialog below. While a playlist records, the button reads **Stop the playlist** and the line beside it shows how many songs are saved and how many are left |
 
 Under the card, 4 counts:
 
@@ -49,6 +50,18 @@ button such as **11 songs to play again**. It opens the list of those songs, wit
 when it last tried. **Open in Spotify** opens the song you picked, or a Spotify search for it when it was recorded
 before the Spotify bridge connected. Play it again and Mynaphone records it. **Hide from the list** takes a song you
 skipped on purpose off the list for good.
+
+### The Record a playlist dialog
+
+The list shows your Spotify playlists, with **Liked Songs** first, and how many songs each holds. You
+can also paste a link to any Spotify playlist or album. Pick one and the line under the list says how
+many of its songs are in your library, how many are left to record, and how many Spotify can't play
+where you are.
+
+| Button | What it does |
+|---|---|
+| **Save the playlist file** | Writes the playlist to the library's `Playlists` folder, without recording anything |
+| **Record the missing songs** | Plays the playlist in Spotify from the first song your library doesn't have, and records the missing ones |
 
 ## Activity
 

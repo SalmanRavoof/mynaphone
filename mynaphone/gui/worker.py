@@ -30,6 +30,23 @@ class RecorderWorker(QThread):
     event = Signal(dict)
     log = Signal(str)
     failed = Signal(str)
+    answer = Signal(int, object, str)       # a question's token, its answer, and the error when there's none
+
+    def ask(self, make, token: int) -> bool:
+        """Run `make(recorder)`, a coroutine, on the recorder's loop; the answer comes back as the answer signal.
+        False when the recorder isn't running."""
+        rec = self.recorder
+        if rec is None:
+            return False
+        fut = asyncio.run_coroutine_threadsafe(make(rec), rec.loop)
+
+        def done(f):
+            try:
+                self.answer.emit(token, f.result(), "")
+            except Exception as e:
+                self.answer.emit(token, None, str(e) or type(e).__name__)
+        fut.add_done_callback(done)
+        return True
 
     def __init__(self, config_path: str, parent=None):
         super().__init__(parent)

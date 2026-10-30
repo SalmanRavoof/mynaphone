@@ -5,6 +5,8 @@
 The extension pushes Spotify's own player state (exact track uri, duration, position, paused,
 buffering, quality tier, album/artist uris, cover url). The daemon treats it as an enrichment of
 the Windows media-session signal for Spotify.exe and as the authoritative quality-tier source.
+The app can also send it commands (list playlists, read one's songs, play one from a song, pause,
+look up track details), each answered with a reply that carries the command's id.
 """
 from __future__ import annotations
 
@@ -38,6 +40,10 @@ class SpotifyState:
     album_info: dict | None = None
     track_info: dict | None = None
     volume: float | None = None   # Spotify's own volume slider, 0..1
+    is_ad: bool = False           # Spotify Free's ads: the item is an ad, not a song
+    context: str = ""             # the playlist, album or library the song plays from
+    uid: str = ""                 # the song's place in that context
+    provider: str = ""            # "context", or "queue" and "autoplay" when it comes from elsewhere
     received_at: float = 0.0      # monotonic
     client_ts: int = 0
 
@@ -124,6 +130,10 @@ class YouTubeEvent:
     previous: YouTubeState | None = None
 
 
+class BridgeError(RuntimeError):
+    """A command the Spotify bridge couldn't carry out, or couldn't be sent at all."""
+
+
 class Bridge:
     def __init__(self, loop: asyncio.AbstractEventLoop, queue: asyncio.Queue, port: int, on_status=None):
         self.loop = loop
@@ -138,6 +148,39 @@ class Bridge:
         self._server = None
         self._on_status = on_status
         self._detail_errors: set[tuple[str, str]] = set()
+        self._spotify_ws = None
+        self._next_id = 0
+        self._replies: dict[int, asyncio.Future] = {}
+        self.on_track_details = None            # callable(uri, info or None, error) for the details backfill
+
+    async def request(self, do: str, timeout: float = 30.0, **params):
+        """Send the extension a command and wait for its reply. Raises BridgeError when the extension isn't
+        connected, says it couldn't do it, or doesn't answer in time."""
+        ws = self._spotify_ws
+        if ws is None:
+            raise BridgeError("the Spotify bridge isn't connected")
+        self._next_id += 1
+        rid = self._next_id
+        fut = self.loop.create_future()
+        self._replies[rid] = fut
+        try:
+            await ws.send(json.dumps({"type": "command", "id": rid, "do": do, **params}))
+            return await asyncio.wait_for(fut, timeout)
+        except asyncio.TimeoutError:
+            raise BridgeError(f"Spotify didn't answer {do} within {timeout:.0f} s") from None
+        except websockets.ConnectionClosed:
+            raise BridgeError("the Spotify bridge disconnected") from None
+        finally:
+            self._replies.pop(rid, None)
+
+    def _reply(self, msg: dict) -> None:
+        fut = self._replies.get(msg.get("id"))
+        if fut is None or fut.done():
+            return
+        if msg.get("ok"):
+            fut.set_result(msg.get("result") or {})
+        else:
+            fut.set_exception(BridgeError(re.sub(r"[\x00-\x1f\x7f]+", " ", str(msg.get("error") or "failed"))[:300]))
 
     def _details(self, info, kind: str, uri: str) -> dict | None:
         """The bridge's album or track details, or None. A failed lookup is logged once per item, never stored."""
@@ -181,6 +224,7 @@ class Bridge:
         if path.startswith("/youtube"):
             await self._youtube_handler(ws)
             return
+        self._spotify_ws = ws
         self._status(True)
         log.info("spicetify extension connected")
         first_logged = False
@@ -196,6 +240,16 @@ class Bridge:
                     continue
                 if msg.get("type") == "lyrics":
                     self._store_lyrics(msg)
+                    continue
+                if msg.get("type") == "reply":
+                    self._reply(msg)
+                    continue
+                if msg.get("type") == "track_details":
+                    if self.on_track_details:
+                        try:
+                            self.on_track_details(msg.get("uri") or "", msg.get("info"), msg.get("error"))
+                        except Exception:
+                            log.exception("track details listener failed")
                     continue
                 if msg.get("type") != "state":
                     continue
@@ -217,6 +271,10 @@ class Bridge:
                     album_info=self._details(msg.get("albumInfo"), "album", (msg.get("album") or {}).get("uri", "")),
                     track_info=self._details(msg.get("trackInfo"), "track", msg.get("uri", "")),
                     volume=(float(msg["volume"]) if msg.get("volume") is not None else None),
+                    is_ad=bool(msg.get("isAd")),
+                    context=msg.get("context", "") or "",
+                    uid=msg.get("uid", "") or "",
+                    provider=msg.get("provider", "") or "",
                     received_at=time.monotonic(),
                     client_ts=int(msg.get("ts") or 0),
                 )
@@ -235,6 +293,11 @@ class Bridge:
         except websockets.ConnectionClosed:
             pass
         finally:
+            if self._spotify_ws is ws:
+                self._spotify_ws = None
+            for fut in list(self._replies.values()):
+                if not fut.done():
+                    fut.set_exception(BridgeError("the Spotify bridge disconnected"))
             self._status(False)
             log.info("spicetify extension disconnected")
 

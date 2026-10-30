@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime as dt
+import json
 import logging
 import re
 import time
@@ -12,8 +13,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import smtc as S
-from .bridge import Bridge, BridgeEvent, SpotifyState, YouTubeEvent, YouTubeState
+from . import playlists, smtc as S
+from .bridge import Bridge, BridgeError, BridgeEvent, SpotifyState, YouTubeEvent, YouTubeState
 from .capture import LoopbackCapture, ProcessCapture, Take
 from .config import Config
 from .postprocess import PostProcessor
@@ -85,6 +86,10 @@ class Recorder:
         self._writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mynaphone-writer")
         self._writer_store: Store | None = None
         self._covers: set[asyncio.Task] = set()     # thumbnail reads, each holding a media session
+        self.job = None                             # a playlist being recorded (playlist_job.PlaylistJob)
+        self._details_asked = False                 # the track-details backfill runs once per start
+        if self.bridge is not None:
+            self.bridge.on_track_details = self._got_track_details
 
     # -- observers -------------------------------------------------------------------------
 
@@ -98,6 +103,84 @@ class Recorder:
 
     def _bridge_status(self, connected: bool) -> None:
         self._emit("bridge", connected=connected)
+        if connected and not self._details_asked:
+            self._details_asked = True
+            self.loop.call_later(10.0, lambda: asyncio.ensure_future(self._backfill_track_details()))
+
+    # -- Spotify's track details for older songs ---------------------------------------------
+
+    async def _backfill_track_details(self) -> None:
+        """Ask the bridge for the track details (ISRC, numbers) of songs recorded while it couldn't read them:
+        before October 12 its token expired after an hour, and 158 songs went without. One a second."""
+        uris = self.store.missing_track_details()
+        if not uris or self.bridge is None:
+            return
+        log.info("asking Spotify for the track details of %d older songs", len(uris))
+        try:
+            res = await self.bridge.request("track_details", timeout=len(uris) * 4.0 + 60.0, uris=uris)
+            log.info("Spotify gave track details for %s of %d older songs", res.get("done", "?"), len(uris))
+        except BridgeError as e:
+            log.info("the track-details backfill stopped: %s", e)
+            self._details_asked = False         # the next connection tries again
+
+    def _got_track_details(self, uri: str, info, error) -> None:
+        if not uri or not isinstance(info, dict) or not info.get("source"):
+            if error:
+                log.info("Spotify could not give track details for %s: %s", uri, str(error)[:200])
+            return
+        for row in self.store.conn.execute("SELECT id, meta_json, identity_json, missing_json FROM tracks "
+                                           "WHERE source_uri=?", (uri,)).fetchall():
+            try:
+                meta = json.loads(row["meta_json"] or "{}")
+                ident = json.loads(row["identity_json"] or "{}")
+                missing = json.loads(row["missing_json"] or "[]")
+            except ValueError:
+                continue
+            meta.setdefault("extra", {})["track_info"] = info
+            if info.get("isrc") and not ident.get("isrc"):
+                ident["isrc"] = info["isrc"]
+                missing = [m for m in missing if m != "isrc"]
+            self.store.conn.execute("UPDATE tracks SET meta_json=?, identity_json=?, missing_json=? WHERE id=?",
+                                    (json.dumps(meta, ensure_ascii=False), json.dumps(ident, ensure_ascii=False),
+                                     json.dumps(missing), int(row["id"])))
+        self.store.conn.commit()
+
+    # -- recording a playlist ----------------------------------------------------------------
+
+    async def list_playlists(self) -> dict:
+        if self.bridge is None:
+            raise BridgeError("the Spotify bridge is turned off in Settings")
+        return await self.bridge.request("playlists", timeout=30.0)
+
+    async def check_playlist(self, uri: str) -> dict:
+        """A playlist's or album's songs and how many of them the library holds."""
+        if self.bridge is None:
+            raise BridgeError("the Spotify bridge is turned off in Settings")
+        tracks = (await self.bridge.request("tracks", timeout=120.0, uri=uri)).get("tracks") or []
+        return {"uri": uri, "tracks": tracks, **playlists.summary(self.store, tracks)}
+
+    async def save_playlist(self, uri: str, name: str) -> dict:
+        """Write a playlist's M3U8 without recording anything."""
+        checked = await self.check_playlist(uri)
+        path, listed, missing = playlists.save(self.store, self.cfg.paths.library_dir, uri, name, checked["tracks"])
+        return {"path": str(path), "listed": listed, "missing": missing}
+
+    async def start_job(self, uri: str, name: str) -> dict:
+        from .playlist_job import PlaylistJob
+        if self.job is not None:
+            raise BridgeError(f"{self.job.name} is still being recorded")
+        checked = await self.check_playlist(uri)
+        self.job = PlaylistJob(self, uri, name, checked["tracks"])
+        await self.job.start()
+        return self.job.progress()
+
+    async def stop_job(self) -> None:
+        if self.job is not None:
+            await self.job.finish("you stopped it", stopped=True)
+
+    def _job_result(self, uri: str, kept: bool, reasons: list[str]) -> None:
+        if self.job is not None:
+            asyncio.ensure_future(self.job.on_result(uri, kept, reasons))
 
     def request_stop(self) -> None:
         """Thread-safe: ask the run loop to shut down."""
@@ -474,6 +557,12 @@ class Recorder:
             st = self.bridge.state
             if not st.name or st.name.strip().lower() == snap.title.strip().lower():
                 self._enrich_from_bridge(meta, st)
+        if (self.bridge and self.bridge.state.fresh and snap.app.lower().startswith("spotify")
+                and self.bridge.state.is_ad):
+            self.skipping_key = snap.key
+            log.info("advertisement, not recording: %s - %s", snap.artist, snap.title)
+            self._emit("skipped", artist=snap.artist, title=snap.title, reason="advertisement")
+            return
         if self._is_browser(snap.app):
             ok, why = self._youtube_ok(snap)
             if not ok:
@@ -495,7 +584,9 @@ class Recorder:
                 self.skipping_key = snap.key
                 log.info("already archived (%s): %s - %s", existing["quality_tier"], meta.artist, meta.title)
                 skipped = False
-                if self.harvest and session is not None:
+                if self.job is not None and await self.job.on_track(meta.source_uri, archived=True):
+                    skipped = True
+                elif self.harvest and session is not None:
                     skipped = await self._harvest_skip(session, meta.artist, meta.title)
                 self._emit("skipped", artist=meta.artist, title=meta.title,
                            reason="already_archived_skipped" if skipped else "already_archived")
@@ -512,12 +603,16 @@ class Recorder:
             self.skipping_key = snap.key
             log.info("too short (%.0fs), not recording: %s - %s", meta.expected_ms / 1000, meta.artist, meta.title)
             self._emit("skipped", artist=meta.artist, title=meta.title, reason="too_short")
+            if self.job is not None:
+                self.job.on_skipped(meta.source_uri, "too_short")
             return
         if meta.expected_ms and meta.expected_ms / 1000.0 > self.cfg.rules.max_duration_seconds:
             self.skipping_key = snap.key
             log.info("too long (%.0fs; podcast or mix?), not recording: %s - %s",
                      meta.expected_ms / 1000, meta.artist, meta.title)
             self._emit("skipped", artist=meta.artist, title=meta.title, reason="too_long")
+            if self.job is not None:
+                self.job.on_skipped(meta.source_uri, "too_long")
             return
         # If the change was noticed late (position already > 0), reach back into the ring buffer
         # for the audio that played since the real boundary.
@@ -544,6 +639,8 @@ class Recorder:
         cover = asyncio.create_task(self._fetch_cover(session, snap.key, meta))
         self._covers.add(cover)
         cover.add_done_callback(self._covers.discard)
+        if self.job is not None and snap.app.lower().startswith("spotify"):
+            await self.job.on_track(meta.source_uri, archived=False)
 
     def _check_volumes(self, app: str, flags: dict) -> None:
         """A take recorded below full volume is a quiet, degraded file; flag it so the verdict rejects it.
@@ -728,11 +825,15 @@ class Recorder:
             else:
                 store.add_track(**fields)
             log.info("KEPT %.1fs -> %s", captured_s, path.name)
+            if self.job is not None:
+                self.loop.call_soon_threadsafe(self._job_result, meta.source_uri, True, [])
             self._emit("kept", artist=meta.artist, title=meta.title, album=meta.album, path=str(path),
                        captured_ms=verdict.captured_ms, expected_ms=meta.expected_ms, tier=meta.quality_tier)
             self.post.kick()
         else:
             log.info("DISCARDED %s - %s: %s", meta.artist, meta.title, ", ".join(verdict.reasons))
+            if self.job is not None:
+                self.loop.call_soon_threadsafe(self._job_result, meta.source_uri, False, list(verdict.reasons))
             self._emit("discarded", artist=meta.artist, title=meta.title, album=meta.album, reasons=verdict.reasons,
                        captured_ms=verdict.captured_ms, expected_ms=meta.expected_ms, tier=meta.quality_tier)
         if self.active is None:

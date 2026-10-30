@@ -540,3 +540,46 @@ def test_songs_to_play_again_open_from_the_status_page(window, monkeypatch):
     window._load_recent()
     assert dlg.table.rowCount() == 0 and window.status.btn_again.isHidden()
     dlg.deleteLater()
+
+
+def test_record_a_playlist_from_the_status_page(window, monkeypatch):
+    import asyncio
+
+    from mynaphone.gui import playlist_dialog as PD
+    assert PD.spotify_uri("https://open.spotify.com/intl-es/playlist/37i9dQZF1DXcBWIGoYBM5M?si=ab") == \
+        "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"
+    assert PD.spotify_uri("spotify:album:4aawyAB9vmqN3uQ7FjRGTy") == "spotify:album:4aawyAB9vmqN3uQ7FjRGTy"
+    assert PD.spotify_uri("https://example.com/playlist") == ""
+
+    class Recorder:
+        async def list_playlists(self):
+            return {"liked": {"uri": "spotify:collection:tracks", "name": "Liked Songs", "total": 412},
+                    "playlists": [{"uri": "spotify:playlist:p", "name": "Car Songs", "total": 3}]}
+
+        async def check_playlist(self, uri):
+            return {"uri": uri, "tracks": [], "total": 3, "have": [0], "todo": [1, 2], "unplayable": []}
+
+    def ask(make, token):
+        window.worker_answer.emit(token, asyncio.run(make(Recorder())), "")
+        return True
+
+    started = []
+    monkeypatch.setattr(window, "ask_recorder", ask)
+    monkeypatch.setattr(window, "start_playlist", lambda uri, name: started.append((uri, name)))
+    dlg = PD.PlaylistDialog(window)
+    assert dlg.table.rowCount() == 2 and dlg.table.item(0, 0).text() == "Liked Songs"
+    assert not dlg.btn_record.isEnabled()
+    dlg.table.selectRow(1)
+    assert dlg.summary.text() == "1 of 3 songs are in your library. 2 to record."
+    assert dlg.btn_record.isEnabled()
+    dlg.record()
+    assert started == [("spotify:playlist:p", "Car Songs")]
+    dlg.deleteLater()
+
+    window._show_job({"name": "Car Songs", "saved": 1, "left": 1, "failed": 0, "current": "Ratata", "done": False})
+    assert window.status.btn_playlist.text() == "Stop the playlist"
+    assert window.status.job_line.text() == "Recording Car Songs: 1 saved, 1 to go, now Ratata."
+    window._show_job({"name": "Car Songs", "saved": 1, "left": 0, "failed": 1, "done": True, "why": "done"})
+    assert window.status.btn_playlist.text() == "Record a playlist" and window.job is None
+    assert window.status.job_line.text() == \
+        "Car Songs: done. 1 song saved, 1 didn't record (they're on the list to play again)."
