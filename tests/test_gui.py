@@ -2,7 +2,12 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """GUI tests, run offscreen: the theme, the mark, tooltips, page headers, state pills, tables, shortcuts
 and the single-instance guard. No recorder is started and no audio is touched."""
+import ast
+import itertools
 import os
+import subprocess
+import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -240,12 +245,45 @@ def test_detail_wording():
 
 # -- single instance ----------------------------------------------------------------------
 
+_PIPES = itertools.count()
+
+
+@pytest.fixture(autouse=True)
+def _own_pipe(monkeypatch):
+    """No test may reach the Mynaphone running on this PC: "quit" would close it, and a copy from before the quit
+    command shows its window for any message."""
+    import mynaphone.gui.app as A
+    monkeypatch.setattr(A, "INSTANCE_NAME", f"mynaphone-test-{os.getpid()}-{next(_PIPES)}")
+
+
+def _from_another_launch(qapp, code: str):
+    """Run code in a second Python, as another launch would, while this process answers the pipe, and return the
+    value of its last line. (A pipe client on a thread of this process never sends.)"""
+    import mynaphone.gui.app as A
+    *body, last = code.strip().splitlines()
+    script = "\n".join(["import mynaphone.gui.app as A", f"A.INSTANCE_NAME = {A.INSTANCE_NAME!r}", *body,
+                        f"print(repr({last}))"])
+    proc = subprocess.Popen([sys.executable, "-c", script], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                            text=True, env={**os.environ, "QT_QPA_PLATFORM": "offscreen"})
+    try:
+        deadline = time.monotonic() + 30
+        while proc.poll() is None and time.monotonic() < deadline:
+            qapp.processEvents()
+            time.sleep(0.005)
+        out, err = proc.communicate(timeout=5)
+    finally:
+        proc.kill()
+    assert proc.returncode == 0, err
+    return ast.literal_eval(out.strip().splitlines()[-1])
+
+
 def test_second_launch_talks_to_the_first(qapp, monkeypatch):
     from PySide6.QtNetwork import QLocalServer
 
     import mynaphone.gui.app as A
     name = f"mynaphone-test-{os.getpid()}"
     monkeypatch.setattr(A, "INSTANCE_NAME", name)
+    monkeypatch.setattr(A, "ANSWER_WAIT_MS", 50)      # a bare server never answers
     assert A._already_running() is False
     QLocalServer.removeServer(name)
     server = QLocalServer()
@@ -272,6 +310,7 @@ def test_second_launch_lets_the_first_come_to_the_front(qapp, monkeypatch):
     import mynaphone.gui.app as A
     name = f"mynaphone-test-front-{os.getpid()}"
     monkeypatch.setattr(A, "INSTANCE_NAME", name)
+    monkeypatch.setattr(A, "ANSWER_WAIT_MS", 50)
     allowed = []
     monkeypatch.setattr(A._user32, "AllowSetForegroundWindow", allowed.append)
     QLocalServer.removeServer(name)
@@ -282,6 +321,82 @@ def test_second_launch_lets_the_first_come_to_the_front(qapp, monkeypatch):
     finally:
         server.close()
     assert allowed == [os.getpid()]         # the server end of the pipe, here this same process
+
+
+def test_second_launch_brings_the_window_back(window, qapp, monkeypatch):
+    import mynaphone.gui.app as A
+    shown = []
+    monkeypatch.setattr(window, "show_from_tray", lambda: shown.append(True))
+    server = A._listen_for_launches(window)
+    try:
+        assert _from_another_launch(qapp, "A._already_running()") is True
+    finally:
+        server.close()
+    assert shown == [True]
+
+
+def test_quit_command_asks_the_running_copy_to_quit(window, qapp, monkeypatch):
+    """Restarts used to end the process, which left a dead icon in the tray until the mouse passed over it."""
+    import mynaphone.gui.app as A
+    asked = []
+    monkeypatch.setattr(window, "quit_app", asked.append)
+    server = A._listen_for_launches(window)
+    try:
+        assert _from_another_launch(qapp, "A._tell_running_copy(b'quit')") == (os.getpid(), b"quitting")
+    finally:
+        server.close()
+    assert asked == ["mynaphone quit asked it to"]
+
+
+def test_a_launch_while_quitting_waits_and_then_opens(window, qapp, monkeypatch):
+    """Opened in the 20 seconds it takes to quit, Mynaphone brought back the old copy's window, which then closed
+    with it."""
+    import mynaphone.gui.app as A
+    shown = []
+    monkeypatch.setattr(window, "show_from_tray", lambda: shown.append(True))
+    window._quitting = True
+    server = A._listen_for_launches(window)
+    try:
+        # the second launch finds the old copy gone as soon as it waits
+        got = _from_another_launch(qapp, "waited = []\n"
+                                         "A._wait_for_exit = lambda pid, seconds: waited.append(pid) or True\n"
+                                         "(A._already_running(), waited)")
+    finally:
+        server.close()
+    assert got == (False, [os.getpid()]) and shown == []       # False, so that launch opens its own window
+
+
+def test_a_copy_that_never_answers_is_named(qapp, monkeypatch):
+    from PySide6.QtNetwork import QLocalServer
+
+    import mynaphone.gui.app as A
+    monkeypatch.setattr(A, "ANSWER_WAIT_MS", 50)
+    server = QLocalServer()
+    assert server.listen(A.INSTANCE_NAME)
+    try:
+        assert A.quit_running_copy(0.2) == "no answer"      # the copy is this test's own process, which stays up
+    finally:
+        server.close()
+
+
+def test_waiting_for_a_copy_to_close():
+    import mynaphone.gui.app as A
+    quick = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(0.3)"])
+    slow = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(30)"])
+    try:
+        assert A._wait_for_exit(quick.pid, 10) is True
+        assert A._wait_for_exit(slow.pid, 0.2) is False
+    finally:
+        slow.kill()
+        quick.wait()
+        slow.wait()
+    assert A._wait_for_exit(A.ASFW_ANY, 0.2) is True        # no process named, and no pipe left to watch
+
+
+def test_quit_command_with_nothing_running(capsys):
+    from mynaphone.__main__ import main
+    assert main(["quit"]) == 0
+    assert capsys.readouterr().out.strip() == "Mynaphone isn't running."
 
 
 # -- now-playing card ------------------------------------------------------------------------

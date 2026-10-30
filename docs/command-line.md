@@ -21,6 +21,7 @@ Installing the package also creates `.venv\Scripts\mynaphone.exe`, so
 | Command | What it does |
 |---|---|
 | [`gui`](#gui) | Open the window and the tray icon |
+| [`quit`](#quit) | Quit the running Mynaphone and wait for it to close |
 | [`shortcut`](#shortcut) | Add Mynaphone to the Start menu or the desktop, or remove it |
 | [`run`](#run) | Run the recorder in the console, without the window |
 | [`status`](#status) | Print the archive counts and the latest takes |
@@ -39,6 +40,17 @@ Installing the package also creates `.venv\Scripts\mynaphone.exe`, so
 Opens the window. `--minimized` starts it hidden in the tray, which is how **Start with Windows**
 launches it while **When Windows starts it, open in the tray** is ticked. If Mynaphone is already
 running, the command brings its window back instead.
+
+### quit
+
+```powershell
+.\.venv\Scripts\python -m mynaphone quit
+```
+
+Asks the running Mynaphone to quit, the same way **Quit** in its tray menu does, and waits up to 30
+seconds for it to close. Use it before you update Mynaphone or in a script that restarts it, since
+ending its process leaves its icon in the tray until the mouse passes over it. It ends with code 0
+when Mynaphone has quit or wasn't running, and 1 when it's still running.
 
 ### shortcut
 

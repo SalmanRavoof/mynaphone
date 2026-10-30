@@ -196,6 +196,17 @@ def cmd_gui(args) -> int:
     return run_gui(Path(args.config).resolve(), minimized=args.minimized)
 
 
+def cmd_quit(args) -> int:
+    from .gui.app import QUIT_WAIT_SECONDS, quit_running_copy
+    how = quit_running_copy()
+    print({"not running": "Mynaphone isn't running.",
+           "closed": "Mynaphone has quit.",
+           "still running": f"Mynaphone is still closing after {QUIT_WAIT_SECONDS:.0f} seconds.",
+           "no answer": "Mynaphone didn't answer and is still running. A copy started before the quit command "
+                        "can't quit this way, so use Quit in its tray menu."}[how])
+    return 0 if how in ("not running", "closed") else 1
+
+
 def cmd_shortcut(args) -> int:
     from . import shortcuts
     config = Path(args.config).resolve()
@@ -244,6 +255,7 @@ def main(argv=None) -> int:
     s = command("gui", help="open the desktop window (tray app)")
     s.add_argument("--minimized", action="store_true", help="start hidden in the tray")
     s.set_defaults(fn=cmd_gui)
+    command("quit", help="ask the running window to quit, and wait for it to close").set_defaults(fn=cmd_quit)
     s = command("shortcut", help="add Mynaphone to the Start menu, or remove it")
     s.add_argument("--desktop", action="store_true", help="also put a shortcut on the desktop")
     s.add_argument("--remove", action="store_true", help="remove the Start menu and desktop shortcuts")

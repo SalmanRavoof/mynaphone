@@ -108,8 +108,8 @@ view.
   you untick **When Windows starts it, open in the tray**.
 - Opening Mynaphone yourself, from a shortcut or PowerShell, always shows the window.
 
-Only one copy runs at a time. Starting Mynaphone again while it's in the tray brings its window back
-instead of opening a second recorder.
+Only one copy runs at a time, so starting Mynaphone again while it's in the tray brings its window
+back. Started while it's still quitting, it opens once that copy has closed.
 
 ## Find out why a take was discarded
 

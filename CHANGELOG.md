@@ -6,6 +6,9 @@ All notable changes to Mynaphone are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- A `quit` command asks the running Mynaphone to quit, the way **Quit** in its tray menu does, and
+  waits for it to close. Ending the process left a dead icon in the tray until the mouse passed over
+  it, so a script that restarts Mynaphone can quit it this way now.
 - Indian film credits from JioSaavn, off unless you turn it on in Settings. When MusicBrainz has
   no lyricist or composer for a film song, Mynaphone asks JioSaavn, reads its copies of the
   recording together, and takes a name only when 2 copies agree or the film's own album names it.
@@ -105,6 +108,9 @@ All notable changes to Mynaphone are listed here. The format follows
   `SUPPORT.md` says where to get help.
 
 ### Fixed
+- Opening Mynaphone while it was quitting brought back the window of the copy that was quitting,
+  which then closed with it, so nothing kept recording. The new launch now waits for that copy to
+  close and then opens.
 - The window could still come up as a blank white frame, and the check that repairs it only ran
   when the window opened from the tray. It now also runs when the window comes back from the
   taskbar, moves to another screen, or the PC wakes up or changes its screens. When it can't tell,

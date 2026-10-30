@@ -88,11 +88,19 @@ GA_ROOT = 2
 # Windows messages after which the window may come back blank: waking from sleep, and the screens changing
 WM_POWERBROADCAST, PBT_APMRESUMESUSPEND, PBT_APMRESUMEAUTOMATIC = 0x0218, 0x0007, 0x0012
 WM_DISPLAYCHANGE = 0x007E
-# and for _already_running, which lets the running copy bring its window to the front
+# and for _tell_running_copy, which lets the running copy bring its window to the front
 _user32.AllowSetForegroundWindow.argtypes = [wintypes.DWORD]
 _kernel32 = ctypes.WinDLL("kernel32")
 _kernel32.GetNamedPipeServerProcessId.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.ULONG)]
 ASFW_ANY = 0xFFFFFFFF
+# and for waiting until a copy that's quitting has closed
+_kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+_kernel32.OpenProcess.restype = wintypes.HANDLE
+_kernel32.WaitForSingleObject.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+_kernel32.WaitForSingleObject.restype = wintypes.DWORD
+_kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+SYNCHRONIZE, WAIT_OBJECT_0 = 0x00100000, 0
+
 
 RUN_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_NAME = "Mynaphone"
@@ -1726,6 +1734,21 @@ class MainWindow(QMainWindow):
         else:
             QApplication.instance().quit()
 
+    def on_launch_message(self, conn) -> None:
+        """Another launch wrote to the instance pipe. `mynaphone quit` says "quit", and anything else (a second
+        launch says "show") brings the window back. A copy that's already quitting answers so, and the launch
+        then waits for it to close and opens as the new copy."""
+        said = conn.readAll().data().strip()
+        was_quitting = self._quitting
+        conn.write(b"quitting" if was_quitting or said == b"quit" else b"shown")
+        conn.waitForBytesWritten(300)          # answered first, since quitting can end the event loop
+        if was_quitting:
+            return
+        if said == b"quit":
+            self.quit_app("mynaphone quit asked it to")
+        else:
+            self.show_from_tray()
+
 
 def _screen_facts(screen) -> str:
     g = screen.geometry()
@@ -1748,22 +1771,95 @@ def _log_qt_messages() -> None:
 
 
 INSTANCE_NAME = f"mynaphone-{os.environ.get('USERNAME', 'user')}"
+ANSWER_WAIT_MS = 1000           # copies from before the quit command never answer
+QUIT_WAIT_SECONDS = 30.0        # the recorder gets 20 s to save the songs that just ended, then the app quits
 
 
 def _already_running() -> bool:
-    """Ask a running copy to show its window. True if one answered."""
+    """Ask a running copy to show its window. True if one answered. When that copy is quitting, this launch waits
+    for it to close and carries on as the new copy."""
+    told = _tell_running_copy(b"show")
+    if told is None:
+        return False
+    pid, answer = told
+    if answer != b"quitting":
+        return True
+    log.info("the running copy is quitting, so this launch waits for it to close")
+    return not _wait_for_exit(pid, QUIT_WAIT_SECONDS)
+
+
+def quit_running_copy(wait_seconds: float = QUIT_WAIT_SECONDS) -> str:
+    """Ask a running copy to quit, as Quit in its tray menu does, and wait for it to close. Returns "not running",
+    "closed", "still running", or "no answer" when it's still running and never answered."""
+    told = _tell_running_copy(b"quit")
+    if told is None:
+        return "not running"
+    pid, answer = told
+    if _wait_for_exit(pid, wait_seconds):
+        return "closed"
+    return "still running" if answer else "no answer"
+
+
+def _tell_running_copy(message: bytes) -> tuple[int, bytes] | None:
+    """Send a running copy "show" or "quit" over the instance pipe. Returns its process id and its answer, or None
+    when no copy is running."""
     from PySide6.QtNetwork import QLocalSocket
     sock = QLocalSocket()
     sock.connectToServer(INSTANCE_NAME)
     if not sock.waitForConnected(300):
-        return False
-    # Windows lets only the app you just clicked bring a window to the front. That's this launch, so it hands
-    # the right to the running copy, whose window would otherwise only flash on the taskbar.
-    _user32.AllowSetForegroundWindow(_running_copy_pid(sock))
-    sock.write(b"show")
+        return None
+    pid = _running_copy_pid(sock)
+    if message == b"show":
+        # Windows lets only the app you just clicked bring a window to the front. That's this launch, so it hands
+        # the right to the running copy, whose window would otherwise only flash on the taskbar.
+        _user32.AllowSetForegroundWindow(pid)
+    sock.write(message)
     sock.waitForBytesWritten(300)
+    answer = sock.readAll().data() if sock.waitForReadyRead(ANSWER_WAIT_MS) else b""
     sock.disconnectFromServer()
+    return pid, answer
+
+
+def _wait_for_exit(pid: int, seconds: float) -> bool:
+    """True once process `pid` has closed, False if it's still running after `seconds`."""
+    handle = _kernel32.OpenProcess(SYNCHRONIZE, False, pid) if pid != ASFW_ANY else None
+    if handle:
+        try:
+            return _kernel32.WaitForSingleObject(handle, int(seconds * 1000)) == WAIT_OBJECT_0
+        finally:
+            _kernel32.CloseHandle(handle)
+    # Windows didn't name the process, or it has closed already: wait for its pipe to go instead
+    deadline = time.monotonic() + seconds
+    while _pipe_open():
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.25)
     return True
+
+
+def _pipe_open() -> bool:
+    from PySide6.QtNetwork import QLocalSocket
+    sock = QLocalSocket()
+    sock.connectToServer(INSTANCE_NAME)
+    up = sock.waitForConnected(300)
+    sock.abort()
+    return up
+
+
+def _listen_for_launches(win: MainWindow):
+    """Listen on the instance pipe, where a second launch asks for the window and `mynaphone quit` asks this copy
+    to quit."""
+    from PySide6.QtNetwork import QLocalServer
+    QLocalServer.removeServer(INSTANCE_NAME)
+    server = QLocalServer(win)
+    if server.listen(INSTANCE_NAME):
+        def on_conn():
+            while server.hasPendingConnections():
+                conn = server.nextPendingConnection()
+                conn.readyRead.connect(lambda conn=conn: win.on_launch_message(conn))
+                conn.disconnected.connect(conn.deleteLater)
+        server.newConnection.connect(on_conn)
+    return server
 
 
 def _running_copy_pid(sock) -> int:
@@ -1802,15 +1898,5 @@ def run_gui(config_path: Path, minimized: bool = False) -> int:
     app.screenAdded.connect(lambda s: win.check_painted_soon(1500))
     app.screenRemoved.connect(lambda s: win.check_painted_soon(1500))
     if not dev_shots:
-        from PySide6.QtNetwork import QLocalServer
-        QLocalServer.removeServer(INSTANCE_NAME)
-        server = QLocalServer(win)
-        if server.listen(INSTANCE_NAME):
-            def on_conn():
-                while server.hasPendingConnections():
-                    conn = server.nextPendingConnection()
-                    conn.readyRead.connect(win.show_from_tray)
-                    conn.disconnected.connect(conn.deleteLater)
-            server.newConnection.connect(on_conn)
-        win._instance_server = server
+        win._instance_server = _listen_for_launches(win)
     return app.exec()
