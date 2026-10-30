@@ -178,7 +178,7 @@ def refresh_track(cfg: Config, store: Store, row, lookup: bool = True, manual: d
     if isinstance(manual_all.get("instrumental"), bool):
         instrumental = manual_all["instrumental"]       # set in the Library editor
     else:
-        instrumental = (identify.is_instrumental(ident.title, ident.album)
+        instrumental = (identify.has_no_words(ident, store.played_title(row))
                         or ("lyrics_state" in row.keys() and row["lyrics_state"] == "instrumental"))
     if new_lyrics is not None:
         lyrics_text = new_lyrics

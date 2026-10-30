@@ -714,7 +714,7 @@ class Recorder:
                           source_uri=meta.source_uri, quality_tier=meta.quality_tier, file_path=str(path),
                           state="inbox", meta_json={"album_uri": meta.album_uri, "artist_uris": meta.artist_uris,
                                                     "cover_url": meta.cover_url, "quality": meta.quality_raw,
-                                                    "extra": meta.extra})
+                                                    "played_title": meta.title, "extra": meta.extra})
             if a.replace_id is not None:
                 old = store.conn.execute("SELECT file_path FROM tracks WHERE id=?", (a.replace_id,)).fetchone()
                 store.replace_track(a.replace_id, **fields)

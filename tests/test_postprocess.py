@@ -77,3 +77,43 @@ def test_a_lyrics_lookup_without_an_answer_is_not_a_try(tmp_config, monkeypatch)
     pp.process(_inbox_take(tmp_config, pp.store, "Hukum", "spotify:track:album"))
     row = pp.store.conn.execute("SELECT lyrics_state, lyrics_tries, lyrics_tried_at FROM tracks").fetchone()
     assert tuple(row) == ("none", 0, None)
+
+
+def test_has_no_words():
+    from mynaphone.identify import has_no_words
+    assert has_no_words(Identity(title="Nothing Sinister", album="Casino Royale", language="zxx"))
+    assert has_no_words(Identity(title="Soul of K3G", album="Kabhi Khushi Kabhie Gham"), "Soul Of K3G - Instrumental")
+    assert has_no_words(Identity(title="Metro Fight", album="Karuppu - Side B (God Mode Begins) [Original Score]"))
+    assert has_no_words(Identity(title="Wade In", album="Sinners: Original Motion Picture Score"))
+    assert not has_no_words(Identity(title="Ratata", album="Leo (Original Motion Picture Soundtrack)", language="tam"))
+    assert not has_no_words(Identity(title="Score", album="Score"))
+
+
+def _song(store, folder, title, album, lyrics_state="none", manual=None, **ident):
+    f = folder / album.replace(":", " -") / f"{title}.m4a"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(b"m4a")
+    ident = {"title": title, "album": album, **ident}
+    return store.add_track(artist="A", title=title, album=album, album_artist="A", duration_ms=200_000,
+                           file_path=str(f), state="library", lyrics_state=lyrics_state,
+                           identity_json=json.dumps(ident), manual_json=json.dumps(manual or {}),
+                           missing_json='["lyrics", "synced_lyrics", "lyricists", "isrc"]')
+
+
+def test_scores_and_wordless_albums_are_marked_instrumental(tmp_config):
+    store = Store(tmp_config.paths.db_path)
+    pp = PostProcessor(tmp_config, store)
+    lib = tmp_config.paths.library_dir
+    pof = "Guild Wars 2: Path of Fire (Original Soundtrack)"
+    score = [_song(store, lib, f"Theme {i}", pof, mb_release_id="pof") for i in range(5)]
+    sung = _song(store, lib, "Sung Theme", pof, mb_release_id="pof", vocals=["Singer"])
+    kept_vocal = _song(store, lib, "Theme 9", pof, mb_release_id="pof", manual={"instrumental": False})
+    zxx = _song(store, lib, "Nothing Sinister", "Casino Royale", language="zxx")
+    film = [_song(store, lib, f"Song {i}", "Leo (Original Motion Picture Soundtrack)", mb_release_id="leo",
+                  lyrics_state="synced" if i else "none") for i in range(6)]
+    assert pp.mark_instrumentals() == 6
+    state = {i: store.track(i)["lyrics_state"] for i in score + [sung, kept_vocal, zxx] + film}
+    assert all(state[i] == "instrumental" for i in score + [zxx])
+    assert state[sung] == "none" and state[kept_vocal] == "none"       # a credited singer, and your own edit
+    assert state[film[0]] == "none"                                     # a film album with words isn't a score
+    assert json.loads(store.track(score[0])["missing_json"]) == ["isrc"]

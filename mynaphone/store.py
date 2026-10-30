@@ -219,6 +219,22 @@ class Store:
     def track(self, track_id: int) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM tracks WHERE id=?", (track_id,)).fetchone()
 
+    def played_title(self, row) -> str:
+        """The title the player showed when the song was recorded. Filing replaces the row's title with
+        MusicBrainz's, which can drop words such as Instrumental. Older rows find it in their kept take."""
+        try:
+            title = json.loads(row["meta_json"] or "{}").get("played_title")
+        except (TypeError, ValueError, AttributeError):
+            title = None
+        if title:
+            return title
+        if row["source_uri"]:
+            r = self.conn.execute("SELECT title FROM takes WHERE source_uri=? AND verdict='keep' ORDER BY id DESC "
+                                  "LIMIT 1", (row["source_uri"],)).fetchone()
+            if r and r[0]:
+                return r[0]
+        return ""
+
     def incomplete_for_retry(self, min_age_days: float = 7.0, limit: int = 10) -> list[sqlite3.Row]:
         cutoff = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=min_age_days)).isoformat()
         return self.conn.execute(

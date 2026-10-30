@@ -299,6 +299,21 @@ def is_instrumental(title: str, album: str = "") -> bool:
     return bool(INSTRUMENTAL_RE.search(title or "") or INSTRUMENTAL_RE.search(album or ""))
 
 
+SCORE_RE = re.compile(r"\b(original|background|film|motion picture|game)\s+score\b", re.I)
+
+
+def has_no_words(ident: Identity, *titles: str) -> bool:
+    """True when something says the recording has no words: MusicBrainz's "no lyrics" language (zxx), a title or
+    album that says Instrumental, or an album that is a film's or a game's score ('Karuppu - Side B [Original
+    Score]'). `titles` are other names the song went by: Spotify called it 'Soul Of K3G - Instrumental' where
+    MusicBrainz says 'Soul of K3G'."""
+    if (ident.language or "").lower() == "zxx":
+        return True
+    if is_instrumental(ident.title, ident.album) or any(is_instrumental(t) for t in titles if t):
+        return True
+    return bool(SCORE_RE.search(ident.album or ""))
+
+
 def from_tags(meta: dict) -> Identity:
     """Build an identity from the capture's provisional (Spotify) metadata."""
     ident = Identity(source="spotify" if meta.get("source_uri") else "tags")

@@ -80,6 +80,11 @@ All notable changes to Mynaphone are listed here. The format follows
   `SUPPORT.md` says where to get help.
 
 ### Fixed
+- Game and film scores counted as songs missing their lyrics and lyricist. A song is now taken as
+  instrumental when MusicBrainz gives it its "no lyrics" language, when its title (the one the
+  player showed too) or its album says Instrumental, when its album is a film's or a game's score,
+  or when it has no lyricist or singer credited and sits on an album with at least 5 songs in the
+  library, 3 in 4 of them without words. Choosing vocals in the Library editor still wins.
 - Lyrics from LRCLIB had stopped arriving since mid-October. For a song LRCLIB doesn't have, its
   exact lookup also asks other sites, and that part answered "The server is busy" (503), which
   stopped every lyrics run at its first song. Mynaphone now asks LRCLIB's own database and its
