@@ -447,6 +447,12 @@ class StatusPage(QWidget):
         more.setToolTip("Open the Activity page: every kept, discarded and filed take, with reasons, "
                         "plus the live log.")
         more.clicked.connect(lambda: win.nav.setCurrentRow(1))
+        self.btn_again = QPushButton("")
+        self.btn_again.setToolTip("Songs that didn't record all the way through and aren't in your library yet. "
+                                  "Open the list to play them again.")
+        self.btn_again.clicked.connect(win.show_play_again)
+        self.btn_again.hide()
+        head.addWidget(self.btn_again)
         head.addWidget(more)
         cl.addLayout(head)
         self.recent = QTableWidget(0, 3)
@@ -498,6 +504,10 @@ class StatusPage(QWidget):
                 self.cover.setPixmap(_rounded(pm, COVER))
                 return
         self.cover.setPixmap(app_icon(state).pixmap(COVER_MARK, COVER_MARK))
+
+    def set_play_again(self, count: int) -> None:
+        self.btn_again.setText(f"{count} song{'' if count == 1 else 's'} to play again")
+        self.btn_again.setVisible(count > 0)
 
     def set_recent(self, rows: list[tuple[str, str, str]]) -> None:
         self.recent.setRowCount(0)
@@ -1136,8 +1146,15 @@ class MainWindow(QMainWindow):
             self.status.tiles["discarded"].setText(str(s["takes_discarded"]))
             self.status.tiles["skipped"].setText(str(s["takes_skipped"]))
             self.activity.summary.setText(f"{s['tracks_inbox']} in the inbox, {s['tracks_library']} in the library")
+            self.status.set_play_again(len(st.songs_to_play_again()))
         except Exception as e:
             self.activity.summary.setText(f"could not read the index: {e}")
+
+    @Slot()
+    def show_play_again(self) -> None:
+        from .play_again import PlayAgainDialog
+        PlayAgainDialog(self.cfg.paths.db_path, _detail, self).exec()
+        self._load_recent()
 
     # ------------------------------------------------------------------ settings
 

@@ -126,3 +126,31 @@ def test_take_times_show_in_local_time():
     assert local_time(stamp, tz=utc_minus_6) == "02:07"
     assert local_time(stamp, "%Y-%m-%d %H:%M:%S", tz=utc_minus_6) == "2026-10-02 02:07:31"
     assert local_time(None) == "" and local_time("not a time") == ""
+
+
+def test_songs_to_play_again(tmp_path):
+    """Songs whose recording failed and that the library doesn't have; Tere Bin failed twice in October."""
+    from mynaphone.store import Store
+    st = Store(tmp_path / "db.sqlite")
+    def discard(artist, title, uri="", when="2026-10-04T10:00:00+00:00", reasons=("paused",)):
+        st.log_take(started_at=when, artist=artist, title=title, source_uri=uri, verdict="discard",
+                    reasons=list(reasons))
+    discard("Pritam", "Tere Bin", "spotify:track:tb", "2026-10-04T10:00:00+00:00", ["started_mid_track:47549ms"])
+    discard("Pritam", "Tere Bin", "spotify:track:tb", "2026-10-05T10:00:00+00:00", ["paused", "stopped"])
+    discard("Tiffany", "I Think We're Alone Now", "spotify:track:t", "2026-10-13T10:00:00+00:00")
+    discard("Iron Maiden", "Blood Brothers", "spotify:track:bb")
+    discard("Lost Acapulco", "Mercury")                                    # no Spotify id: matched by name
+    discard("A", "Kept Later", "spotify:track:k")
+    discard("A", "Its Single", "spotify:track:single")
+    discard("B", "Same Name", "spotify:track:other")
+    st.add_track(artist="A", title="Kept Later", source_uri="spotify:track:k", state="library", duration_ms=1)
+    album = st.add_track(artist="A", title="Its Album Track", source_uri="spotify:track:album", state="library",
+                         duration_ms=1)
+    st.add_alias("spotify:track:single", album)
+    st.add_track(artist="B", title="Same Name", source_uri="spotify:track:b", state="library", duration_ms=1)
+    st.hide_retry("spotify:track:bb")
+    songs = st.songs_to_play_again()
+    assert [s["title"] for s in songs] == ["I Think We're Alone Now", "Tere Bin", "Mercury"]
+    tere = songs[1]
+    assert tere["tries"] == 2 and tere["reasons"] == ["paused", "stopped"] and tere["last_try"].startswith("2026-10-05")
+    assert songs[2]["key"] == "lost acapulco|mercury"

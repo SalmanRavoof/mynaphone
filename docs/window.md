@@ -44,6 +44,12 @@ Under the card, 4 counts:
 
 **Recent** lists the last 6 takes. **See all activity** opens the Activity page.
 
+When a song didn't record all the way through and your library still doesn't have it, **Recent** also shows a
+button such as **11 songs to play again**. It opens the list of those songs, with why each one didn't record and
+when it last tried. **Open in Spotify** opens the song you picked, or a Spotify search for it when it was recorded
+before the Spotify bridge connected. Play it again and Mynaphone records it. **Hide from the list** takes a song you
+skipped on purpose off the list for good.
+
 ## Activity
 
 ![The Activity page with kept and discarded takes above the live log](images/activity.png)

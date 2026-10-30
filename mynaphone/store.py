@@ -63,6 +63,10 @@ CREATE TABLE IF NOT EXISTS aliases (
     uri TEXT PRIMARY KEY,                  -- another player id for a song in tracks: its single, its album track
     track_id INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS hidden_retries (
+    key TEXT PRIMARY KEY,                  -- a song taken off the list to play again: its player id, or artist|title
+    hidden_at TEXT
+);
 """
 
 
@@ -209,6 +213,45 @@ class Store:
 
     def recent_takes(self, n: int = 15) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM takes ORDER BY id DESC LIMIT ?", (n,)).fetchall()
+
+    # -- songs to play again ---------------------------------------------------------------
+
+    @staticmethod
+    def retry_key(source_uri: str | None, artist: str, title: str) -> str:
+        return source_uri or f"{norm(artist)}|{norm(title)}"
+
+    def songs_to_play_again(self) -> list[dict]:
+        """Songs whose recording was discarded and that the library still doesn't have, last tried first.
+
+        A song counts as saved once its player id or one of its aliases is in the library, or a library song has its
+        artist and title as the player showed them. Songs taken off the list stay off."""
+        hidden = {r[0] for r in self.conn.execute("SELECT key FROM hidden_retries")}
+        uris = ({r[0] for r in self.conn.execute("SELECT source_uri FROM tracks WHERE source_uri IS NOT NULL")}
+                | {r[0] for r in self.conn.execute("SELECT uri FROM aliases")})
+        names = {(r[0], r[1]) for r in self.conn.execute("SELECT artist_norm, title_norm FROM tracks")}
+        songs: dict[str, dict] = {}
+        for t in self.conn.execute("SELECT * FROM takes WHERE verdict='discard' ORDER BY started_at DESC, id DESC"):
+            key = self.retry_key(t["source_uri"], t["artist"] or "", t["title"] or "")
+            if key in songs:
+                songs[key]["tries"] += 1
+                continue
+            if (key in hidden or (t["source_uri"] and t["source_uri"] in uris)
+                    or (norm(t["artist"] or ""), norm(t["title"] or "")) in names):
+                continue
+            try:
+                reasons = json.loads(t["reasons"] or "[]")
+            except ValueError:
+                reasons = []
+            songs[key] = {"key": key, "artist": t["artist"] or "", "title": t["title"] or "", "album": t["album"] or "",
+                          "source_uri": t["source_uri"] or "", "last_try": t["started_at"] or "", "reasons": reasons,
+                          "tries": 1}
+        return list(songs.values())
+
+    def hide_retry(self, key: str) -> None:
+        """Take a song off the list to play again, for good: you skipped it on purpose, say."""
+        self.conn.execute("INSERT OR REPLACE INTO hidden_retries (key, hidden_at) VALUES (?, ?)",
+                          (key, dt.datetime.now(dt.timezone.utc).isoformat()))
+        self.conn.commit()
 
     def library_rows(self, only_incomplete: bool = False) -> list[sqlite3.Row]:
         q = "SELECT * FROM tracks WHERE state='library'"

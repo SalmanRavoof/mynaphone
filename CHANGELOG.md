@@ -6,6 +6,9 @@ All notable changes to Mynaphone are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- Songs to play again: a button on the Status page opens the songs that didn't record all the way
+  through and that your library still doesn't have, with why each one failed and when it last
+  tried. Open one in Spotify to play it again, or hide a song you skipped on purpose.
 - Per-app audio capture through a native helper using Windows' process-loopback API; whole-device
   capture kept as an option.
 - Keep-or-discard verdict: start position, pause, seek, stall, dropout, device change, length and

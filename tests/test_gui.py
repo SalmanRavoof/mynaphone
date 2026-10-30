@@ -507,3 +507,36 @@ def test_taskbar_identity_matches_the_shortcuts():
         assert ctypes.wstring_at(out.value) == shortcuts.APP_ID
     finally:
         ctypes.WinDLL("ole32").CoTaskMemFree(out)
+
+
+def test_songs_to_play_again_open_from_the_status_page(window, monkeypatch):
+    from mynaphone.gui import play_again
+    from mynaphone.gui.app import _detail
+    from mynaphone.store import Store
+    st = Store(window.cfg.paths.db_path)
+    seeded = len(st.songs_to_play_again())
+    st.log_take(started_at="2026-10-04T10:00:00+00:00", artist="Pritam", title="Tere Bin",
+                source_uri="spotify:track:tb", verdict="discard", reasons=["paused", "stopped"])
+    st.log_take(started_at="2026-10-06T10:00:00+00:00", artist="A.R. Rahman", title="Main Vari Vari",
+                source_uri="", verdict="discard", reasons=["started_mid_track:4461ms"])
+    window._load_recent()
+    assert window.status.btn_again.text() == f"{seeded + 2} songs to play again"
+    assert not window.status.btn_again.isHidden()
+    dlg = play_again.PlayAgainDialog(window.cfg.paths.db_path, _detail)
+    assert dlg.table.rowCount() == seeded + 2
+    assert dlg.table.item(0, 0).text() == "A.R. Rahman - Main Vari Vari"
+    assert dlg.table.item(0, 1).text() == "started mid-song"
+    opened = []
+    monkeypatch.setattr(play_again.os, "startfile", opened.append)
+    dlg.open_selected()
+    assert opened == ["spotify:search:A.R.%20Rahman%20Main%20Vari%20Vari"]     # no Spotify id, so a search
+    dlg.table.selectRow(1)
+    dlg.open_selected()
+    assert opened[-1] == "spotify:track:tb"
+    dlg.hide_selected()
+    assert dlg.table.rowCount() == seeded + 1
+    for _ in range(seeded + 1):
+        dlg.hide_selected()
+    window._load_recent()
+    assert dlg.table.rowCount() == 0 and window.status.btn_again.isHidden()
+    dlg.deleteLater()
