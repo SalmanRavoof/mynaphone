@@ -138,7 +138,11 @@ The inbox FLAC is a lossless copy of what the app decoded. The recorder encodes 
 stay FLAC. The file is then placed by type:
 
 - `Soundtracks/<Album (Year)>/<NN Title>` when MusicBrainz marks the release as a soundtrack or the
-  text rule does.
+  text rule does. Each film gets one folder: its singles, such as `Ratata (From "Leo")`, and a second
+  spelling of its album name join the folder of the film's album, without the single's `01`. A dubbed
+  album such as `Vettaiyan (telugu)` and a background score keep folders of their own, and so does a
+  film of the same name more than 3 years apart. Songs filed apart before are moved in, and every move
+  is written to `folder-moves.json` next to the index.
 - `Artists/<Album artist>/<Album (Year)>/<NN Title>` for albums.
 - `Artists/<Artist>/Singles/<Title>` for singles and EPs.
 - `Artists/Various Artists/<Album (Year)>/...` for compilations.
@@ -148,7 +152,9 @@ stay FLAC. The file is then placed by type:
 A film song keeps its singers in the artist tag and its music director in the album-artist and
 composer tags, so an A. R. Rahman album remains one folder while each track still names Sonu
 Nigam or Shreya Ghoshal. When MusicBrainz credits the recording to the composer and lists the singers only
-as vocal performers, the app swaps the singers into the artist tag itself.
+as vocal performers, the app swaps the singers into the artist tag itself, as long as the player named one of
+the singers and none of the credited artists. A band keeps its name that way, since Spotify shows
+Metallica, not James Hetfield. Backing and choir singers never go into the artist tag.
 
 Tags follow [MusicBrainz Picard's tag mapping](https://picard-docs.musicbrainz.org/en/latest/appendices/tag_mapping.html),
 so other players and taggers understand them. [mutagen](https://github.com/quodlibet/mutagen) writes them.

@@ -476,12 +476,16 @@ def read_extras(path: Path) -> tuple[tuple[bytes, str] | None, str]:
 
 def file_take(src_flac: Path, library_dir: Path, ident: Identity, fmt: str, bitrate: int,
               lyrics_text: str, capture: dict, cover: tuple[bytes, str] | None,
-              keep_flac_for_lossless: bool = True) -> Path:
-    """Encode, tag and place the file. Returns the final path."""
+              keep_flac_for_lossless: bool = True, into: Path | None = None) -> Path:
+    """Encode, tag and place the file. Returns the final path. `into` is the folder that already holds a soundtrack
+    song's film, under the library."""
     tier = capture.get("quality_tier", "")
     use_fmt = "flac" if (keep_flac_for_lossless and tier_rank(tier) >= tier_rank("hifi")) else fmt
     ext = EXT.get(use_fmt, ".m4a")
     pl = place(ident)
+    if into is not None and pl.kind == "soundtrack":
+        from .films import in_folder
+        pl = in_folder(pl, ident, into)
     capture = dict(capture, kind=pl.kind)
     dst = library_dir / pl.rel_dir / f"{pl.filename}{ext}"
     if dst.exists():

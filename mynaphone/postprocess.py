@@ -17,9 +17,9 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-from . import genres, identify, lyrics as lyr, tools
+from . import films, genres, identify, lyrics as lyr, tools
 from .config import Config
-from .library import file_take, resolve_cover, write_lyrics, write_lyrics_sidecar
+from .library import classify, file_take, resolve_cover, write_lyrics, write_lyrics_sidecar
 from .metadata import identity_from_row, missing_fields, refresh_track
 from .store import Store, tier_rank
 
@@ -81,6 +81,7 @@ class PostProcessor(threading.Thread):
                     self._work()
                     if time.monotonic() >= self._next_jobs:
                         self._interrupted = False
+                        self.fold_film_folders()
                         self.mark_instrumentals()
                         self.backfill_lyrics()
                         if not self._interrupted:
@@ -212,8 +213,12 @@ class PostProcessor(threading.Thread):
                 log.info("lyrics lookup failed for %s: %s (will retry later)", ident.title, e)
 
         cover = resolve_cover(path, ident, meta.get("cover_url", ""))
+        into = None
+        if classify(ident) == "soundtrack":
+            into = films.folder_for(self.cfg.paths.library_dir, films.soundtrack_rows(self.store), ident.album,
+                                    ident.title, ident.year)
         dst = file_take(path, self.cfg.paths.library_dir, ident, self.cfg.library.format,
-                        self.cfg.library.aac_bitrate, text, capture, cover)
+                        self.cfg.library.aac_bitrate, text, capture, cover, into=into)
         missing = missing_fields(ident, cover is not None, lyr_state)
         now = dt.datetime.now(dt.timezone.utc).isoformat()
         if row:
@@ -301,6 +306,20 @@ class PostProcessor(threading.Thread):
             except Exception as e:
                 log.info("retry failed for %s: %s", row["title"], e)
                 break
+        return done
+
+    # -- one folder per film ----------------------------------------------------------------
+
+    def fold_film_folders(self) -> int:
+        """Gather each film's songs in one folder under Soundtracks (films.py). New songs go to their film's folder
+        when they're filed; this folds the ones filed apart before, or before their film's album arrived. Every move
+        goes into folder-moves.json next to the index, so it can be undone by hand."""
+        moves = films.plan(self.cfg.paths.library_dir, films.soundtrack_rows(self.store))
+        if not moves:
+            return 0
+        done = films.apply(self.store, moves, self.cfg.paths.db_path.parent / "folder-moves.json")
+        if done:
+            log.info("gathered %d songs into their films' folders", done)
         return done
 
     # -- artist credits --------------------------------------------------------------------

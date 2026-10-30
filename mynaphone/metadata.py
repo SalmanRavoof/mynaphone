@@ -210,6 +210,13 @@ def refresh_track(cfg: Config, store: Store, row, lookup: bool = True, manual: d
         if manual_all.get("kind"):
             pl.kind = manual_all["kind"]
             pl = _place_with_kind(ident, manual_all["kind"])
+        if pl.kind == "soundtrack":
+            # a song gathered in its film's folder stays there
+            from . import films
+            into = films.folder_for(cfg.paths.library_dir, films.soundtrack_rows(store), ident.album, ident.title,
+                                    ident.year)
+            if into is not None:
+                pl = films.in_folder(pl, ident, into)
         target = cfg.paths.library_dir / pl.rel_dir / f"{pl.filename}{path.suffix}"
         if target != path:
             target.parent.mkdir(parents=True, exist_ok=True)

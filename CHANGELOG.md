@@ -6,6 +6,11 @@ All notable changes to Mynaphone are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- One folder per film. A film's singles, such as `Ratata (From "Leo")`, a second spelling of its
+  album name, and a single released the year before its album now join the folder of the film's
+  album. Dubbed albums, background scores and films of the same name years apart keep their own
+  folders. Songs filed apart before are moved in, and each move is written to
+  `folder-moves.json` next to the index.
 - Songs to play again: a button on the Status page opens the songs that didn't record all the way
   through and that your library still doesn't have, with why each one failed and when it last
   tried. Open one in Spotify to play it again, or hide a song you skipped on purpose.

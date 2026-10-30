@@ -19,7 +19,7 @@ def _processor(cfg, monkeypatch):
     monkeypatch.setattr(P, "resolve_cover", lambda *a: None)
     monkeypatch.setattr(P.lyr, "fetch", lambda *a, **k: None)
 
-    def fake_file_take(src, library_dir, ident, fmt, bitrate, text, capture, cover):
+    def fake_file_take(src, library_dir, ident, fmt, bitrate, text, capture, cover, into=None):
         dst = library_dir / "Soundtracks" / "Jailer (2023)" / f"{capture['quality_tier']} Hukum.m4a"
         dst.parent.mkdir(parents=True, exist_ok=True)
         dst.write_bytes(b"m4a")

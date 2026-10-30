@@ -219,7 +219,8 @@ image file, and save.
 
 MusicBrainz marks soundtrack releases, and a text rule catches album titles such as "Original Motion
 Picture Soundtrack". Everything else is filed under the album artist, with singles and EPs in a
-Singles folder. You can override the choice per song on the Library page.
+Singles folder. You can override the choice per song on the Library page. A film's singles go into
+the film's own folder under Soundtracks, so Leo's songs sit together however they were released.
 
 ## Storage and performance
 
