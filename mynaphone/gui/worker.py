@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import logging
 
 from PySide6.QtCore import QThread, Signal
@@ -62,6 +63,9 @@ class RecorderWorker(QThread):
                 loop.close()
             except Exception:
                 pass
+            # the recorder's objects, Windows' media-session objects among them, sit in reference cycles; free them
+            # here on the thread that made them, before Python starts shutting down
+            gc.collect()
 
     def stop(self) -> None:
         if self.recorder is not None:

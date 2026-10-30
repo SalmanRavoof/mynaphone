@@ -80,6 +80,10 @@ All notable changes to Mynaphone are listed here. The format follows
   `SUPPORT.md` says where to get help.
 
 ### Fixed
+- Quitting could crash Mynaphone after it had closed, inside Windows' media-session module. A
+  change Windows reported during shutdown could hook the media sessions again after the recorder
+  had let go of them. The listener now ignores changes once it has stopped, and its Windows objects
+  are freed before Python shuts down.
 - Opening Mynaphone from its shortcut could show nothing. With **Open minimized to the tray** ticked
   it started hidden in the tray, where Windows had tucked its icon under the ^ arrow by the clock.
   Opening it yourself now always shows the window; the setting, renamed **When Windows starts it,

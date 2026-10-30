@@ -141,6 +141,7 @@ class SmtcListener:
         self.manager = None
         self._hooked: list[tuple[Any, list[tuple[str, int]]]] = []
         self._sessions_token = None
+        self._stopped = False
 
     async def start(self) -> None:
         self.manager = await Manager.request_async()
@@ -149,12 +150,18 @@ class SmtcListener:
         log.info("media-session listener started (%d sessions)", len(self._hooked))
 
     def stop(self) -> None:
+        """Take every handler off and let go of Windows' objects. A change Windows reports after this finds the
+        listener stopped and does nothing: one that re-attached the handlers during shutdown would call into
+        Python after it had exited, and a quit once crashed in Windows' media-session module that way."""
+        self._stopped = True
         self._unhook_all()
         if self.manager is not None and self._sessions_token is not None:
             try:
                 self.manager.remove_sessions_changed(self._sessions_token)
             except Exception:
                 pass
+        self._sessions_token = None
+        self.manager = None
 
     def sessions(self) -> list[Any]:
         try:
@@ -166,15 +173,25 @@ class SmtcListener:
     # -- internals -------------------------------------------------------------------------
 
     def _emit(self, kind: str, session) -> None:
+        if self._stopped:
+            return
         try:
             app = session.source_app_user_model_id or ""
         except Exception:
             app = ""
-        self.loop.call_soon_threadsafe(self.queue.put_nowait, SmtcEvent(kind, app, session))
+        try:
+            self.loop.call_soon_threadsafe(self.queue.put_nowait, SmtcEvent(kind, app, session))
+        except RuntimeError:        # the event loop has closed: the app is quitting
+            pass
 
     def _on_sessions_changed(self, manager, args) -> None:
-        self.loop.call_soon_threadsafe(self._rehook)
-        self.loop.call_soon_threadsafe(self.queue.put_nowait, SmtcEvent("sessions", "", None))
+        if self._stopped:
+            return
+        try:
+            self.loop.call_soon_threadsafe(self._rehook)
+            self.loop.call_soon_threadsafe(self.queue.put_nowait, SmtcEvent("sessions", "", None))
+        except RuntimeError:
+            pass
 
     def _unhook_all(self) -> None:
         for session, tokens in self._hooked:
@@ -186,6 +203,8 @@ class SmtcListener:
         self._hooked.clear()
 
     def _rehook(self) -> None:
+        if self._stopped:           # a change reported just before stop() must not hook the sessions again
+            return
         self._unhook_all()
         for s in self.sessions():
             tokens = []

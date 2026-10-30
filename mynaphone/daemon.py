@@ -169,18 +169,28 @@ class Recorder:
                 except Exception:
                     log.exception("error handling %s", ev)
         finally:
+            # before anything here waits, so no media-session change can hook the sessions again during shutdown
+            self.smtc.stop()
             ticker.cancel()
             if self.active:
                 await self._finish("shutdown")
-            self.smtc.stop()
             for cap in self.captures.values():
                 cap.stop()
             self.foreign.stop()
             self.post.stop()
             if self.bridge:
                 await self.bridge.stop()
+            self._drop_queued()
             self._emit("stopped")
             log.info("recorder stopped")
+
+    def _drop_queued(self) -> None:
+        """Events still waiting hold Windows' session objects; drop them while their thread is alive."""
+        while True:
+            try:
+                self.queue.get_nowait()
+            except asyncio.QueueEmpty:
+                return
 
     async def _ticker(self) -> None:
         while True:
