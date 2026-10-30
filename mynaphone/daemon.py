@@ -8,6 +8,7 @@ import datetime as dt
 import logging
 import re
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -78,6 +79,12 @@ class Recorder:
         self._skips: list[float] = []               # monotonic times of recent harvest skips
         self.foreign = ForeignAudioMonitor(cfg.rules.sources, cfg.rules.foreign_audio_threshold_db)
         self.post = PostProcessor(cfg, self.store, on_event=lambda e: self._emit(e.pop("kind"), **e))
+        # ended takes are written out one at a time on their own thread and database connection, while the
+        # event loop goes on reading the player
+        self._saves: set[asyncio.Task] = set()
+        self._writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="mynaphone-writer")
+        self._writer_store: Store | None = None
+        self._covers: set[asyncio.Task] = set()     # thumbnail reads, each holding a media session
 
     # -- observers -------------------------------------------------------------------------
 
@@ -174,6 +181,10 @@ class Recorder:
             ticker.cancel()
             if self.active:
                 await self._finish("shutdown")
+            # a song that ended a moment ago still has its last seconds coming in, so save before the captures stop
+            await self.settle()
+            self._writer.shutdown(wait=True)
+            await self._cancel_covers()
             for cap in self.captures.values():
                 cap.stop()
             self.foreign.stop()
@@ -183,6 +194,14 @@ class Recorder:
             self._drop_queued()
             self._emit("stopped")
             log.info("recorder stopped")
+
+    async def _cancel_covers(self) -> None:
+        """Thumbnail reads still waiting hold Windows' session objects; end them while their thread is alive."""
+        covers = list(self._covers)
+        for t in covers:
+            t.cancel()
+        if covers:
+            await asyncio.gather(*covers, return_exceptions=True)
 
     def _drop_queued(self) -> None:
         """Events still waiting hold Windows' session objects; drop them while their thread is alive."""
@@ -221,15 +240,14 @@ class Recorder:
     async def _handle(self, snap: S.Snapshot, kind: str, session) -> None:
         a = self.active
         if a and a.app.lower() == snap.app.lower() and snap.key != a.key and not self._is_blank(snap):
-            # boundary: the session now reports a different track. Start the next take before writing
-            # the old one out: writing a long song takes seconds, and the next take can only reach
-            # preroll_seconds back into the ring buffer for its opening.
+            # boundary: the session now reports a different track. Start the next take first, since it can only
+            # reach preroll_seconds back into the ring buffer for its opening, and save the old one in the background.
             ended = self._end_take("track_change")
             try:
                 await self._handle(snap, kind, session)
             finally:
                 if ended is not None:
-                    await self._write_take(*ended)
+                    self._save_later(ended)
             return
         if a and a.app.lower() == snap.app.lower():
             # same track: pause/stop/seek/stall checks
@@ -523,7 +541,9 @@ class Recorder:
                  meta.artist, meta.title, meta.album, meta.expected_ms / 1000, start_pos / 1000, meta.quality_tier)
         self._emit("recording", artist=meta.artist, title=meta.title, album=meta.album,
                    expected_ms=meta.expected_ms, tier=meta.quality_tier, t_event=self.active.t_event)
-        asyncio.create_task(self._fetch_cover(session, snap.key, meta))
+        cover = asyncio.create_task(self._fetch_cover(session, snap.key, meta))
+        self._covers.add(cover)
+        cover.add_done_callback(self._covers.discard)
 
     def _check_volumes(self, app: str, flags: dict) -> None:
         """A take recorded below full volume is a quiet, degraded file; flag it so the verdict rejects it.
@@ -573,7 +593,25 @@ class Recorder:
     async def _finish(self, reason: str) -> None:
         ended = self._end_take(reason)
         if ended is not None:
-            await self._write_take(*ended)
+            self._save_later(ended)
+
+    def _save_later(self, ended: tuple[ActiveTake, Take, dict, float]) -> None:
+        """Judge and write an ended take in the background. The event queue used to wait for it, 5 to 9 seconds a
+        song, so the next song's first timeline readings were handled late; on October 2 that made 7 complete
+        songs look seeked."""
+        task = self.loop.create_task(self._write_take(*ended))
+        self._saves.add(task)
+        task.add_done_callback(self._saved)
+
+    def _saved(self, task: asyncio.Task) -> None:
+        self._saves.discard(task)
+        if not task.cancelled() and task.exception() is not None:
+            log.error("could not save a take", exc_info=task.exception())
+
+    async def settle(self) -> None:
+        """Wait until every ended take has been saved."""
+        while self._saves:
+            await asyncio.gather(*list(self._saves), return_exceptions=True)
 
     def _end_take(self, reason: str) -> tuple[ActiveTake, Take, dict, float] | None:
         """Stop the active take's capture and settle its flags. Quick, so the next take can start at once."""
@@ -614,17 +652,25 @@ class Recorder:
         return a, take, flags, wall_s
 
     async def _write_take(self, a: ActiveTake, take: Take, flags: dict, wall_s: float) -> None:
-        """Judge, write and index an ended take, off the event loop; this is the slow part."""
+        """Judge, write and index an ended take on the writer thread; this is the slow part."""
         if take.tail_until:
             await asyncio.sleep(max(0.0, take.tail_until - time.monotonic()) + 0.2)
         try:
-            await self.loop.run_in_executor(None, self._finalize, a, take, flags, wall_s)
+            await self.loop.run_in_executor(self._writer, self._finalize, a, take, flags, wall_s)
         finally:
             take.chunks = []        # written out; whatever still holds the take doesn't keep its audio
+
+    def _wstore(self) -> Store:
+        """The writer thread's own connection to the index. The event loop and the post-processor share the other
+        one, and two threads writing through one connection can mix up each other's transactions."""
+        if self._writer_store is None:
+            self._writer_store = Store(self.cfg.paths.db_path)
+        return self._writer_store
 
     def _finalize(self, a: ActiveTake, take: Take, flags: dict, wall_s: float) -> None:
         cfg = self.cfg
         meta = a.meta
+        store = self._wstore()
         audio = take.audio()
         audio, lead_ms = trim(audio, take.rate, meta.expected_ms,
                               cfg.capture.lead_margin_seconds + 1.5, cfg.rules.duration_tolerance_seconds)
@@ -655,7 +701,7 @@ class Recorder:
             except Exception as e:
                 log.warning("tagging failed for %s: %s", path.name, e)
             sidecar(path, meta, verdict, flags, take.rate, cfg.capture.bit_depth)
-        self.store.log_take(
+        store.log_take(
             started_at=meta.started_at, ended_at=meta.ended_at, artist=meta.artist, title=meta.title,
             album=meta.album, source_app=meta.app, source_uri=meta.source_uri, expected_ms=meta.expected_ms,
             captured_ms=verdict.captured_ms, wall_ms=verdict.wall_ms,
@@ -670,8 +716,8 @@ class Recorder:
                                                     "cover_url": meta.cover_url, "quality": meta.quality_raw,
                                                     "extra": meta.extra})
             if a.replace_id is not None:
-                old = self.store.conn.execute("SELECT file_path FROM tracks WHERE id=?", (a.replace_id,)).fetchone()
-                self.store.replace_track(a.replace_id, **fields)
+                old = store.conn.execute("SELECT file_path FROM tracks WHERE id=?", (a.replace_id,)).fetchone()
+                store.replace_track(a.replace_id, **fields)
                 if old and old["file_path"]:
                     for p in (Path(old["file_path"]), Path(old["file_path"]).with_suffix(".json")):
                         try:
@@ -679,7 +725,7 @@ class Recorder:
                         except Exception:
                             pass
             else:
-                self.store.add_track(**fields)
+                store.add_track(**fields)
             log.info("KEPT %.1fs -> %s", captured_s, path.name)
             self._emit("kept", artist=meta.artist, title=meta.title, album=meta.album, path=str(path),
                        captured_ms=verdict.captured_ms, expected_ms=meta.expected_ms, tier=meta.quality_tier)

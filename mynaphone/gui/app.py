@@ -1576,7 +1576,9 @@ class MainWindow(QMainWindow):
         self.tray.hide()
         if self.worker is not None and self.worker.isRunning():
             self.worker.stop()
-            QTimer.singleShot(8000, QApplication.instance().quit)
+            # the recorder quits on its own once it has saved the songs that just ended, a song's last seconds
+            # and its write together; this only covers a recorder that never answers
+            QTimer.singleShot(20000, QApplication.instance().quit)
         else:
             QApplication.instance().quit()
 

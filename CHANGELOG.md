@@ -80,6 +80,9 @@ All notable changes to Mynaphone are listed here. The format follows
   `SUPPORT.md` says where to get help.
 
 ### Fixed
+- While a finished song was written out, the recorder read nothing from the player for 5 to 9
+  seconds, so the next song's first updates arrived late. Songs are now saved in the background, one
+  at a time on their own thread and database connection.
 - Quitting could crash Mynaphone after it had closed, inside Windows' media-session module. A
   change Windows reported during shutdown could hook the media sessions again after the recorder
   had let go of them. The listener now ignores changes once it has stopped, and its Windows objects

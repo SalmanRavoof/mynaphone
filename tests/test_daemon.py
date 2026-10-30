@@ -78,12 +78,24 @@ def recorder(tmp_config, clock, monkeypatch):
     rec.captures = {"*": FakeCapture(clock)}
     rec.events = []
     rec.on_event = rec.events.append
+    _RECORDERS[loop] = rec
     yield rec, loop
+    _RECORDERS.pop(loop, None)
+    rec._writer.shutdown(wait=True)
+    loop.run_until_complete(rec._cancel_covers())
     loop.close()
 
 
+_RECORDERS = {}
+
+
 def run(loop, coro):
-    return loop.run_until_complete(coro)
+    """Run one step, then wait for the takes it ended to be saved: the recorder saves them in the background."""
+    result = loop.run_until_complete(coro)
+    rec = _RECORDERS.get(loop)
+    if rec is not None:
+        loop.run_until_complete(rec.settle())
+    return result
 
 
 def play_full_song(rec, loop, clock, title, session=None, end_ms=180_000, **kw):
@@ -481,3 +493,28 @@ def test_take_with_no_audio_leaves_no_file(recorder, clock, tmp_config, caplog, 
     assert list(tmp_config.paths.discard_dir.iterdir()) == []
     # only the app's own loggers count; asyncio reports other tests' leftover cover tasks whenever they are collected
     assert not [r for r in caplog.records if r.name.startswith("mynaphone") and r.levelno >= logging.WARNING]
+
+
+def test_saving_a_song_does_not_hold_up_the_next_one(recorder, clock, monkeypatch):
+    """Writing a song out used to block the event queue for 5 to 9 s, so the next song's first timeline readings
+    were handled late, and on October 2 seven complete songs looked seeked."""
+    import threading
+    rec, loop = recorder
+    release = threading.Event()
+    real_finalize = rec._finalize
+
+    def slow_finalize(*args):
+        release.wait(10)
+        real_finalize(*args)
+
+    monkeypatch.setattr(rec, "_finalize", slow_finalize)
+    play_full_song(rec, loop, clock, "One")
+    loop.run_until_complete(rec._handle(snap("Two"), "media", None))     # the boundary returns at once
+    assert rec.active.meta.title == "Two"
+    assert rec._saves and not [e for e in rec.events if e["kind"] == "kept"]
+    clock.advance(10)
+    loop.run_until_complete(rec._handle(snap("Two", pos_ms=10_000), "timeline", None))
+    assert "start_lag_ms" in rec.active.flags and not rec.active.flags.get("seek")
+    release.set()
+    loop.run_until_complete(rec.settle())
+    assert [e["title"] for e in rec.events if e["kind"] == "kept"] == ["One"]

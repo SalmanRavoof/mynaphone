@@ -69,7 +69,9 @@ CREATE TABLE IF NOT EXISTS aliases (
 class Store:
     def __init__(self, path: Path):
         self.path = Path(path)
-        self.conn = sqlite3.connect(str(self.path), check_same_thread=False)
+        # the recorder's writer, the post-processor and the window each have a connection; one waits for another's
+        # write to finish rather than failing after the default 5 s
+        self.conn = sqlite3.connect(str(self.path), check_same_thread=False, timeout=30.0)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA journal_mode=WAL")
         self.conn.executescript(SCHEMA)
