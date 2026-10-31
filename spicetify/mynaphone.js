@@ -251,13 +251,34 @@
       || md.is_advertisement === "true" || !!md.ad_id);
   }
 
-  function snapshot() {
+  // Spicetify copies the state of a player object it finds in Spotify's code into Spicetify.Player.data. After
+  // some starts it finds one that never changes, and its copy stays empty while songs play (October 3 and 30,
+  // 2026). Spotify's own PlayerAPI always has the song, so the state comes from there, the same object the
+  // playlist commands use, and Spicetify's copy only stands in when that can't be read.
+  function playerState() {
+    try {
+      const api = Spicetify.Platform.PlayerAPI;
+      const st = api.getState ? api.getState() : api._state;
+      if (st && st.item) return st;
+    } catch (e) {}
     const d = Spicetify.Player.data;
-    if (!d || !d.item) return null;
+    return d && d.item ? d : null;
+  }
+  // the position as of the state's timestamp, brought up to now, as Spicetify.Player.getProgress() works it out
+  function progress(d) {
+    const at = Number(d.positionAsOfTimestamp), ts = Number(d.timestamp);
+    if (!Number.isFinite(at)) return Spicetify.Player.getProgress();
+    const p = d.isPaused || !Number.isFinite(ts) ? at : at + (Date.now() - ts);
+    return Math.max(0, d.duration ? Math.min(p, d.duration) : p);
+  }
+
+  function snapshot() {
+    const d = playerState();
+    if (!d) return null;
     const it = d.item;
     const md = it.metadata || {};
     let position = 0;
-    try { position = Spicetify.Player.getProgress(); } catch (e) {}
+    try { position = progress(d); } catch (e) {}
     let volume = null;
     try { volume = Spicetify.Player.getVolume(); } catch (e) {}
     return {
@@ -291,6 +312,8 @@
       context: (d.context && d.context.uri) || "",
       uid: it.uid || "",
       provider: it.provider || (md.provider || ""),
+      // so the app's log can say when Spicetify's copy of the player is empty
+      spicetifyEmpty: !(Spicetify.Player.data && Spicetify.Player.data.item),
       albumInfo: null,
       trackInfo: null,
     };
@@ -306,28 +329,10 @@
   function send(force) {
     try { sendState(force); } catch (e) { report("send", e); }
   }
-  // After a fresh start the extension once saw no track for 20 minutes while songs played. Say so when
-  // Spicetify.Player has nothing but Spotify's own player API has a track.
-  let noTrackSince = 0, stuckReported = false;
-  function playerApiHasTrack() {
-    try {
-      const api = Spicetify.Platform.PlayerAPI;
-      const st = api.getState ? api.getState() : api._state;
-      return !!(st && st.item);
-    } catch (e) { return false; }
-  }
   function sendState(force) {
     if (!ws || ws.readyState !== 1) return;
     const s = snapshot();
-    if (!s) {
-      noTrackSince = noTrackSince || Date.now();
-      if (!stuckReported && Date.now() - noTrackSince > 60000 && playerApiHasTrack()) {
-        stuckReported = true;
-        report("snapshot", "Spicetify.Player has had no track for a minute, but PlayerAPI has one");
-      }
-      return;
-    }
-    noTrackSince = 0;
+    if (!s) return;
     const albumUri = s.album && s.album.uri;
     if (albumUri && albumUri.startsWith("spotify:album:")) {
       s.albumInfo = details(albumUri, albumCache, [albumFromSpclient, albumFromGraphql, albumFromWebApi]);
@@ -519,5 +524,7 @@
   connect();
   Spicetify.Player.addEventListener("songchange", () => send(true));
   Spicetify.Player.addEventListener("onplaypause", () => send(true));
+  // Spicetify's events come from its copy, which can stay empty, so Spotify's own player says when songs change too
+  try { Spicetify.Platform.PlayerAPI._events.addListener("update", () => send(true)); } catch (e) {}
   setInterval(() => send(false), 1000);
 })();

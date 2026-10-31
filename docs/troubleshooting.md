@@ -105,7 +105,8 @@ the Library page.
 |---|---|
 | Spotify updated and undid Spicetify. | Run `spicetify apply`, or `spicetify backup apply` if it complains. |
 | Spicetify is not installed, or the extension is not enabled. | Run `.\.venv\Scripts\python -m mynaphone install-spicetify --apply`. |
-| The bridge connected, but the log says Spicetify.Player has had no track for a minute. | Quit Spotify from its tray icon and start it again. If that doesn't help, run `spicetify apply`. |
+| The log says Spicetify.Player has had no track for a minute. | Your extension is older than the fix for this. Run `.\.venv\Scripts\python -m mynaphone install-spicetify --apply`, which restarts Spotify. |
+| The log says Spicetify's copy of the player is empty. | Nothing to do. The bridge reads Spotify's own player until Spicetify's copy has the song again. |
 | Port 8765 is used by another program. | Change `port` under `[bridge]`, and the port at the top of `spicetify/mynaphone.js` and in `browser-extension/background.js`, then reinstall both. |
 
 Spicetify's own [getting-started guide](https://spicetify.app/docs/getting-started) covers problems

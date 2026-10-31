@@ -227,7 +227,7 @@ class Bridge:
         self._spotify_ws = ws
         self._status(True)
         log.info("spicetify extension connected")
-        first_logged = False
+        first_logged = spicetify_empty = False
         try:
             async for raw in ws:
                 try:
@@ -283,6 +283,11 @@ class Bridge:
                     log.info("first state from Spotify: %s (quality %s, track details %s)",
                              st.name or "nothing playing", "yes" if st.quality else "no",
                              "pending" if msg.get("trackInfo") is None else "yes")
+                # older extensions sent nothing at all while Spicetify's copy was empty
+                if bool(msg.get("spicetifyEmpty")) != spicetify_empty:
+                    spicetify_empty = not spicetify_empty
+                    log.info("Spicetify's copy of the player is empty, so the bridge reads Spotify's own player"
+                             if spicetify_empty else "Spicetify's copy of the player has the song again")
                 self.state = st
                 changed = (st.uri != prev.uri or st.playback_id != prev.playback_id
                            or st.is_paused != prev.is_paused or st.is_buffering != prev.is_buffering

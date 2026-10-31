@@ -75,7 +75,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (198 tests).
+- Test suite (200 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -121,6 +121,11 @@ All notable changes to Mynaphone are listed here. The format follows
 - Mynaphone set aside nearly 500 MB of Windows' memory that it never used. numpy's maths library
   reserves memory for every CPU thread as it loads, and Mynaphone's audio arithmetic never uses
   those threads, so it now gets one.
+- The Spotify bridge could send nothing while songs played. Spicetify copies the player's state
+  from an object it finds in Spotify's code, and after some starts it finds one that never changes,
+  so its copy stays empty. On October 30, 2026 the bridge sent nothing for 40 minutes, and Mynaphone
+  knew only what Windows reports about each song. The extension now reads Spotify's own player, and
+  the log says when Spicetify's copy is empty.
 - Band songs were tagged with their singers as the artist: Metallica's as James Hetfield, Queen's
   as Brian May and Freddie Mercury, and Bowie's "“Heroes”" as David Bowie and Tony Visconti, who
   sang backing vocals. The rule meant for film songs, where MusicBrainz credits the music director
