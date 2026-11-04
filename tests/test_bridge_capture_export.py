@@ -1,6 +1,7 @@
 # Copyright (C) 2026 Salman Ravoof
 # SPDX-License-Identifier: GPL-3.0-or-later
 import asyncio
+import logging
 import os
 import threading
 import time
@@ -104,6 +105,20 @@ def test_foreign_monitor_source_matching_and_report():
     rep = ForeignReport([
         ForeignSound(1.0, "a.exe", -30.0), ForeignSound(2.0, "b.exe", -10.0), ForeignSound(3.0, "a.exe", -50.0)])
     assert rep.apps == ["a.exe", "b.exe"] and rep.max_db == -10.0
+
+
+def test_another_apps_sound_is_logged_once_a_stretch(caplog):
+    """Slay the Spire 2 wrote 1,144 log lines in 3.5 hours on October 31, 2026, one every 5 seconds."""
+    m = ForeignAudioMonitor(["Spotify.exe"])
+    with caplog.at_level(logging.DEBUG, logger="mynaphone.sessions"):
+        for t in range(600):                                      # a game playing for 10 minutes
+            m._heard("SlayTheSpire2.exe", -40.0, 1000.0 + t)
+        m._heard("SlayTheSpire2.exe", -40.0, 1000.0 + 599 + 61)   # back after a quiet minute
+    info = [r.getMessage() for r in caplog.records if r.levelno == logging.INFO]
+    debug = [r for r in caplog.records if r.levelno == logging.DEBUG]
+    assert info == ["other app making sound: SlayTheSpire2.exe (-40 dBFS)"] * 2
+    assert len(debug) == 99                                       # every 6 s or so, with -v
+    assert len(m.events_since(0).events) == 601                   # whole-device takes still see every sound
 
 
 def test_export_plan_and_mirror(tmp_path):

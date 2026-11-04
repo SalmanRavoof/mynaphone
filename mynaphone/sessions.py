@@ -119,8 +119,28 @@ class ForeignAudioMonitor(threading.Thread):
         self._lock = threading.Lock()
         self._events: list[ForeignSound] = []
         self._last_log: dict[str, float] = {}
+        self._last_heard: dict[str, float] = {}
         self.available = False
         self.my_pid = os.getpid()
+
+    QUIET_SECONDS = 60.0        # an app quiet this long is logged again when it next makes a sound
+
+    def _heard(self, name: str, db: float, now: float) -> None:
+        """Note a sound from another app. Only whole-device recording cares, so the log gets one line when an app
+        starts making sound after a quiet minute, and a line every 5 seconds only with -v. Slay the Spire 2 wrote
+        1,144 of those lines in 3.5 hours on October 31, 2026."""
+        with self._lock:
+            self._events.append(ForeignSound(now, name, db))
+            if len(self._events) > 5000:
+                self._events = self._events[-2500:]
+        last = self._last_heard.get(name)
+        self._last_heard[name] = now
+        if last is None or now - last > self.QUIET_SECONDS:
+            self._last_log[name] = now
+            log.info("other app making sound: %s (%.0f dBFS)", name, db)
+        elif now - self._last_log.get(name, 0) > 5.0:
+            self._last_log[name] = now
+            log.debug("other app making sound: %s (%.0f dBFS)", name, db)
 
     def stop(self) -> None:
         self._stop.set()
@@ -177,13 +197,7 @@ class ForeignAudioMonitor(threading.Thread):
                         db = 20.0 * math.log10(peak)
                         # threshold <= -100 means "any sound at all"
                         if self.threshold <= -100 or db >= self.threshold:
-                            with self._lock:
-                                self._events.append(ForeignSound(now, name, db))
-                                if len(self._events) > 5000:
-                                    self._events = self._events[-2500:]
-                            if now - self._last_log.get(name, 0) > 5.0:
-                                self._last_log[name] = now
-                                log.info("other app making sound: %s (%.0f dBFS)", name, db)
+                            self._heard(name, db, now)
                     except Exception:
                         continue
             except Exception as e:

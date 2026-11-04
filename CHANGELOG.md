@@ -75,7 +75,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (200 tests).
+- Test suite (201 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -121,6 +121,9 @@ All notable changes to Mynaphone are listed here. The format follows
 - Mynaphone set aside nearly 500 MB of Windows' memory that it never used. numpy's maths library
   reserves memory for every CPU thread as it loads, and Mynaphone's audio arithmetic never uses
   those threads, so it now gets one.
+- Another app's sound took a line in the log every 5 seconds, a third of the whole log by October 31,
+  2026, and only whole-device recording cares about it. The log now says once when an app starts
+  making sound after a quiet minute, and the rest shows with `-v`.
 - The Spotify bridge could send nothing while songs played. Spicetify copies the player's state
   from an object it finds in Spotify's code, and after some starts it finds one that never changes,
   so its copy stays empty. On October 30, 2026 the bridge sent nothing for 40 minutes, and Mynaphone
