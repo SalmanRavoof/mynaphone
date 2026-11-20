@@ -202,17 +202,56 @@ class Recorder:
         checked = await self.check_playlist(uri)
         if not checked["tracks"]:
             raise BridgeError("Spotify didn't list any songs in it")
-        self.job = PlaylistJob(self, uri, name or checked["name"] or "Playlist", checked["tracks"], keep_file=keep_file)
-        await self.job.start()
-        return self.job.progress()
+        # the job can end while it starts, when Spotify won't play, and then self.job is None again
+        job = self.job = PlaylistJob(self, uri, name or checked["name"] or "Playlist", checked["tracks"],
+                                     keep_file=keep_file)
+        await job.start()
+        return job.progress()
 
-    async def stop_job(self) -> None:
+    async def stop_job(self, why: str = "you stopped it") -> None:
         if self.job is not None:
-            await self.job.finish("you stopped it", stopped=True)
+            await self.job.finish(why, stopped=True)
 
-    def _job_result(self, uri: str, kept: bool, reasons: list[str]) -> None:
+    def _job_result(self, uri: str, kept: bool, reasons: list[str], title: str = "", duration_ms: int = 0) -> None:
         if self.job is not None:
-            asyncio.ensure_future(self.job.on_result(uri, kept, reasons))
+            asyncio.ensure_future(self.job.on_result(uri, kept, reasons, title, duration_ms))
+
+    def _for_job(self, app: str) -> bool:
+        """A playlist is being recorded and this song comes from Spotify, so the job hears about it."""
+        return self.job is not None and (app or "").lower().startswith("spotify")
+
+    async def _have_it_already(self, a: ActiveTake) -> None:
+        """During a playlist job, the library may hold a song from another release, under another Spotify id and a
+        title or length a little different (Holiday, from its COLORS single, November 20, 2026). Spotify gives the
+        song's ISRC a moment after it starts, too late for the check in _start, so the take stops here and the job
+        moves on."""
+        isrc = (a.meta.extra.get("track_info") or {}).get("isrc")
+        if not isrc or not a.meta.source_uri:
+            return
+        a.flags["isrc_checked"] = True
+        twin = self.store.find_isrc(isrc)
+        if twin is None:
+            return
+        if (self.cfg.quality.upgrade_on_higher_tier
+                and tier_rank(a.meta.quality_tier) > tier_rank(twin["quality_tier"])):
+            return
+        self.active = None
+        take = a.capture.end_take(0.0) if a.capture is not None else None
+        if take is not None:
+            take.chunks = []
+        self.skipping_key = a.key
+        if twin["source_uri"] != a.meta.source_uri:
+            self.store.add_alias(a.meta.source_uri, int(twin["id"]))
+        log.info("already archived (%s), found by its ISRC: %s - %s", twin["quality_tier"], a.meta.artist,
+                 a.meta.title)
+        reason = "already_archived_skipped"
+        self._emit("skipped", artist=a.meta.artist, title=a.meta.title, reason=reason)
+        self.store.log_take(started_at=a.meta.started_at, ended_at=a.meta.started_at, artist=a.meta.artist,
+                            title=a.meta.title, album=a.meta.album, source_app=a.meta.app,
+                            source_uri=a.meta.source_uri, expected_ms=a.meta.expected_ms, verdict="skip",
+                            reasons=[reason], quality_tier=a.meta.quality_tier)
+        self._emit("idle")
+        await self.job.on_track(a.meta.source_uri, archived=True, title=a.meta.title, duration_ms=a.meta.expected_ms)
 
     def request_stop(self) -> None:
         """Thread-safe: ask the run loop to shut down."""
@@ -298,6 +337,8 @@ class Recorder:
                 await self._finish("shutdown")
             # a song that ended a moment ago still has its last seconds coming in, so save before the captures stop
             await self.settle()
+            # a playlist being recorded stops too, while the bridge can still put its shuffle back
+            await self.stop_job("the recorder stopped")
             self._writer.shutdown(wait=True)
             await self._cancel_covers()
             for cap in self.captures.values():
@@ -529,6 +570,10 @@ class Recorder:
         if st.name and a.meta.title and st.name.strip().lower() != a.meta.title.strip().lower():
             return  # bridge is reporting a different track than the media session; ignore
         self._enrich_from_bridge(a.meta, st)
+        if self._for_job(a.app) and not a.flags.get("isrc_checked"):
+            await self._have_it_already(a)
+            if self.active is not a:
+                return
         since_start = time.monotonic() - a.t_event
         # Spotify loads the next track during the last seconds of this one and reports buffering while it
         # does. A real stall there still shows up in the verdict as extra wall-clock time.
@@ -626,7 +671,8 @@ class Recorder:
                 self.skipping_key = snap.key
                 log.info("already archived (%s): %s - %s", existing["quality_tier"], meta.artist, meta.title)
                 skipped = False
-                if self.job is not None and await self.job.on_track(meta.source_uri, archived=True):
+                if self._for_job(snap.app) and await self.job.on_track(meta.source_uri, archived=True,
+                                                                       title=meta.title, duration_ms=meta.expected_ms):
                     skipped = True
                 elif self.harvest and session is not None:
                     skipped = await self._harvest_skip(session, meta.artist, meta.title)
@@ -645,16 +691,16 @@ class Recorder:
             self.skipping_key = snap.key
             log.info("too short (%.0fs), not recording: %s - %s", meta.expected_ms / 1000, meta.artist, meta.title)
             self._emit("skipped", artist=meta.artist, title=meta.title, reason="too_short")
-            if self.job is not None:
-                self.job.on_skipped(meta.source_uri, "too_short")
+            if self._for_job(snap.app):
+                await self.job.on_skipped(meta.source_uri, "too_short", meta.title, meta.expected_ms)
             return
         if meta.expected_ms and meta.expected_ms / 1000.0 > self.cfg.rules.max_duration_seconds:
             self.skipping_key = snap.key
             log.info("too long (%.0fs; podcast or mix?), not recording: %s - %s",
                      meta.expected_ms / 1000, meta.artist, meta.title)
             self._emit("skipped", artist=meta.artist, title=meta.title, reason="too_long")
-            if self.job is not None:
-                self.job.on_skipped(meta.source_uri, "too_long")
+            if self._for_job(snap.app):
+                await self.job.on_skipped(meta.source_uri, "too_long", meta.title, meta.expected_ms)
             return
         # If the change was noticed late (position already > 0), reach back into the ring buffer
         # for the audio that played since the real boundary.
@@ -681,8 +727,9 @@ class Recorder:
         cover = asyncio.create_task(self._fetch_cover(session, snap.key, meta))
         self._covers.add(cover)
         cover.add_done_callback(self._covers.discard)
-        if self.job is not None and snap.app.lower().startswith("spotify"):
-            await self.job.on_track(meta.source_uri, archived=False)
+        if self._for_job(snap.app):
+            # the bridge can name the song a second after the media session does, so the job gets its title too
+            await self.job.on_track(meta.source_uri, archived=False, title=meta.title, duration_ms=meta.expected_ms)
 
     def _check_volumes(self, app: str, flags: dict) -> None:
         """A take recorded below full volume is a quiet, degraded file; flag it so the verdict rejects it.
@@ -752,6 +799,11 @@ class Recorder:
         while self._saves:
             await asyncio.gather(*list(self._saves), return_exceptions=True)
 
+    def _job_dropped(self, a: ActiveTake) -> None:
+        """A take that won't be judged: the job mustn't wait for its verdict."""
+        if self._for_job(a.app):
+            self.job.on_dropped(a.meta.source_uri, a.meta.title, a.meta.expected_ms)
+
     def _end_take(self, reason: str) -> tuple[ActiveTake, Take, dict, float] | None:
         """Stop the active take's capture and settle its flags. Quick, so the next take can start at once."""
         a, self.active = self.active, None
@@ -760,6 +812,7 @@ class Recorder:
         tail = END_TAIL_SECONDS if reason == "track_change" else 0.0
         take = a.capture.end_take(tail) if a.capture is not None else None
         if take is None:
+            self._job_dropped(a)
             return None
         a.meta.ended_at = dt.datetime.now(dt.timezone.utc).isoformat()
         flags = dict(a.flags)
@@ -783,6 +836,7 @@ class Recorder:
         if reason == "track_change" and wall_s < BLIP_SECONDS:
             # Spotify names the last song for a moment when you press play on the next one; that isn't a take
             log.info("dropped %.1f s of %s - %s: the player moved on at once", wall_s, a.meta.artist, a.meta.title)
+            self._job_dropped(a)
             return None
         # a stop reported at the song's expected end (YouTube does this between tracks) is a normal finish
         at_end = (bool(a.meta.expected_ms)
@@ -875,14 +929,16 @@ class Recorder:
                 store.add_track(**fields)
             log.info("KEPT %.1fs -> %s", captured_s, path.name)
             if self.job is not None:
-                self.loop.call_soon_threadsafe(self._job_result, meta.source_uri, True, [])
+                self.loop.call_soon_threadsafe(self._job_result, meta.source_uri, True, [], meta.title,
+                                               meta.expected_ms)
             self._emit("kept", artist=meta.artist, title=meta.title, album=meta.album, path=str(path),
                        captured_ms=verdict.captured_ms, expected_ms=meta.expected_ms, tier=meta.quality_tier)
             self.post.kick()
         else:
             log.info("DISCARDED %s - %s: %s", meta.artist, meta.title, ", ".join(verdict.reasons))
             if self.job is not None:
-                self.loop.call_soon_threadsafe(self._job_result, meta.source_uri, False, list(verdict.reasons))
+                self.loop.call_soon_threadsafe(self._job_result, meta.source_uri, False, list(verdict.reasons),
+                                               meta.title, meta.expected_ms)
             self._emit("discarded", artist=meta.artist, title=meta.title, album=meta.album, reasons=verdict.reasons,
                        captured_ms=verdict.captured_ms, expected_ms=meta.expected_ms, tier=meta.quality_tier)
         if self.active is None:

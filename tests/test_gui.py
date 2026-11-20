@@ -885,6 +885,14 @@ def test_a_pasted_link_gets_the_name_spotify_gives_it(window, monkeypatch):
     dlg.deleteLater()
 
 
+def test_the_playlist_button_comes_back_when_the_recorder_stops(window):
+    window._show_job({"name": "Car Songs", "saved": 1, "left": 2, "failed": 0, "current": "Ratata", "done": False})
+    assert window.status.btn_playlist.text() == "Stop the playlist"
+    window.on_finished()
+    assert window.status.btn_playlist.text() == "Record a playlist" and window.job is None
+    assert window.status.job_line.text() == "Car Songs: the recorder stopped. 1 song saved."
+
+
 # -- albums ----------------------------------------------------------------------------------
 
 def _fake_spotify(window, monkeypatch, songs_of):

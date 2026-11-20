@@ -783,3 +783,114 @@ def test_a_video_that_is_loading_never_counts(recorder, clock):
         clock.advance(1.0)
         run(loop, rec._tick())
     assert yt.position_s == 0 and not quiet_events(rec)
+
+
+# -- recording a playlist ------------------------------------------------------------------------
+
+def _job_bridge(rec, loop):
+    """The bridge object, with the job's commands (play, pause, shuffle) answered here."""
+    from mynaphone.bridge import Bridge
+    bridge = Bridge(loop, rec.queue, 0)
+    bridge.sent = []
+
+    async def request(do, timeout=30.0, **params):
+        bridge.sent.append((do, params.get("uri") or params.get("mode")))
+        return {"shuffle_was": 0} if do == "play" else {}
+
+    bridge.request = request
+    rec.bridge = bridge
+    return bridge
+
+
+def _album(rec, tmp_config, have, n=3):
+    """An album of n songs as the bridge lists them, with the ones in `have` in the library."""
+    tracks = [{"index": i, "uri": f"spotify:track:{i}", "uid": f"u{i}", "name": f"Song {i}", "artists": ["Artist"],
+               "duration_ms": 180_000, "playable": True} for i in range(n)]
+    for i in have:
+        f = tmp_config.paths.library_dir / "Artists" / "Artist" / "Album" / f"Song {i}.m4a"
+        f.parent.mkdir(parents=True, exist_ok=True)
+        f.write_bytes(b"m4a")
+        rec.store.add_track(artist="Artist", title=f"Song {i}", duration_ms=180_000, source_uri=f"spotify:track:{i}",
+                            quality_tier="high", state="library", file_path=str(f))
+    return tracks
+
+
+def _plays(bridge):
+    return [uri for do, uri in bridge.sent if do == "play"]
+
+
+def test_a_playlist_waits_for_its_last_songs_verdict(recorder, clock, tmp_config):
+    """Monsoon Season, November 20, 2026: a song the library had started while the last missing one was being
+    saved, and the job played that one again. Here the bridge names nothing, so the job goes by the titles."""
+    from mynaphone.playlist_job import PlaylistJob
+    rec, loop = recorder
+    bridge = _job_bridge(rec, loop)
+    rec.job = PlaylistJob(rec, "spotify:album:a", "Album", _album(rec, tmp_config, have=(0, 2)))
+    run(loop, rec.job.start())
+    run(loop, rec._handle(snap("Song 1"), "media", None))
+    clock.advance(180)
+    run(loop, rec._handle(snap("Song 2"), "media", None))
+    for _ in range(3):
+        run(loop, asyncio.sleep(0))
+    assert _plays(bridge) == ["spotify:track:1"]
+    assert [e["title"] for e in rec.events if e["kind"] == "kept"] == ["Song 1"]
+    assert rec.job is None and ("pause", None) in bridge.sent
+
+
+def test_a_song_the_library_has_from_another_release_isnt_recorded_again(recorder, clock, tmp_config):
+    """Holiday, November 20, 2026: the library had it from its COLORS single, under another Spotify id, a longer title
+    and 4 s less, so nothing matched it until Spotify gave the song's ISRC a moment after it started."""
+    import json
+
+    from mynaphone.playlist_job import PlaylistJob
+    rec, loop = recorder
+    bridge = _job_bridge(rec, loop)
+    f = tmp_config.paths.library_dir / "Holiday.m4a"
+    f.parent.mkdir(parents=True, exist_ok=True)
+    f.write_bytes(b"m4a")
+    colors = rec.store.add_track(artist="Hanumankind", title="Holiday - A COLORS SHOW", duration_ms=178_956,
+                                 source_uri="spotify:track:colors", quality_tier="high", state="library",
+                                 file_path=str(f), identity_json=json.dumps({"isrc": "USUG12501292"}))
+    tracks = [{"index": 0, "uri": "spotify:track:holiday", "name": "Holiday", "artists": ["Hanumankind"],
+               "duration_ms": 183_000, "playable": True},
+              {"index": 1, "uri": "spotify:track:sicko", "name": "Sicko", "artists": ["Hanumankind"],
+               "duration_ms": 246_000, "playable": True}]
+    rec.job = PlaylistJob(rec, "spotify:album:ms", "Monsoon Season", tracks)
+    assert rec.job.todo == [0, 1]
+    run(loop, rec.job.start())
+    run(loop, rec._handle(snap("Holiday", artist="Hanumankind", end_ms=183_000), "media", None))
+    assert rec.active is not None
+    clock.advance(1)
+    bridge.state = SpotifyState(uri="spotify:track:holiday", name="Holiday", duration_ms=183_000,
+                                track_info={"isrc": "USUG12501292", "source": "spclient"}, received_at=clock())
+    run(loop, rec._on_bridge(BridgeEvent(state=bridge.state)))
+    run(loop, asyncio.sleep(0))
+    assert rec.active is None and not [e for e in rec.events if e["kind"] in ("kept", "discarded")]
+    assert _plays(bridge) == ["spotify:track:holiday", "spotify:track:sicko"]
+    assert rec.store.find_archived("", "", 0, "spotify:track:holiday")["id"] == colors      # by its alias now
+    assert json.loads(rec.store.recent_takes(1)[0]["reasons"]) == ["already_archived_skipped"]
+
+
+def test_stopping_the_recorder_ends_the_playlist(recorder, clock, tmp_config, monkeypatch):
+    """The playlist kept going with the recorder gone: its shuffle stayed off and its file wasn't written."""
+    from mynaphone.playlist_job import PlaylistJob
+    rec, loop = recorder
+    bridge = _job_bridge(rec, loop)
+
+    async def nothing():
+        return None
+
+    bridge.start = bridge.stop = nothing
+    rec.smtc = type("Smtc", (), {"start": lambda self: nothing(), "sessions": lambda self: [],
+                                 "stop": lambda self: None})()
+    for part in (rec.foreign, rec.post):
+        monkeypatch.setattr(part, "start", lambda: None)
+        monkeypatch.setattr(part, "stop", lambda: None)
+    rec.job = PlaylistJob(rec, "spotify:album:a", "Album", _album(rec, tmp_config, have=()))
+    rec.job.shuffle_was = 1
+    rec.request_stop()
+    loop.run_until_complete(rec.run())
+    assert rec.job is None and ("restore_shuffle", 1) in bridge.sent and ("pause", None) not in bridge.sent
+    assert (tmp_config.paths.library_dir / "Playlists" / "Album.m3u8").exists()
+    job = [e for e in rec.events if e["kind"] == "job"][-1]
+    assert job["done"] and job["why"] == "the recorder stopped"

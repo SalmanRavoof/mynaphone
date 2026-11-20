@@ -132,13 +132,9 @@ class Store:
                     "SELECT t.* FROM aliases a JOIN tracks t ON t.id = a.track_id WHERE a.uri=?", (uri,)).fetchone()
             if row:
                 return row
-        if isrc:
-            row = self.conn.execute(
-                "SELECT * FROM tracks WHERE json_extract(identity_json, '$.isrc') = ? "
-                "OR json_extract(meta_json, '$.extra.track_info.isrc') = ? ORDER BY id DESC LIMIT 1",
-                (isrc, isrc)).fetchone()
-            if row:
-                return row
+        row = self.find_isrc(isrc)
+        if row:
+            return row
         rows = self.conn.execute(
             "SELECT * FROM tracks WHERE artist_norm=? AND title_norm=?", (norm(artist), norm(title))).fetchall()
         best = None
@@ -147,6 +143,15 @@ class Store:
                 if best is None or tier_rank(r["quality_tier"]) > tier_rank(best["quality_tier"]):
                     best = r
         return best
+
+    def find_isrc(self, isrc: str | None) -> sqlite3.Row | None:
+        """The newest song with this ISRC, from its identity or from Spotify's track details."""
+        if not isrc:
+            return None
+        return self.conn.execute(
+            "SELECT * FROM tracks WHERE json_extract(identity_json, '$.isrc') = ? "
+            "OR json_extract(meta_json, '$.extra.track_info.isrc') = ? ORDER BY id DESC LIMIT 1",
+            (isrc, isrc)).fetchone()
 
     def add_track(self, **fields) -> int:
         fields.setdefault("created_at", dt.datetime.now(dt.timezone.utc).isoformat())

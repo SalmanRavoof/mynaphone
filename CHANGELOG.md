@@ -105,7 +105,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (296 tests).
+- Test suite (310 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -142,6 +142,31 @@ All notable changes to Mynaphone are listed here. The format follows
   Deezer's API.
 
 ### Fixed
+- Recording a playlist played its last missing song again, for one more try, while Mynaphone was
+  still saving its first take, and then paused Spotify a few seconds in. On November 20, 2026 that
+  happened to Sicko at the end of Monsoon Season, and the first take was fine. A song now gets one
+  more try only once its verdict says it needs one, and the playlist ends when the last verdicts
+  are in.
+- Recording a playlist recorded a song again when your library had it from another release. Holiday,
+  on Monsoon Season, was in the library from its COLORS single, under another Spotify id, with a
+  longer title and 4 seconds less, so the playlist counted it as missing and spent 3 minutes on it.
+  Spotify gives a song's ISRC a moment after it starts, and when your library has that ISRC,
+  Mynaphone now drops the take and the playlist moves on. That covers a playlist, whose songs come
+  without ISRCs, and an album whose ISRCs the bridge couldn't give before the run.
+- A playlist song that starts before the Spotify bridge names it is now known by its title and
+  length, so the playlist still jumps past it when you have it. Since the log began on October 3,
+  2026, 22 of 1,009 songs got their Spotify id only after they started.
+- When an album ended on a song it was recording, Spotify's autoplay played on afterwards and
+  Mynaphone recorded those songs too. Spotify now pauses there, or the playlist goes back for a song
+  that needs one more try.
+- A playlist could stop the moment it started, when Spotify named the song it had been paused on. It
+  never finished when it listed a song twice. A song too long to record played to its end before the
+  playlist moved on, and a YouTube song you have, played during a playlist, ended it.
+- When Spotify wouldn't play a playlist, the Status page showed a Python error in place of the
+  reason.
+- Stopping the recorder during a playlist left the button on **Stop the playlist** and the
+  playlist's shuffle off. The playlist now stops with the recorder, gets its shuffle back and writes
+  its file, and the log says what its shuffle was and when it comes back.
 - An album or playlist pasted as a link was named after its Spotify id, so Monsoon Season's file
   was `Playlist 0AVJyPXZ.m3u8`. The Spotify bridge now sends each one's name with its songs, and a
   playlist saved again under a new name leaves no file under the old one.

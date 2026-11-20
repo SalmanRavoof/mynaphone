@@ -53,10 +53,11 @@ have. It needs the [Spotify bridge](install.md) connected.
 4. Leave the PC alone. The **Status** page shows how many songs are saved and how many are left.
 
 When a song you already have comes up, Mynaphone jumps to the next one you're missing, so it plays as
-little as it can of what you have. A song that doesn't record all the way through gets one more try at
-the end, and if it fails again it's on the list of songs to play again. At the end Spotify pauses and
-the playlist's own shuffle setting comes back. Pick something else in Spotify, or press **Stop the
-playlist**, and it stops.
+little as it can of what you have. That includes a song you have from another release, such as its
+single, which Mynaphone knows by its ISRC. A song that doesn't record all the way through gets one
+more try at the end, and if it fails again it's on the list of songs to play again. At the end Spotify
+pauses, even when its autoplay has started another song, and the playlist's own shuffle setting comes
+back. Pick something else in Spotify, press **Stop the playlist**, or stop the recorder, and it stops.
 
 **Save the playlist file** writes the playlist to your library without recording anything. The
 [playlist files](how-it-works.md#playlist-files) section explains where they go and how they stay

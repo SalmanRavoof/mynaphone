@@ -97,6 +97,10 @@ def _have(store, cfg, tracks, *indexes):
                         state="library", file_path=str(f))
 
 
+def _plays(rec):
+    return [uri for do, uri in rec.bridge.sent if do == "play"]
+
+
 def test_the_job_records_only_whats_missing_and_retries_failures_once(tmp_config):
     store = Store(tmp_config.paths.db_path)
     rec = FakeRecorder(tmp_config, store)
@@ -116,9 +120,9 @@ def test_the_job_records_only_whats_missing_and_retries_failures_once(tmp_config
         await job.on_result("spotify:track:3", kept=False, reasons=["buffering"])
         await job.on_track("spotify:track:4", archived=False)
         await job.on_result("spotify:track:4", kept=True, reasons=[])
-        await job.on_track("spotify:track:0", archived=True)   # the playlist came round: song 3 gets one more go
+        # Spotify stopped after the playlist's last song, so song 3 gets its one more go
         await asyncio.sleep(0)
-        assert rec.bridge.sent[-1] == ("play", "spotify:track:3") and job.tries == {3: 1}
+        assert _plays(rec).count("spotify:track:3") == 2 and job.tries == {3: 1}
         await job.on_track("spotify:track:3", archived=False)
         await job.on_result("spotify:track:3", kept=True, reasons=[])
         assert job.done and rec.job is None
@@ -130,16 +134,136 @@ def test_the_job_records_only_whats_missing_and_retries_failures_once(tmp_config
     assert "../Artists/A/Album/00 Song 0.m4a" in m3u and "# not in your library yet: A - Song 1" in m3u
 
 
-def test_picking_something_else_in_spotify_stops_the_job(tmp_config):
+def test_the_last_song_isnt_played_again_while_its_take_is_saved(tmp_config):
+    """Monsoon Season, November 20, 2026: song 12, which the library had, started while song 11's take was being
+    saved, and the job played song 11 again for one more try. The first take was fine."""
+    store = Store(tmp_config.paths.db_path)
+    rec = FakeRecorder(tmp_config, store)
+    tracks = _tracks(4)
+    _have(store, tmp_config, tracks, 0, 2, 3)
+
+    async def scenario():
+        job = rec.job = PlaylistJob(rec, "spotify:album:a", "Album", tracks)
+        await job.start()
+        await job.on_track("spotify:track:1", archived=False)
+        assert await job.on_track("spotify:track:2", archived=True) is True     # before song 1 is judged
+        await asyncio.sleep(0)
+        assert _plays(rec) == ["spotify:track:1"] and not job.done
+        await job.on_result("spotify:track:1", kept=True, reasons=[])
+        assert job.done and ("pause", None) in rec.bridge.sent
+        assert rec.events[-1][1]["why"] == "done" and rec.events[-1][1]["saved"] == 1
+
+    asyncio.run(scenario())
+
+
+def test_the_last_song_gets_its_one_more_go_once_its_verdict_is_in(tmp_config):
+    store = Store(tmp_config.paths.db_path)
+    rec = FakeRecorder(tmp_config, store)
+    tracks = _tracks(3)
+    _have(store, tmp_config, tracks, 0, 2)
+
+    async def scenario():
+        job = rec.job = PlaylistJob(rec, "spotify:album:a", "Album", tracks)
+        await job.start()
+        await job.on_track("spotify:track:1", archived=False)
+        await job.on_track("spotify:track:2", archived=True)
+        await asyncio.sleep(0)
+        assert _plays(rec) == ["spotify:track:1"]                    # it waits for song 1's verdict
+        await job.on_result("spotify:track:1", kept=False, reasons=["buffering"])
+        await asyncio.sleep(0)
+        assert _plays(rec) == ["spotify:track:1", "spotify:track:1"]   # which says it needs one more go
+
+    asyncio.run(scenario())
+
+
+def test_autoplay_after_the_last_song_is_the_end(tmp_config, clock):
+    store = Store(tmp_config.paths.db_path)
+    rec = FakeRecorder(tmp_config, store)
+    tracks = _tracks(2)
+    _have(store, tmp_config, tracks, 0)
+
+    async def scenario():
+        job = rec.job = PlaylistJob(rec, "spotify:album:a", "Album", tracks)
+        await job.start()
+        await job.on_track("spotify:track:1", archived=False)
+        clock.advance(200)
+        await job.on_track("spotify:track:radio", archived=False)     # Spotify's autoplay, after the album's end
+        assert ("pause", None) in rec.bridge.sent and not job.done
+        await job.on_result("spotify:track:1", kept=True, reasons=[])
+        assert job.done and rec.events[-1][1]["why"] == "done" and rec.events[-1][1]["saved"] == 1
+
+    asyncio.run(scenario())
+
+
+def test_a_song_you_queue_after_the_last_one_plays_on(tmp_config, clock):
+    from mynaphone.bridge import SpotifyState
+    store = Store(tmp_config.paths.db_path)
+    rec = FakeRecorder(tmp_config, store)
+    tracks = _tracks(2)
+    _have(store, tmp_config, tracks, 0)
+
+    async def scenario():
+        job = rec.job = PlaylistJob(rec, "spotify:album:a", "Album", tracks)
+        await job.start()
+        await job.on_track("spotify:track:1", archived=False)
+        clock.advance(200)
+        rec.bridge.state = SpotifyState(uri="spotify:track:queued", provider="queue")
+        await job.on_track("spotify:track:queued", archived=False)
+        assert job.done and rec.events[-1][1]["why"] == "playback left the playlist"
+        assert ("pause", None) not in rec.bridge.sent
+
+    asyncio.run(scenario())
+
+
+def test_picking_something_else_in_spotify_stops_the_job(tmp_config, clock):
     store = Store(tmp_config.paths.db_path)
     rec = FakeRecorder(tmp_config, store)
 
     async def scenario():
         job = rec.job = PlaylistJob(rec, "spotify:playlist:p", "Car", _tracks(3))
         await job.start()
+        clock.advance(30)
         await job.on_track("spotify:track:elsewhere", archived=False)
         assert job.done and rec.events[-1][1]["stopped"] and rec.events[-1][1]["why"] == "playback left the playlist"
         assert ("pause", None) not in rec.bridge.sent                 # you're listening to something else now
+
+    asyncio.run(scenario())
+
+
+def test_the_song_spotify_was_paused_on_doesnt_end_the_job(tmp_config):
+    """After a play command Spotify names the song it was paused on for a moment."""
+    store = Store(tmp_config.paths.db_path)
+    rec = FakeRecorder(tmp_config, store)
+
+    async def scenario():
+        job = rec.job = PlaylistJob(rec, "spotify:album:a", "Album", _tracks(2))
+        await job.start()
+        await job.on_track("spotify:track:before", archived=True)
+        assert not job.done
+        assert await job.on_track("spotify:track:0", archived=False) is False and 0 in job.recording
+
+    asyncio.run(scenario())
+
+
+def test_a_song_named_before_its_id_arrives_is_still_recognised(tmp_config):
+    """The bridge can name a song a second after the media session does, so a take can start with no Spotify id."""
+    store = Store(tmp_config.paths.db_path)
+    rec = FakeRecorder(tmp_config, store)
+    tracks = _tracks(3)
+    _have(store, tmp_config, tracks, 1)
+
+    async def scenario():
+        job = rec.job = PlaylistJob(rec, "spotify:album:a", "Album", tracks)
+        await job.start()
+        assert await job.on_track("", archived=False, title="Song 0", duration_ms=200_400) is False
+        assert job.recording == {0} and rec.events[-1][1]["current"] == "Song 0"
+        await job.on_result("", kept=True, reasons=[], title="Song 0", duration_ms=200_400)
+        assert job.saved == [0]
+        assert await job.on_track("", archived=True, title="song 1", duration_ms=199_000) is True   # one you have
+        await asyncio.sleep(0)
+        assert _plays(rec)[-1] == "spotify:track:2"
+        assert await job.on_track("", archived=False, title="Something Else", duration_ms=1000) is False
+        assert not job.done                                          # no id and not one of its titles
 
     asyncio.run(scenario())
 
@@ -151,8 +275,89 @@ def test_a_song_the_recorder_wont_take_is_left_out(tmp_config):
     async def scenario():
         job = rec.job = PlaylistJob(rec, "spotify:album:a", "Album", _tracks(2))
         await job.start()
-        job.on_skipped("spotify:track:0", "too_long")
+        await job.on_skipped("spotify:track:0", "too_long")
         assert job.todo == [1] and job.given_up == {0: "too_long"}
+        await asyncio.sleep(0)
+        assert _plays(rec)[-1] == "spotify:track:1"                  # it doesn't play the long one out
+
+    asyncio.run(scenario())
+
+
+def test_a_song_the_library_gets_meanwhile_leaves_the_list(tmp_config):
+    """A song still in the inbox, or recorded some other way while the job ran, counts as had."""
+    store = Store(tmp_config.paths.db_path)
+    rec = FakeRecorder(tmp_config, store)
+
+    async def scenario():
+        job = rec.job = PlaylistJob(rec, "spotify:album:a", "Album", _tracks(2))
+        await job.start()
+        await job.on_track("spotify:track:0", archived=True)
+        await asyncio.sleep(0)
+        assert _plays(rec)[-1] == "spotify:track:1" and job.have == 1
+        await job.on_track("spotify:track:1", archived=False)
+        await job.on_result("spotify:track:1", kept=True, reasons=[])
+        assert job.done
+
+    asyncio.run(scenario())
+
+
+def test_a_song_listed_twice_is_recorded_once(tmp_config):
+    store = Store(tmp_config.paths.db_path)
+    rec = FakeRecorder(tmp_config, store)
+    tracks = _tracks(3)
+    tracks[2]["uri"] = tracks[0]["uri"]
+
+    async def scenario():
+        job = rec.job = PlaylistJob(rec, "spotify:playlist:p", "Car", tracks)
+        await job.start()
+        await job.on_track("spotify:track:0", archived=False)
+        await job.on_result("spotify:track:0", kept=True, reasons=[])
+        await job.on_track("spotify:track:1", archived=False)
+        await job.on_result("spotify:track:1", kept=True, reasons=[])
+        assert job.done and job.saved == [0, 1]
+
+    asyncio.run(scenario())
+
+
+def test_a_take_dropped_at_once_gets_another_go(tmp_config):
+    store = Store(tmp_config.paths.db_path)
+    rec = FakeRecorder(tmp_config, store)
+
+    async def scenario():
+        job = rec.job = PlaylistJob(rec, "spotify:album:a", "Album", _tracks(2))
+        await job.start()
+        await job.on_track("spotify:track:0", archived=False)
+        job.on_dropped("spotify:track:0")                            # it played under 2 seconds, so no verdict
+        await job.on_track("spotify:track:1", archived=False)
+        await job.on_result("spotify:track:1", kept=True, reasons=[])
+        await asyncio.sleep(0)
+        assert _plays(rec)[-1] == "spotify:track:0" and not job.done
+
+    asyncio.run(scenario())
+
+
+def test_starting_says_why_spotify_wouldnt_play(tmp_config):
+    """It used to answer the window with "'NoneType' object has no attribute 'progress'"."""
+    from mynaphone.daemon import Recorder
+
+    class Bridge:
+        async def request(self, do, timeout=30.0, **params):
+            if do == "tracks":
+                return {"tracks": _tracks(2), "name": "Monsoon Season"}
+            if do == "play":
+                raise BridgeError("Spotify is playing on another device")
+            return {}
+
+    async def scenario():
+        rec = Recorder(tmp_config, asyncio.get_running_loop())
+        rec.bridge = Bridge()
+        try:
+            got = await rec.start_job("spotify:album:a", "")
+        finally:
+            rec._writer.shutdown(wait=True)
+        assert got["done"] and got["name"] == "Monsoon Season"
+        assert rec.job is None
+        assert rec.store.conn.execute("SELECT name FROM playlists").fetchone()[0] == "Monsoon Season"
 
     asyncio.run(scenario())
 
@@ -182,7 +387,6 @@ def test_playlist_files_follow_the_songs(tmp_config):
     store.conn.commit()
     assert playlists.rewrite_all(store, tmp_config.paths.library_dir) == 1
     assert "../Artists/A/Other/Song 1.m4a" in path.read_text(encoding="utf-8")
-
 
 def test_a_renamed_playlist_leaves_no_old_file(tmp_config):
     store = Store(tmp_config.paths.db_path)

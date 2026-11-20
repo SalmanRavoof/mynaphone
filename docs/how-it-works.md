@@ -232,6 +232,10 @@ artist, title and length. A song the library doesn't have yet stays in the file 
 playlist's song list is kept in the index, and the files are written again whenever a song is filed
 or moved, so a line never points at an old path.
 
+While a playlist records, a song you have from another release is matched too. Spotify gives the
+song's ISRC a moment after it starts, and when a song in your library has that ISRC, Mynaphone
+remembers this playlist's id for it, so the playlist file lists it from then on.
+
 A car's player may want something else. Mazda Connect, as its owners describe it in a
 [Mazda3Revolution how-to](https://www.mazda3revolution.com/threads/how-to-your-music-library-on-a-usb-drive.199522/),
 reads playlist paths from the stick's root, with a leading backslash and no drive letter, which these

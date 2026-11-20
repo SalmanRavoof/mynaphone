@@ -1478,7 +1478,6 @@ class MainWindow(QMainWindow):
             self.act_pause.setChecked(paused)
         self._refresh_state_labels()
 
-    @Slot(dict)
     # ------------------------------------------------------------------ playlists
 
     def ask_recorder(self, make, token: int) -> bool:
@@ -1520,6 +1519,7 @@ class MainWindow(QMainWindow):
         st.job_line.setText(text + ".")
         self._load_recent()
 
+    @Slot(dict)
     def on_event(self, ev: dict) -> None:
         kind = ev.get("kind")
         st = self.status
@@ -1719,6 +1719,10 @@ class MainWindow(QMainWindow):
         self.extension_seen = None
         self.quiet.clear()
         self._show_quiet()
+        if self.job is not None:
+            # the recorder normally reports the playlist's end as it stops; after a crash it can't, and the button
+            # would stay on Stop the playlist with nothing left to stop
+            self._show_job({**self.job, "done": True, "why": "the recorder stopped"})
         self._refresh_state_labels()
         self._load_recent()
         if self._quitting:
