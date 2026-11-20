@@ -205,6 +205,16 @@ album artist you type in the Library editor goes on the film's other songs too. 
 filed. If it names fewer of those people, the whole film keeps the ones they share. Each change to a song
 filed earlier is written to `album-artists.json` next to the index.
 
+The songs in a film's folder share one album name too. Each of Leo's 4 singles kept its own name, such as
+"Ratata (From “Leo”)", so a player that groups by album name showed Leo 5 times. Now each song gets the
+album's own name, spelled the way most of its songs spell it, and a film with only singles gets the
+film's name from their "(From ...)". Mynaphone numbers the singles after the album's songs, in the order
+they came out, so Leo's are tracks 8 to 11, and their file names stay as they are. A song keeps its own
+album and track number in the index too, since they decide its folder, its file name, and its lyrics
+lookup. An album or a
+track number you type in the Library editor stays, and a typed album goes on the film's other songs too.
+Mynaphone writes each change to a song filed earlier to `album-names.json` next to the index.
+
 Tags follow [MusicBrainz Picard's tag mapping](https://picard-docs.musicbrainz.org/en/latest/appendices/tag_mapping.html),
 so other players and taggers understand them. [mutagen](https://github.com/quodlibet/mutagen) writes them.
 

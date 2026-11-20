@@ -227,6 +227,28 @@ def test_library_page_lists_songs_and_wraps_missing(window, qapp):
     assert lib.table.rowHeight(0) > 30  # the missing list wrapped onto more than one line
 
 
+def test_the_library_editor_shows_a_films_album_name(window, qapp):
+    """A single in its film's folder carries the film's album name and its place after the album. The editor shows
+    them the way the file does, and saving without a change types nothing in."""
+    import json
+    st = Store(window.cfg.paths.db_path)
+    song = window.cfg.paths.library_dir / "Soundtracks" / "Leo (2023)" / "Ratata.m4a"
+    song.parent.mkdir(parents=True)
+    song.write_bytes(b"")
+    ident = {"title": "Ratata", "album": "Ratata (From “Leo”)", "track_number": 1, "track_total": 1,
+             "film_album": "Leo", "film_track": [9, 9, 1, 1]}
+    tid = st.add_track(artist="Anirudh Ravichander", title="Ratata", album="Leo", track_number=9, duration_ms=1,
+                       file_path=str(song), state="library", missing_json="[]", identity_json=json.dumps(ident))
+    lib = window.library
+    lib.reload()
+    lib._load(tid)
+    assert lib.fields["album"].text() == "Leo"
+    assert (lib.fields["track_number"].text(), lib.fields["track_total"].text()) == ("9", "9")
+    assert lib._manual_from_form() == {}
+    lib.fields["track_number"].setText("4")
+    assert lib._manual_from_form() == {"track_number": "4"}
+
+
 def test_activity_rows_keep_one_line_with_hover_text(window):
     t = window.activity.table
     window.activity.add_row("09:00", "X " * 80, "discard", ("short", "the whole reason"))

@@ -95,10 +95,25 @@ def identity_from_row(row) -> Identity:
             setattr(ident, k, v)
     ident.title = ident.title or (row["title"] or "")
     ident.artist = ident.artist or (row["artist"] or "")
-    ident.album = ident.album or (row["album"] or "")
     ident.album_artist = ident.album_artist or (row["album_artist"] or "")
-    ident.track_number = ident.track_number or int(row["track_number"] or 0)
+    # the row's album and track number are its film's when it's in a film's folder, so they fill in only for an
+    # identity that has none of its own
+    if "album" not in d:
+        ident.album = row["album"] or ""
+    if "track_number" not in d:
+        ident.track_number = int(row["track_number"] or 0)
     return ident
+
+
+def tagged_value(ident: dict, key: str):
+    """The value a song's tags carry for an identity field: its film's album name, and a single's place after its
+    film's album, where it has them. `ident` is a row's identity_json, read."""
+    keys = ("track_number", "track_total", "disc_number", "disc_total")
+    if key == "album":
+        return ident.get("film_album") or ident.get("album", "")
+    if key in keys and len(ident.get("film_track") or []) == 4:
+        return ident["film_track"][keys.index(key)]
+    return ident.get(key, "")
 
 
 def read_file_extras(path: Path) -> tuple[tuple[bytes, str] | None, str]:
@@ -169,6 +184,7 @@ def refresh_track(cfg: Config, store: Store, row, lookup: bool = True, manual: d
         ident.album = ""
         ident.release_type = ident.release_type or "single"
     ident.album_credit = ident.album_credit or ident.album_artist      # its own release's, before an edit or its film's
+    ident.release_album = ident.release_album or ident.album          # likewise its release's album, before an edit
     apply_manual(ident, manual_all)
 
     cover, lyrics_text = read_file_extras(path)
@@ -215,6 +231,13 @@ def refresh_track(cfg: Config, store: Store, row, lookup: bool = True, manual: d
         rows = films.soundtrack_rows(store) if rows is None else rows
         films.take_album_artist(ident, films.album_artist_for(cfg.paths.library_dir, rows, folder,
                                                               films.credit_from(ident), int(row["id"])))
+    film = None
+    if folder is not None:
+        # and one album name, with a single numbered after the album's songs; outside a film's folder it has its own
+        rows = films.soundtrack_rows(store) if rows is None else rows
+        film = films.film_tags_for(cfg.paths.library_dir, rows, folder,
+                                   films.song_from(ident, manual_all, int(row["id"])))
+    films.take_film_tags(ident, film)
     # when and how the take was recorded, and its fingerprint, aren't in the index, so the file keeps its own
     kept = read_kept_tags(path)
     ident.acoustid_fingerprint = kept.get("ACOUSTID_FINGERPRINT") or ident.acoustid_fingerprint
@@ -222,7 +245,7 @@ def refresh_track(cfg: Config, store: Store, row, lookup: bool = True, manual: d
                "quality_tier": row["quality_tier"] or "",
                "captured_at": kept.get("MYNAPHONE_CAPTURED_AT") or row["created_at"] or "",
                "capture_format": kept.get("MYNAPHONE_CAPTURE_FORMAT", ""), "kind": kind}
-    tag(path, ident, cover, lyrics_text, capture)
+    tag(path, films.tagged_as(ident), cover, lyrics_text, capture)
     write_lyrics_sidecar(path, lyrics_text)
     if lyr_state != "synced":
         try:
@@ -243,11 +266,12 @@ def refresh_track(cfg: Config, store: Store, row, lookup: bool = True, manual: d
         _prune_empty(path.parent, cfg.paths.library_dir)
 
     missing = missing_fields(ident, cover is not None, lyr_state)
+    shown = films.tagged_as(ident)          # the index lists a song the way its tags name it
     store.conn.execute(
         "UPDATE tracks SET file_path=?, title=?, artist=?, album=?, album_artist=?, track_number=?, lyrics_state=?, "
         "identity_json=?, manual_json=?, missing_json=?, last_lookup=?, lookup_tries=COALESCE(lookup_tries,0)+? "
         "WHERE id=?",
-        (str(new_path), ident.title, ident.artist, ident.album, ident.album_artist, ident.track_number, lyr_state,
+        (str(new_path), ident.title, ident.artist, shown.album, ident.album_artist, shown.track_number, lyr_state,
          json.dumps(ident.to_json(), ensure_ascii=False), json.dumps(manual_all, ensure_ascii=False),
          json.dumps(missing), dt.datetime.now(dt.timezone.utc).isoformat() if lookup else row["last_lookup"],
          1 if lookup else 0, int(row["id"])))

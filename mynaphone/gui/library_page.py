@@ -453,7 +453,7 @@ class LibraryPage(QWidget):
         self.missing_label.setText(("Missing: " + ", ".join(metadata.LABELS.get(x, x) for x in miss)) if miss
                                    else "All metadata present.")
         for key, e in self.fields.items():
-            v = manual.get(key, ident.get(key, ""))
+            v = manual.get(key, metadata.tagged_value(ident, key))     # what the file says, such as its film's album
             if isinstance(v, list):
                 v = "; ".join(v)
             e.setText("" if v in (None, 0, "0") else str(v))
@@ -497,7 +497,7 @@ class LibraryPage(QWidget):
         out = {}
         for key, e in self.fields.items():
             text = e.text().strip()
-            auto = ident.get(key, "")
+            auto = metadata.tagged_value(ident, key)
             if isinstance(auto, list):
                 auto = "; ".join(auto)
             auto = "" if auto in (None, 0) else str(auto)

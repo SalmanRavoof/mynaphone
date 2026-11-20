@@ -36,6 +36,10 @@ class Identity:
     album: str = ""
     album_artist: str = ""
     album_credit: str = ""              # the album artist its own release credits, before its film's replaces it
+    release_album: str = ""             # the album its own release names, before an edit in the Library editor
+    film_album: str = ""                # the album name its film's songs share, which its tags carry for its own
+    # a single's place after its film's album, [track, tracks, disc, discs], which its tags carry in place of its own
+    film_track: list[int] = field(default_factory=list)
     year: int = 0
     date: str = ""
     track_number: int = 0
@@ -261,6 +265,7 @@ def choose(result: dict, hint_album: str = "", hint_track: int = 0, hint_artist:
                     ident.mb_artist_ids = [a.get("id", "") for a in rec.get("artists", []) or [] if a.get("id")]
                     ident.mb_recording_id = rec.get("id", "")
                     ident.album = rel.get("title", "") or rg.get("title", "")
+                    ident.release_album = ident.album
                     ident.album_artist = _join_artists(rg.get("artists")) or ident.artist
                     ident.album_credit = ident.album_artist
                     d = rel.get("date") or {}
@@ -326,6 +331,7 @@ def from_tags(meta: dict) -> Identity:
     ident.artists = ([a.strip() for a in re.split(r",|;|&| feat\.? | ft\.? ", ident.artist) if a.strip()]
                      or [ident.artist])
     ident.album = "" if looks_like_count(meta.get("album", "")) else meta.get("album", "")
+    ident.release_album = ident.album
     ident.album_artist = meta.get("album_artist", "") or ident.artist
     ident.album_credit = ident.album_artist
     ident.track_number = int(meta.get("track_number") or 0)
@@ -656,6 +662,7 @@ def from_youtube(meta: dict) -> Identity | None:
                 ident.composers = [ident.album_artist]
         ident.album_artist = ident.album_artist or ident.artist
         ident.album_credit = ident.album_artist
+        ident.release_album = ident.album
         if not ident.year and str(m.get("year") or info.get("year") or "").isdigit():
             ident.year = int(m.get("year") or info.get("year"))
         if ident.year and not ident.date:
@@ -722,6 +729,7 @@ def enrich_from_musicbrainz(ident: Identity, contact: str = "", shown_artist: st
         rel = mb.release(ident.mb_release_id)
         if rel:
             ident.album = rel["title"] or ident.album
+            ident.release_album = rel["title"] or ident.release_album
             ident.album_artist = rel["artist"] or ident.album_artist
             ident.album_credit = rel["artist"] or ident.album_credit
             ident.album_artist_sort = rel["artist_sort"]

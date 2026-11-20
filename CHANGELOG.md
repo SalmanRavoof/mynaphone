@@ -105,7 +105,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (288 tests).
+- Test suite (294 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -170,6 +170,15 @@ All notable changes to Mynaphone are listed here. The format follows
   Library page goes on the film's other songs too.
   New songs take their film's album artist when they're filed. Songs filed earlier are re-tagged,
   and each change is written to `album-artists.json` next to the index.
+- A film's singles, and a second spelling of its album's name, showed up as albums of their own in a
+  player that groups by album name. On November 20, 2026, 11 films did, among them Leo, whose 4
+  singles each kept a name such as "Ratata (From “Leo”)". A film's songs now share the album's own
+  name, spelled the way most of its songs spell it, and a film with only singles takes the film's
+  name. Mynaphone numbers the singles after the album's songs, in the order they came out, so Leo's
+  are tracks 8 to 11, and their file names stay as they are. An album or track number you type on
+  the Library page stays, and a typed album goes on the film's other songs too. New songs take their
+  film's album name when they're filed. Mynaphone re-tags the songs filed earlier and writes each
+  change to `album-names.json` next to the index.
 - Record a playlist no longer goes back at the end to a song the recorder already has from another
   release. It also knows such a song when several artists sing it, since Spotify's media session
   gives the recorder only the first artist's name, so it jumps past the song before it plays.

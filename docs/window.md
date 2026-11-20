@@ -120,8 +120,9 @@ of missing details, and every field.
 | **Instrumental** | Decide automatically, Yes, no vocals, or No, it has vocals. An instrumental needs no lyrics or lyricist |
 | **Lyrics** | Plain lyrics, or synced lyrics with timestamps such as `[01:23.45]` at the start of each line |
 
-A field you edit gets a blue border, and later lookups never overwrite it. An album artist you type
-for a film song goes on every song in the film's folder.
+A field you edit gets a blue border, and later lookups never overwrite it. An album artist or an
+album you type for a film song goes on every song in the film's folder. For a film's single, the
+Album and Track number fields show what its file says, such as Leo and 8 for Villain Yaaru.
 
 | Button | What it does |
 |---|---|

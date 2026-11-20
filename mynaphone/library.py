@@ -513,18 +513,18 @@ def file_take(src_flac: Path, library_dir: Path, ident: Identity, fmt: str, bitr
               keep_flac_for_lossless: bool = True, into: Path | None = None) -> Path:
     """Encode, tag and place the file. Returns the final path. `into` is the folder that already holds a soundtrack
     song's film, under the library."""
+    from .films import in_folder, tagged_as
     tier = capture.get("quality_tier", "")
     use_fmt = "flac" if (keep_flac_for_lossless and tier_rank(tier) >= tier_rank("hifi")) else fmt
     ext = EXT.get(use_fmt, ".m4a")
     pl = place(ident)
     if into is not None and pl.kind == "soundtrack":
-        from .films import in_folder
         pl = in_folder(pl, ident, into)
     capture = dict(capture, kind=pl.kind)
     dst = library_dir / pl.rel_dir / f"{pl.filename}{ext}"
     if dst.exists():
         dst.unlink()
     encode(src_flac, dst, use_fmt, bitrate)
-    tag(dst, ident, cover, lyrics_text, capture)
+    tag(dst, tagged_as(ident), cover, lyrics_text, capture)      # its own album placed it; its tags carry its film's
     write_lyrics_sidecar(dst, lyrics_text)
     return dst

@@ -15,10 +15,17 @@ credits, so a player that groups by album artist showed the film twice: on Novem
 Aashiq Banaya Aapne with "Himesh Reshammiya & Sameer" and "Himesh Reshammiya", and Zeher with its composers and
 "Various Artists". The album artist they share is the names every song's credit has, which is usually the music
 director (shared_album_artist).
+
+They share one album name as well. A single kept its own, such as "Ratata (From “Leo”)", and MusicBrainz and Spotify
+spell an album differently, so a player that groups by album name showed 11 films more than once on November 20. The
+name they share is the album's own, spelled the way most of its songs spell it (shared_album), and a single joining
+it is numbered after the album's songs (film_tags). Each song keeps its own album and track number in the index,
+since they file it and look it up, and its tags carry its film's (tagged_as).
 """
 from __future__ import annotations
 
 import collections
+import dataclasses
 import json
 import logging
 import os
@@ -183,7 +190,7 @@ def in_folder(placement, ident, into: Path):
     "01" it had as the only song of its own release."""
     if into == placement.rel_dir:
         return placement
-    film = film_of(ident.album, ident.title)
+    film = film_of(ident.release_album or ident.album, ident.title)
     name = re.sub(r"^\d+(-\d+)?\s+", "", placement.filename) if film and film.single else placement.filename
     return type(placement)(placement.kind, into, name)
 
@@ -446,3 +453,183 @@ def take_album_artist(ident, film: AlbumArtist | None) -> None:
         ident.album_artist = film.name
     ident.album_artist_sort = film.sort
     ident.mb_album_artist_ids = list(film.ids)
+
+
+# -- one album name per film -----------------------------------------------------------------
+
+@dataclass
+class Song:
+    """One song's say in the album name its film's songs share, and in where the film's singles go."""
+    id: int
+    album: str                  # its album: its own release's, or one typed in the Library editor
+    release: str                # its own release's album, which says whether it's a single
+    title: str = ""
+    date: str = ""              # its release's date, which puts the film's singles in order
+    track: tuple[int, int, int, int] = (0, 0, 0, 0)     # its own track, tracks, disc and discs
+    typed: bool = False         # its album was typed in the Library editor
+    typed_track: bool = False   # so was its track number
+
+    @property
+    def film(self) -> Film | None:
+        return film_of(self.release or self.album, self.title)
+
+    @property
+    def single(self) -> bool:
+        film = self.film
+        return bool(film and film.single)
+
+
+@dataclass(frozen=True)
+class FilmTags:
+    """What a song in a film's folder carries in its tags: the album name the film's songs share and, for a single
+    numbered after the film's album, its place there."""
+    album: str
+    track: tuple[int, ...] = ()         # track, tracks, disc and discs; empty to keep its own
+
+
+def _json(text) -> dict:
+    try:
+        value = json.loads(text or "{}")
+    except ValueError:
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def _int(value) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def song_of(row) -> Song:
+    """A library row's say in its film's album name. `row` is one of soundtrack_rows()."""
+    ident, typed = _json(row["identity_json"]), _json(row["manual_json"])
+    album = ident.get("album") if "album" in ident else row["album"]
+    return Song(int(row["id"]), album or "", ident.get("release_album") or album or "", ident.get("title") or "",
+                ident.get("date") or str(ident.get("year") or ""),
+                tuple(_int(ident.get(k)) for k in ("track_number", "track_total", "disc_number", "disc_total")),
+                bool(str(typed.get("album") or "").strip()), bool(typed.get("track_number")))
+
+
+def song_from(ident, typed: dict | None = None, track_id: int = -1) -> Song:
+    """A song's say in its film's album name, read from its identity while it's filed or refreshed. `typed` is what
+    was typed for it in the Library editor."""
+    typed = typed or {}
+    return Song(track_id, ident.album, ident.release_album or ident.album, ident.title,
+                ident.date or str(ident.year or ""),
+                (ident.track_number, ident.track_total, ident.disc_number, ident.disc_total),
+                bool(str(typed.get("album") or "").strip()), bool(typed.get("track_number")))
+
+
+def _most(values: list[str]) -> str:
+    """The value most of them have, the shorter on a tie."""
+    counts = collections.Counter(values)
+    return min(counts, key=lambda v: (-counts[v], len(v), v)) if counts else ""
+
+
+def shared_album(songs: list[Song]) -> str:
+    """The album name a film's songs share: the album's own name, spelled the way most of its songs spell it, so Leo's
+    singles take "Leo" from its 7 album songs, and Aavesham's 2 songs filed as "Aavesham (Original Motion Picture
+    Soundtrack)" take the "Aavesham" of its other 5. A tie goes to the shorter spelling. A film with only singles takes
+    the film's name from their "(From X)", and songs that already share a name keep it. An album typed in the Library
+    editor wins. Empty when no song has an album."""
+    typed = [s.album for s in songs if s.typed and s.album.strip()]
+    if typed:
+        return _most(typed)
+    names = [s.album for s in songs if s.album.strip()]
+    if len(set(names)) <= 1:
+        return names[0] if names else ""
+    albums = [s.album for s in songs if s.album.strip() and not s.single]
+    if albums:
+        return _most(albums)
+    return _most([s.film.name for s in songs if s.film]) or _most(names)
+
+
+def film_tags(songs: list[Song]) -> dict[int, FilmTags]:
+    """What each song of a film's folder carries in its tags, by track id: the album name the film's songs share, and
+    for a single joining another release's songs, a track number after the album's own songs, in the order the singles
+    came out. Leo's 4 singles, each track 1 of 1, become tracks 8 to 11 of 11 after the album's 7. A film with only
+    singles numbers them from 1, and they move after the album once it arrives. A typed album or track number stays.
+    Empty for a folder of one song."""
+    if len(songs) < 2:
+        return {}
+    name = shared_album(songs)
+    if not name:
+        return {}
+    numbered: dict[int, tuple[int, ...]] = {}
+    if len({s.release or s.album for s in songs}) > 1:
+        singles = sorted((s for s in songs if s.single and not s.typed_track),
+                         key=lambda s: (s.date or "9999", s.title.casefold(), s.id))
+        albums = [s for s in songs if not s.single]
+        disc = max((s.track[2] for s in albums), default=0)
+        discs = max((s.track[3] for s in albums), default=0)
+        last = [s for s in albums if s.track[2] == disc]
+        count = max([n for s in last for n in s.track[:2]], default=0)     # its count, or its last song's number
+        for i, s in enumerate(singles, start=1):
+            numbered[s.id] = (count + i, count + len(singles), *((disc, discs) if discs > 1 else s.track[2:]))
+    return {s.id: FilmTags(s.album if s.typed else name, numbered.get(s.id, ())) for s in songs}
+
+
+def film_tags_for(library_dir: Path, rows, folder: Path, own: Song) -> FilmTags | None:
+    """What a song carries in its tags in `folder` (Soundtracks/<folder>), worked out with the folder's other songs.
+    `own.id` is the song's own row, or -1 for a song being filed. None when no other song is in the folder."""
+    peers = [song_of(r) for r in rows if film_folder(library_dir, r["file_path"]) == folder and int(r["id"]) != own.id]
+    return film_tags(peers + [own]).get(own.id) if peers else None
+
+
+def take_film_tags(ident, tags: FilmTags | None) -> None:
+    """The song's tags carry its film's album name, and a single's its place after the film's album. Its own album and
+    track number stay in its identity, since they file it and look it up. Outside a film's folder it carries its own."""
+    own = (ident.track_number, ident.track_total, ident.disc_number, ident.disc_total)
+    ident.film_album = tags.album if tags is not None and tags.album != ident.album else ""
+    ident.film_track = list(tags.track) if tags is not None and tags.track and tuple(tags.track) != own else []
+
+
+def tagged_as(ident):
+    """A copy of the song's identity with what its tags carry: its film's album name and, for a single, its place
+    after the film's album."""
+    shown = dataclasses.replace(ident, album=ident.film_album or ident.album)
+    if len(ident.film_track) == 4:
+        shown.track_number, shown.track_total, shown.disc_number, shown.disc_total = ident.film_track
+    return shown
+
+
+def tagged_album(row) -> tuple:
+    """The album, track, tracks, disc and discs a library row's tags carry now."""
+    ident = _json(row["identity_json"])
+    album = ident.get("film_album") or (ident.get("album") if "album" in ident else row["album"]) or ""
+    track = ident.get("film_track") or []
+    if len(track) != 4:
+        track = [_int(ident.get(k)) for k in ("track_number", "track_total", "disc_number", "disc_total")]
+    return (album, *(_int(n) for n in track))
+
+
+@dataclass
+class Retitle:
+    track_id: int
+    path: Path
+    old: tuple                  # the album, track, tracks, disc and discs its tags carry
+    new: tuple                  # and the ones its film's folder gives it
+
+
+def album_plan(library_dir: Path, rows) -> list[Retitle]:
+    """Songs whose tags carry another album name or track number than their film's folder gives them (film_tags), and
+    songs left alone in a folder that still carry their film's. A typed album or track number never changes. `rows`
+    are soundtrack_rows()."""
+    folders: dict[Path, list] = {}
+    for r in rows:
+        rel = film_folder(library_dir, r["file_path"])
+        if rel is not None:
+            folders.setdefault(rel, []).append(r)
+    out = []
+    for rs in folders.values():
+        songs = [song_of(r) for r in rs]
+        tags = film_tags(songs)
+        for r, s in zip(rs, songs):
+            t = tags.get(s.id)
+            want = (t.album if t else s.album, *(t.track if t and t.track else s.track))
+            have = tagged_album(r)
+            if want != have:
+                out.append(Retitle(s.id, Path(r["file_path"]), have, want))
+    return out

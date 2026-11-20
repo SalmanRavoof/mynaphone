@@ -50,7 +50,7 @@ class PostProcessor(threading.Thread):
         self._next_jobs = 0.0           # when the lyrics backfill and the retry of incomplete songs run next
         self._interrupted = False       # a job stopped early so a new song could be filed
         self._playlists_stale = False   # a song was filed or moved, so the playlist files need writing again
-        self._album_artists_stale = False   # a song joined its film's folder and may have narrowed its album artist
+        self._film_tags_stale = False   # a song joined its film's folder, which may change its album artist or name
 
     def stop(self) -> None:
         self._stop.set()
@@ -81,16 +81,16 @@ class PostProcessor(threading.Thread):
                 if not self.paused:
                     self._scan()
                     self._work()
-                    if self._album_artists_stale:
-                        self._album_artists_stale = False
-                        self.share_album_artists()
+                    if self._film_tags_stale:
+                        self._film_tags_stale = False
+                        self.share_film_tags()
                     if self._playlists_stale:
                         self._playlists_stale = False
                         playlists.rewrite_all(self.store, self.cfg.paths.library_dir)
                     if time.monotonic() >= self._next_jobs:
                         self._interrupted = False
                         self.fold_film_folders()
-                        self.share_album_artists()
+                        self.share_film_tags()
                         self.mark_instrumentals()
                         self.backfill_lyrics()
                         if not self._interrupted:
@@ -226,24 +226,29 @@ class PostProcessor(threading.Thread):
 
         cover = resolve_cover(path, ident, meta.get("cover_url", ""))
         into = None
+        ident.release_album = ident.release_album or ident.album
         if classify(ident) == "soundtrack":
             rows = films.soundtrack_rows(self.store)
             into = films.folder_for(self.cfg.paths.library_dir, rows, ident.album, ident.title, ident.year)
             if into is not None:
-                # it takes the album artist its film's songs share, which its own credit can narrow for all of them
+                # it takes the album artist its film's songs share, which its own credit can narrow for all of them,
+                # and their album name, which a single joins after the album's songs
                 films.take_album_artist(ident, films.album_artist_for(self.cfg.paths.library_dir, rows, into,
                                                                       films.credit_from(ident)))
-                self._album_artists_stale = True
+                films.take_film_tags(ident, films.film_tags_for(self.cfg.paths.library_dir, rows, into,
+                                                                films.song_from(ident)))
+                self._film_tags_stale = True
         dst = file_take(path, self.cfg.paths.library_dir, ident, self.cfg.library.format,
                         self.cfg.library.aac_bitrate, text, capture, cover, into=into)
         missing = missing_fields(ident, cover is not None, lyr_state)
         now = dt.datetime.now(dt.timezone.utc).isoformat()
         if row:
+            shown = films.tagged_as(ident)
             self.store.conn.execute(
                 "UPDATE tracks SET file_path=?, state='library', title=?, artist=?, album=?, album_artist=?, "
                 "track_number=?, lyrics_state=?, lyrics_tries=?, lyrics_tried_at=?, identity_json=?, missing_json=?, "
                 "last_lookup=?, lookup_tries=1 WHERE id=?",
-                (str(dst), ident.title, ident.artist, ident.album, ident.album_artist, ident.track_number,
+                (str(dst), ident.title, ident.artist, shown.album, ident.album_artist, shown.track_number,
                  lyr_state, 1 if tried else 0, now if tried else None, json.dumps(ident.to_json(), ensure_ascii=False),
                  json.dumps(missing), now, int(row["id"])))
             self.store.conn.commit()
@@ -340,35 +345,54 @@ class PostProcessor(threading.Thread):
             playlists.rewrite_all(self.store, self.cfg.paths.library_dir)
         return done
 
-    def share_album_artists(self) -> int:
+    def share_film_tags(self) -> int:
         """Give each film's songs one album artist (films.shared_album_artist), with the sort name and MusicBrainz ids
-        that go with it. Songs matched to 2 MusicBrainz releases of a film carried both credits, so a player that
-        groups by album artist showed Aashiq Banaya Aapne as 2 albums. A new song takes its film's album artist when
-        it's filed; this re-tags the songs filed before, and a film's other songs when a new one narrows it. An album
-        artist typed in the Library editor never changes. Every change goes into album-artists.json next to the
-        index, so it can be undone by hand."""
-        changes = films.album_artist_plan(self.cfg.paths.library_dir, films.soundtrack_rows(self.store))
-        done = []
-        for ch in changes:
+        that go with it, and one album name (films.shared_album), numbering the film's singles after its album's songs.
+        Songs matched to 2 MusicBrainz releases of a film carried both credits, and a film's singles kept their own
+        album names, so a player that groups by album artist showed Aashiq Banaya Aapne twice, and one that groups by
+        album name showed Leo 5 times. A new song takes its film's values when it's filed; this re-tags the songs
+        filed before, and a film's other songs when a new one changes them. An album artist, album or track number
+        typed in the Library editor never changes. Every change goes into album-artists.json or album-names.json next
+        to the index, so it can be undone by hand. Returns how many songs it re-tagged."""
+        rows = films.soundtrack_rows(self.store)
+        ids = sorted({ch.track_id for ch in films.album_artist_plan(self.cfg.paths.library_dir, rows)}
+                     | {ch.track_id for ch in films.album_plan(self.cfg.paths.library_dir, rows)})
+        artists, albums = [], []
+        for track_id in ids:
             if self._stop.is_set():
                 break
-            row = self.store.track(ch.track_id)
+            row = self.store.track(track_id)
             if row is None:
                 continue
+            name = Path(row["file_path"] or "").name
+            artist, album = films.tagged(row), films.tagged_album(row)
             try:
                 res = refresh_track(self.cfg, self.store, row, lookup=False, move=False)
             except Exception as e:
-                log.warning("could not give %s its film's album artist: %s", ch.path.name, e)
+                log.warning("could not give %s its film's album artist and album: %s", name, e)
                 continue
-            now = films.tagged(self.store.track(ch.track_id))
-            if now != ch.old:
-                done.append({"file": res["path"], "from": ch.old.name, "to": now.name,
-                             "sort": [ch.old.sort, now.sort], "ids": [list(ch.old.ids), list(now.ids)]})
-                log.info("album artist of %s: %s -> %s", ch.path.name, ch.old.name, now.name)
-        if done:
-            films.append_record(self.cfg.paths.db_path.parent / "album-artists.json", done)
-            log.info("gave %d songs the album artist their film's songs share, with its sort name and ids", len(done))
-        return len(done)
+            now = self.store.track(track_id)
+            new_artist, new_album = films.tagged(now), films.tagged_album(now)
+            if new_artist != artist:
+                artists.append({"file": res["path"], "from": artist.name, "to": new_artist.name,
+                                "sort": [artist.sort, new_artist.sort],
+                                "ids": [list(artist.ids), list(new_artist.ids)]})
+                log.info("album artist of %s: %s -> %s", name, artist.name, new_artist.name)
+            if new_album != album:
+                albums.append({"file": res["path"], "from": album[0], "to": new_album[0],
+                               "track": [list(album[1:]), list(new_album[1:])]})
+                log.info("album of %s: %s, track %d of %d -> %s, track %d of %d", name, album[0], album[1], album[2],
+                         new_album[0], new_album[1], new_album[2])
+        folder = self.cfg.paths.db_path.parent
+        if artists:
+            films.append_record(folder / "album-artists.json", artists)
+            log.info("gave %d songs the album artist their film's songs share, with its sort name and ids",
+                     len(artists))
+        if albums:
+            films.append_record(folder / "album-names.json", albums)
+            log.info("gave %d songs the album name their film's songs share, with a single's track number after the "
+                     "album's", len(albums))
+        return len({a["file"] for a in artists} | {a["file"] for a in albums})
 
     # -- artist credits --------------------------------------------------------------------
 
@@ -497,7 +521,7 @@ class PostProcessor(threading.Thread):
             credited = bool(ident.lyricists or ident.vocals)
             wordless = (r["lyrics_state"] == "instrumental" or (ident.language or "").lower() == "zxx"
                         or (r["lyrics_state"] in (None, "none") and not credited))
-            album = ident.mb_release_id or f"{(r['album'] or '').casefold()}|{(r['album_artist'] or '').casefold()}"
+            album = ident.mb_release_id or f"{ident.album.casefold()}|{(r['album_artist'] or '').casefold()}"
             albums[album].append(wordless)
             if r["lyrics_state"] in (None, "none"):
                 songs.append((r, ident, credited, album))
@@ -543,11 +567,12 @@ class PostProcessor(threading.Thread):
                 continue
             now = dt.datetime.now(dt.timezone.utc).isoformat()
             full = self.store.track(int(r["id"]))
-            if identify.has_no_words(identity_from_row(full), self.store.played_title(full)):
+            ident = identity_from_row(full)     # its own album, which a single's lyrics are filed under
+            if identify.has_no_words(ident, self.store.played_title(full)):
                 got = lyr.Lyrics(instrumental=True)     # it says so itself; no lookup needed
             else:
                 try:
-                    got = lyr.fetch(r["title"], r["artist"], r["album"] or "", (r["duration_ms"] or 0) / 1000.0)
+                    got = lyr.fetch(r["title"], r["artist"], ident.album, (r["duration_ms"] or 0) / 1000.0)
                 except lyr.Unavailable as e:
                     self._lyrics_tried(int(r["id"]), now)
                     if e.retry_after <= lyr.SHORT_WAIT_SECONDS:

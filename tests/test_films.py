@@ -1,7 +1,7 @@
 # Copyright (C) 2026 Salman Ravoof
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""One folder and one album artist per film: film keys, the folds planned and done on a temporary library, the album
-artist a film's songs share, filing and editing."""
+"""One folder, one album artist and one album name per film: film keys, the folds planned and done on a temporary
+library, the album artist and album name a film's songs share, its singles' track numbers, filing and editing."""
 import json
 from pathlib import Path
 
@@ -195,7 +195,7 @@ def _films(cfg):
 def test_each_films_songs_get_one_album_artist(tmp_config):
     store, ids = _films(tmp_config)
     pp = PostProcessor(tmp_config, store)
-    assert pp.share_album_artists() == 7
+    assert pp.share_film_tags() == 7
     now = {title: store.track(i)["album_artist"] for title, i in ids.items()}
     assert {now[t] for t in ("Aashiq Banaya Aapne", "Mar Jaawan Mit Jaawan", "Dilnashin Dilnashin", "Aap Ki Kashish",
                              "Aap Ki Kashish (Remix)")} == {"Himesh Reshammiya"}
@@ -210,7 +210,7 @@ def test_each_films_songs_get_one_album_artist(tmp_config):
     record = json.loads((tmp_config.paths.db_path.parent / "album-artists.json").read_text(encoding="utf-8"))
     assert len(record) == 7 and {"file": song["file_path"], "from": "Himesh Reshammiya & Sameer",
                                  "to": "Himesh Reshammiya", "sort": ["", ""], "ids": [[], []]} in record
-    assert pp.share_album_artists() == 0                                                 # nothing left to change
+    assert pp.share_film_tags() == 0                                                     # nothing left to change
 
 
 def test_the_sort_name_and_ids_go_with_the_films_album_artist(tmp_config):
@@ -227,7 +227,7 @@ def test_the_sort_name_and_ids_go_with_the_films_album_artist(tmp_config):
         ident.update(album_artist_sort=sort, mb_album_artist_ids=mbids)
         store.conn.execute("UPDATE tracks SET identity_json=? WHERE id=?", (json.dumps(ident), ids[title]))
     store.conn.commit()
-    PostProcessor(tmp_config, store).share_album_artists()
+    PostProcessor(tmp_config, store).share_film_tags()
     song = store.track(ids["Aashiq Banaya Aapne"])
     ident = json.loads(song["identity_json"])
     assert ident["album_artist_sort"] == "Reshammiya, Himesh" and ident["mb_album_artist_ids"] == ["himesh"]
@@ -252,7 +252,7 @@ def test_a_new_song_takes_its_films_album_artist(tmp_config, monkeypatch):
     store, ids = _films(tmp_config)
     tmp_config.library.format = "flac"                      # the take is copied as it is, so no encoder is needed
     pp = PostProcessor(tmp_config, store)
-    assert pp.share_album_artists() == 7
+    assert pp.share_film_tags() == 7
     monkeypatch.setattr(P, "resolve_cover", lambda *a: None)
     monkeypatch.setattr(P.lyr, "fetch", lambda *a, **k: None)
     leo = tmp_config.paths.library_dir / "Soundtracks" / "Leo (2023)"
@@ -270,8 +270,8 @@ def test_a_new_song_takes_its_films_album_artist(tmp_config, monkeypatch):
     row = store.conn.execute("SELECT album_artist, identity_json FROM tracks WHERE file_path=?", (str(dst),)).fetchone()
     assert row["album_artist"] == "Anirudh Ravichander"
     assert json.loads(row["identity_json"])["album_credit"] == "Anirudh Ravichander & Nikhita Gandhi"
-    pp._album_artists_stale = False
-    assert pp.share_album_artists() == 0                    # Leo's other songs already had it
+    pp._film_tags_stale = False
+    assert pp.share_film_tags() == 0                        # Leo's other songs already had it
 
     # a Zeher song from a release that credits only Anu Malik leaves the film with the one name they all have
     take, ident = _inbox(tmp_config, store, "Zeher Theme", "Zeher", "Anu Malik")
@@ -279,8 +279,8 @@ def test_a_new_song_takes_its_films_album_artist(tmp_config, monkeypatch):
     pp.identify_take = lambda path, meta: (ident, "")
     dst = pp.process(take)
     assert dst.parent.name == "Zeher (2005)" and FLAC(dst)["ALBUMARTIST"] == ["Anu Malik"]
-    assert pp._album_artists_stale                           # so the film's other songs follow right after filing
-    assert pp.share_album_artists() == 2
+    assert pp._film_tags_stale                               # so the film's other songs follow right after filing
+    assert pp.share_film_tags() == 2
     assert FLAC(store.track(ids["Agar Tum Mil Jao"])["file_path"])["ALBUMARTIST"] == ["Anu Malik"]
 
 
@@ -293,7 +293,7 @@ def _release(artist):
 def test_a_look_up_keeps_its_films_album_artist(tmp_config, monkeypatch):
     """The weekly retry looks songs up again, and MusicBrainz gives each its own release's credit again."""
     store, ids = _films(tmp_config)
-    PostProcessor(tmp_config, store).share_album_artists()
+    PostProcessor(tmp_config, store).share_film_tags()
     monkeypatch.setattr(mb, "release", lambda mbid: _release("Himesh Reshammiya & Sameer"))
     monkeypatch.setattr(md.genres, "resolve", lambda *a, **k: None)
     monkeypatch.setattr(md.lyr, "fetch", lambda *a, **k: None)
@@ -309,4 +309,211 @@ def test_a_look_up_keeps_its_films_album_artist(tmp_config, monkeypatch):
     res = md.refresh_track(tmp_config, store, store.track(ids["Aap Ki Kashish"]), lookup=False,
                            manual={"album_artist": "Himesh Reshammiya (Music Director)"}, move=False)
     assert res["ident"].album_artist == "Himesh Reshammiya (Music Director)"
-    assert PostProcessor(tmp_config, store).share_album_artists() == 4
+    assert PostProcessor(tmp_config, store).share_film_tags() == 4
+
+
+# -- one album name per film -----------------------------------------------------------------
+
+LEO_SINGLES = ("I’m Scared (From “Leo”)", "Ratata (From “Leo”)", "Villain Yaaru (From “Leo”)",
+               "Ordinary Person (From “Leo”)")
+JAILER_2 = "Jailer 2 (Original Motion Picture Soundtrack)"
+OM = "OM Chapter 1: Udhiram - The Blood Wood"
+
+
+def _songs(*albums):
+    return [films.Song(i, album, album) for i, album in enumerate(albums)]
+
+
+def test_the_album_name_a_films_songs_share():
+    """The 11 films a player that groups by album name showed more than once on November 20."""
+    def share(*albums):
+        return films.shared_album(_songs(*albums))
+
+    assert share(*["Leo"] * 7, *LEO_SINGLES) == "Leo"
+    assert share(*["Aavesham"] * 5, *["Aavesham (Original Motion Picture Soundtrack)"] * 2) == "Aavesham"
+    assert share("Saripodhaa Sanivaaram", "Saripodhaa Sanivaaram (Original Motion Picture Soundtrack)") == \
+        "Saripodhaa Sanivaaram"                                                     # a tie goes to the shorter
+    assert share(*["Super"] * 2, *["Super (Original Motion Picture Soundtrack)"] * 2) == "Super"
+    odyssey = "The Odyssey: Original Motion Picture Soundtrack"
+    assert share(*[odyssey] * 22, "The Odyssey (Original Motion Picture Soundtrack)") == odyssey
+    assert share(*["Kabhi Khushi Kabhie Gham"] * 10, "Kabhi Khushi Kabhie Gham...") == "Kabhi Khushi Kabhie Gham"
+    assert share(*["Muqaddar Ka Sikandar: Original Soundtrack"] * 2, "Muqaddar Ka Sikandar") == \
+        "Muqaddar Ka Sikandar: Original Soundtrack"
+    assert share(*[JAILER_2] * 11, 'Hukum Reloaded - Tamil (From "Jailer 2")',
+                 'Tiger Muthuvel Pandian (From "Jailer 2")') == JAILER_2
+    assert share("Jailer", "Jailer", 'Jailer Swag-up (From "Jailer")') == "Jailer"
+    assert share("Devara Part 1", 'All Hail The Tiger (From "Devara Part 1")') == "Devara Part 1"
+    # a film with only singles takes the film's name from them
+    assert share(f'The Wild Theme (From "{OM}")', f'Alaakaa Loova (From "{OM}") [Tamil]',
+                 f'Alaakaa Loova Unplugged (From "{OM}") [Tamil]') == OM
+
+    assert share('Hukum (From "Jailer")', 'Hukum (From "Jailer")') == 'Hukum (From "Jailer")'     # shared already
+    typed = _songs("Leo", "Leo", "Ratata (From “Leo”)")
+    typed[2].album, typed[2].typed = "Leo (2023 film)", True
+    assert films.shared_album(typed) == "Leo (2023 film)"                           # a typed album wins
+    assert share() == "" and share("", "") == ""
+
+
+def _single(i, album, date, track=(1, 1, 1, 1), **kw):
+    return films.Song(i, album, album, album.split(" (")[0], date, track, **kw)
+
+
+def test_a_films_singles_are_numbered_after_its_album():
+    """Each single's tags said track 1 of 1, so a player that showed Leo as one album listed 5 songs as track 1."""
+    leo = [films.Song(i, "Leo", "Leo", f"Song {i}", "2023-10-19", (i, 7, 1, 1)) for i in range(1, 8)]
+    leo += [_single(10 + i, album, date) for i, (album, date) in
+            enumerate(zip(LEO_SINGLES, ("2023-10-27", "2023-11-09", "2023-10-20", "2023-10-24")))]
+    tags = films.film_tags(leo)
+    assert {t.album for t in tags.values()} == {"Leo"}
+    assert all(tags[i].track == () for i in range(1, 8))                            # the album's songs keep theirs
+    assert [tags[10 + i].track[:2] for i in range(4)] == [(10, 11), (11, 11), (8, 11), (9, 11)]
+
+    # Jailer 2's album has 12 songs and the library 11 of them, so its singles come after the 12th
+    songs = [films.Song(i, JAILER_2, JAILER_2, track=(i, 12, 1, 1)) for i in range(1, 12)]
+    songs += [_single(20, 'Hukum Reloaded - Tamil (From "Jailer 2")', "2025-01-14"),
+              _single(21, 'Tiger Muthuvel Pandian (From "Jailer 2")', "2026-10-20")]
+    tags = films.film_tags(songs)
+    assert (tags[20].track, tags[21].track) == ((13, 14, 1, 1), (14, 14, 1, 1))
+
+    # a film with only singles numbers them from 1, in the order they came out
+    tags = films.film_tags([_single(1, f'Alaakaa Loova (From "{OM}") [Tamil]', "2026-07-28"),
+                            _single(2, f'The Wild Theme (From "{OM}")', "2026-06-19")])
+    assert (tags[1].album, tags[1].track, tags[2].track) == (OM, (2, 2, 1, 1), (1, 2, 1, 1))
+
+    # a typed track number stays, and an album on 2 discs gets its singles after the second
+    songs = [films.Song(1, "Ghajini", "Ghajini", track=(5, 5, 1, 2)),
+             films.Song(2, "Ghajini", "Ghajini", track=(3, 4, 2, 2)),
+             _single(3, 'Behka (From "Ghajini")', "2008-11-01"),
+             _single(4, 'Guzarish (From "Ghajini")', "2008-11-02", track=(12, 1, 1, 1), typed_track=True)]
+    tags = films.film_tags(songs)
+    assert (tags[3].track, tags[4].track) == ((5, 5, 2, 2), ())
+
+    # songs from one release keep their numbers, as do the album's songs from a second edition
+    one = films.film_tags([_single(1, 'Hukum (From "Jailer")', "2023", (1, 2, 1, 1)),
+                           _single(2, 'Hukum (From "Jailer")', "2023", (2, 2, 1, 1))])
+    assert [t.track for t in one.values()] == [(), ()]
+    tags = films.film_tags([films.Song(1, "Muqaddar Ka Sikandar: Original Soundtrack", "", track=(2, 8, 1, 1)),
+                            films.Song(2, "Muqaddar Ka Sikandar", "", track=(12, 13, 1, 1))])
+    assert (tags[1].track, tags[2].track) == ((), ())
+    assert films.film_tags(_songs("Leo")) == {}                                     # a song alone keeps its own
+
+
+def _soundtracks(cfg):
+    """Real FLAC files of 3 films whose songs carry more than one album name, as on November 20."""
+    store = Store(cfg.paths.db_path)
+    ids = {}
+
+    def song(folder, name, album, title, track, date, source="acoustid", **extra):
+        f = _flac(cfg.paths.library_dir / "Soundtracks" / folder / f"{name}.flac")
+        ident = {"title": title, "album": album, "artist": "Singer", "album_artist": "Anirudh Ravichander",
+                 "source": source, "secondary_types": ["Soundtrack"], "year": int(date[:4]), "date": date,
+                 "track_number": track[0], "track_total": track[1], "disc_number": 1, "disc_total": 1, **extra}
+        ids[title] = store.add_track(artist="Singer", title=title, album=album, album_artist="Anirudh Ravichander",
+                                     track_number=track[0], duration_ms=100, file_path=str(f), state="library",
+                                     meta_json={}, identity_json=json.dumps(ident))
+
+    for n, title in enumerate(("Bloody Sweet", "Naa Ready", "Badass"), start=1):
+        song("Leo (2023)", f"0{n} {title}", "Leo", title, (n, 7), "2023-10-19")
+    song("Leo (2023)", "Ratata", "Ratata (From “Leo”)", "Ratata", (1, 1), "2023-11-09",
+         mb_release_id="ratata-single", mb_recording_id="ratata")
+    song("Leo (2023)", "Villain Yaaru", "Villain Yaaru (From “Leo”)", "Villain Yaaru", (1, 1), "2023-10-20")
+    for n, title in ((4, "Galatta"), (5, "The Last Dance"), (6, "Odimaga")):
+        song("Aavesham (2024)", f"0{n} {title}", "Aavesham", title, (n, 9), "2024-04-11")
+    song("Aavesham (2024)", "01 Mathapithakkale", "Aavesham (Original Motion Picture Soundtrack)", "Mathapithakkale",
+         (1, 9), "2024-04-11", source="spotify")
+    folder = "OM Chapter 1 Udhiram - The Blood Wood (2026)"
+    song(folder, "Alaakaa Loova (From OM Chapter 1 Udhiram - The Blood Wood) [Tamil]",
+         f'Alaakaa Loova (From "{OM}") [Tamil]', f'Alaakaa Loova (From "{OM}") [Tamil]', (1, 1), "2026-07-28",
+         source="spotify")
+    song(folder, "The Wild Theme (From OM Chapter 1 Udhiram - The Blood Wood)", f'The Wild Theme (From "{OM}")',
+         f'The Wild Theme (From "{OM}")', (1, 1), "2026-06-19", source="spotify")
+    return store, ids
+
+
+def test_each_films_songs_get_one_album_name(tmp_config):
+    store, ids = _soundtracks(tmp_config)
+    pp = PostProcessor(tmp_config, store)
+    assert pp.share_film_tags() == 5              # Leo's 2 singles, 1 Aavesham song, OM Chapter 1's 2 singles
+    ratata = store.track(ids["Ratata"])
+    assert (ratata["album"], ratata["track_number"]) == ("Leo", 9)
+    assert Path(ratata["file_path"]).name == "Ratata.flac"                          # its file keeps its name
+    tags = FLAC(ratata["file_path"])
+    assert (tags["ALBUM"], tags["TRACKNUMBER"], tags["TRACKTOTAL"]) == (["Leo"], ["9"], ["9"])
+    ident = json.loads(ratata["identity_json"])
+    assert (ident["album"], ident["track_number"], ident["track_total"]) == ("Ratata (From “Leo”)", 1, 1)
+    assert (ident["film_album"], ident["film_track"]) == ("Leo", [9, 9, 1, 1])
+    own = md.identity_from_row(ratata)                                              # its own album and number stay
+    assert (own.album, own.track_number, own.film_album) == ("Ratata (From “Leo”)", 1, "Leo")
+    assert FLAC(store.track(ids["Villain Yaaru"])["file_path"])["TRACKNUMBER"] == ["8"]
+    assert FLAC(store.track(ids["Mathapithakkale"])["file_path"])["ALBUM"] == ["Aavesham"]
+    assert FLAC(store.track(ids["Mathapithakkale"])["file_path"])["TRACKNUMBER"] == ["1"]
+    wild = FLAC(store.track(ids[f'The Wild Theme (From "{OM}")'])["file_path"])
+    assert (wild["ALBUM"], wild["TRACKNUMBER"], wild["TRACKTOTAL"]) == ([OM], ["1"], ["2"])
+    record = json.loads((tmp_config.paths.db_path.parent / "album-names.json").read_text(encoding="utf-8"))
+    assert len(record) == 5 and {"file": ratata["file_path"], "from": "Ratata (From “Leo”)", "to": "Leo",
+                                 "track": [[1, 1, 1, 1], [9, 9, 1, 1]]} in record
+    assert pp.share_film_tags() == 0                                                # nothing left to change
+
+    # a song left alone in its folder gets its own album and number back
+    store.conn.execute("DELETE FROM tracks WHERE id=?", (ids[f'The Wild Theme (From "{OM}")'],))
+    store.conn.commit()
+    assert pp.share_film_tags() == 1
+    alaakaa = store.track(ids[f'Alaakaa Loova (From "{OM}") [Tamil]'])
+    assert (alaakaa["album"], alaakaa["track_number"]) == (f'Alaakaa Loova (From "{OM}") [Tamil]', 1)
+    assert FLAC(alaakaa["file_path"])["TRACKNUMBER"] == ["1"]
+
+
+def test_a_look_up_keeps_a_singles_film_album(tmp_config, monkeypatch):
+    """MusicBrainz gives a single its own release's album and number again, and Library edits move songs."""
+    store, ids = _soundtracks(tmp_config)
+    PostProcessor(tmp_config, store).share_film_tags()
+    release = dict(_release(""), title="Ratata (From “Leo”)", date="2023-11-09", rg_type="single",
+                   media=[{"position": 1, "track_count": 1, "format": "Digital Media",
+                           "tracks": [{"position": 1, "recording_id": "ratata", "title": "Ratata", "artist": ""}]}])
+    monkeypatch.setattr(mb, "release", lambda mbid: release)
+    monkeypatch.setattr(mb, "recording", lambda mbid: None)
+    monkeypatch.setattr(md.genres, "resolve", lambda *a, **k: None)
+    monkeypatch.setattr(md.lyr, "fetch", lambda *a, **k: None)
+    monkeypatch.setattr(md, "resolve_cover", lambda *a, **k: None)
+    row = store.track(ids["Ratata"])
+    res = md.refresh_track(tmp_config, store, row, lookup=True, move=True)
+    assert res["path"] == row["file_path"]                      # still Ratata.flac, with no 01 or 09 in front
+    assert (store.track(row["id"])["album"], store.track(row["id"])["track_number"]) == ("Leo", 9)
+    assert FLAC(row["file_path"])["ALBUM"] == ["Leo"] and FLAC(row["file_path"])["TRACKNUMBER"] == ["9"]
+    assert (res["ident"].album, res["ident"].release_album) == ("Ratata (From “Leo”)",) * 2
+
+    # a typed track number stays, and the film's other single closes up after the album
+    md.refresh_track(tmp_config, store, store.track(ids["Villain Yaaru"]), lookup=False,
+                     manual={"track_number": 12}, move=False)
+    assert FLAC(store.track(ids["Villain Yaaru"])["file_path"])["TRACKNUMBER"] == ["12"]
+    assert PostProcessor(tmp_config, store).share_film_tags() == 1
+    assert FLAC(row["file_path"])["TRACKNUMBER"] == ["8"] and FLAC(row["file_path"])["TRACKTOTAL"] == ["8"]
+
+    # an album typed on the Library page stays, and the film's other songs take it
+    md.refresh_track(tmp_config, store, store.track(ids["Galatta"]), lookup=False,
+                     manual={"album": "Aavesham (2024 film)"}, move=False)
+    assert PostProcessor(tmp_config, store).share_film_tags() == 3
+    assert {store.track(ids[t])["album"] for t in ("Galatta", "The Last Dance", "Odimaga", "Mathapithakkale")} == \
+        {"Aavesham (2024 film)"}
+
+
+def test_a_new_single_joins_its_films_album(tmp_config, monkeypatch):
+    store, ids = _soundtracks(tmp_config)
+    tmp_config.library.format = "flac"
+    pp = PostProcessor(tmp_config, store)
+    pp.share_film_tags()
+    monkeypatch.setattr(P, "resolve_cover", lambda *a: None)
+    monkeypatch.setattr(P.lyr, "fetch", lambda *a, **k: None)
+    take, ident = _inbox(tmp_config, store, "I'm Scared", "I’m Scared (From “Leo”)", "Anirudh Ravichander")
+    ident.date, ident.track_number, ident.track_total = "2023-10-27", 1, 1
+    pp.identify_take = lambda path, meta: (ident, "")
+    dst = pp.process(take)
+    leo = tmp_config.paths.library_dir / "Soundtracks" / "Leo (2023)"
+    assert dst == leo / "I'm Scared.flac"
+    assert (FLAC(dst)["ALBUM"], FLAC(dst)["TRACKNUMBER"]) == (["Leo"], ["9"])      # after Villain Yaaru, before Ratata
+    row = store.conn.execute("SELECT album, track_number, identity_json FROM tracks WHERE file_path=?",
+                             (str(dst),)).fetchone()
+    assert (row["album"], row["track_number"]) == ("Leo", 9)
+    assert json.loads(row["identity_json"])["release_album"] == "I’m Scared (From “Leo”)"
+    assert pp._film_tags_stale and pp.share_film_tags() == 2      # Villain Yaaru's count and Ratata's place change
+    assert FLAC(store.track(ids["Ratata"])["file_path"])["TRACKNUMBER"] == ["10"]
