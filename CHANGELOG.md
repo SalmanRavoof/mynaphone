@@ -105,7 +105,8 @@ All notable changes to Mynaphone are listed here. The format follows
   documentation index. Fresh screenshots of every page, the export dialog and the tray menu. The
   settings reference names each setting as the window shows it. Every service, library and source
   the docs mention is linked. Bug reports and feature requests use GitHub issue forms, and
-  `SUPPORT.md` says where to get help.
+  `SUPPORT.md` says where to get help. `docs/research.md` now explains why Mynaphone doesn't use
+  Deezer's API.
 
 ### Fixed
 - A film whose songs matched 2 of its MusicBrainz releases showed up twice in a player that groups

@@ -178,7 +178,9 @@ upgrade`) is re-run; SMTC stays as the fallback signal, and the only signal for 
   "Original Motion Picture Soundtrack", "OST", "From the Motion Picture", "(From ...)"), Deezer's
   keyless API (`record_type`, contributors, label), Discogs (best for composer / music-director
   credits). The track playing during the probe was tagged by Spotify as "I (Original Motion Picture
-  Soundtrack)", which is exactly the heuristic case.
+  Soundtrack)", which is exactly the heuristic case. Mynaphone doesn't use Deezer's API, since its
+  [developer terms](https://developers.deezer.com/termsofuse) of October 27, 2026 forbid keeping
+  what it returns.
 - Tag writer: `mutagen` (FLAC Vorbis comments + `METADATA_BLOCK_PICTURE`), or let beets'
   mediafile do it.
 
