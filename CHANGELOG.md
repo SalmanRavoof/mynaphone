@@ -6,6 +6,12 @@ All notable changes to Mynaphone are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- Keyboard shortcuts in the window. Ctrl+1 to Ctrl+6 open the pages in the sidebar's order, Ctrl+R
+  starts or stops the recorder, Ctrl+P pauses or resumes it, and Ctrl+H turns harvest mode on or off.
+  Ctrl+F finds a song in the Library, Ctrl+S saves the Library editor or Settings, and F5 runs the
+  Setup check. Each control's tooltip shows its key, and the keys work while you type in a field.
+- A search box in the Library's Songs view. It lists only the songs with every word you type in their
+  title, artist, album, or album artist, accents or not.
 - Album counts. The Library page has an **Albums** view that lists the albums your songs come from,
   with how many of each album's songs you have, such as 5 of 7. **Incomplete** lists only the albums
   you don't have whole. Mynaphone counts each album against the edition you played, and the extra
@@ -69,8 +75,8 @@ All notable changes to Mynaphone are listed here. The format follows
   recording, song credits read from the video description, and a catalog search by film. Channel
   names and view counts are never used as artist or album; unidentified songs go to `Unsorted`.
 - Singers stay in the artist tag when MusicBrainz credits a film recording to its music director.
-- Offscreen tests for the window: theme, mark, tooltips, page headers, state pill, tables and the
-  single-instance guard.
+- Offscreen tests for the window: theme, mark, tooltips, page headers, state pill, tables, keyboard
+  shortcuts and the single-instance guard.
 - Lyrics from Spotify and LRCLIB, embedded and as sidecar files; cover art from the capture, Spotify
   and the Cover Art Archive.
 - AAC 256 kbps library encoding (FLAC for lossless captures) and placement under Soundtracks,
@@ -99,7 +105,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (273 tests).
+- Test suite (281 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.

@@ -31,7 +31,7 @@ from PySide6.QtCore import (
     Slot,
     qInstallMessageHandler,
 )
-from PySide6.QtGui import QAction, QBrush, QColor, QPainter, QPainterPath, QPixmap
+from PySide6.QtGui import QAction, QBrush, QColor, QKeySequence, QPainter, QPainterPath, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -145,6 +145,12 @@ FORMAT_CHOICES = [
     ("FLAC (lossless, about 3x larger)", "flac", 0),
 ]
 
+# The window's keyboard shortcuts. Windows and the text boxes, lists and dropdowns on the pages leave all of them
+# alone, so each one works wherever you're typing, and each control's tooltip shows its key.
+PAGE_KEYS = ("Ctrl+1", "Ctrl+2", "Ctrl+3", "Ctrl+4", "Ctrl+5", "Ctrl+6")    # the sidebar's pages, top to bottom
+KEYS = {"start": "Ctrl+R", "pause": "Ctrl+P", "harvest": "Ctrl+H", "find": "Ctrl+F", "save": "Ctrl+S", "checks": "F5"}
+KEYS_ROLE = Qt.UserRole + 1     # a list row's key, for its tooltip
+
 
 # ----------------------------------------------------------------------------- helpers
 
@@ -218,7 +224,8 @@ def _rounded(pm: QPixmap, size: int, radius: int = 6) -> QPixmap:
 
 
 class _Tip(QWidget):
-    """The app's own tooltip: a rounded ink card under the control, faded in, never at the cursor."""
+    """The app's own tooltip: a rounded ink card under the control, faded in, never at the cursor. A control with
+    a keyboard shortcut gets its key on a second, quieter line."""
 
     def __init__(self):
         super().__init__(None, Qt.ToolTip | Qt.FramelessWindowHint | Qt.NoDropShadowWindowHint)
@@ -231,18 +238,25 @@ class _Tip(QWidget):
         self.frame.setObjectName("tip")
         fl = QVBoxLayout(self.frame)
         fl.setContentsMargins(11, 7, 11, 8)
+        fl.setSpacing(3)
         self.text = QLabel()
         self.text.setObjectName("tiptext")
         self.text.setWordWrap(True)
         self.text.setMaximumWidth(340)
         fl.addWidget(self.text)
+        self.keys = QLabel()
+        self.keys.setObjectName("tipkeys")
+        self.keys.hide()
+        fl.addWidget(self.keys)
         lay.addWidget(self.frame)
         self.anim = QPropertyAnimation(self, b"windowOpacity", self)
         self.anim.setDuration(130)
         self.anim.setEasingCurve(QEasingCurve.OutCubic)
 
-    def show_under(self, text: str, rect_global) -> None:
+    def show_under(self, text: str, rect_global, keys: str = "") -> None:
         self.text.setText(text)
+        self.keys.setText(keys)
+        self.keys.setVisible(bool(keys))
         self.adjustSize()
         x = rect_global.left()
         y = rect_global.bottom() + 8
@@ -281,21 +295,23 @@ class _TipFilter(QObject):
         if t == QEvent.ToolTip:
             if not self.win.cfg.app.show_tooltips or not isinstance(obj, QWidget):
                 return True
-            text, rect = "", None
+            text, keys, rect = "", "", None
             view = (obj.parent() if isinstance(obj.parent(), QAbstractItemView) and obj is obj.parent().viewport()
                     else None)
             if view is not None:
                 idx = view.indexAt(event.pos())
                 if idx.isValid():
                     text = idx.data(Qt.ToolTipRole) or ""
+                    keys = idx.data(KEYS_ROLE) or ""
                     r = view.visualRect(idx)
                     rect = QRect(obj.mapToGlobal(r.topLeft()), r.size())
             else:
                 text = obj.toolTip()
+                keys = obj.property("keys") or ""
                 rect = QRect(obj.mapToGlobal(obj.rect().topLeft()), obj.rect().size())
             if text and rect is not None:
                 self.owner = obj
-                self.tip.show_under(text, rect)
+                self.tip.show_under(text, rect, keys)
             else:
                 self._hide()
             return True
@@ -510,7 +526,7 @@ class StatusPage(QWidget):
         head = QHBoxLayout()
         head.addWidget(label("Recent", "h2"))
         head.addStretch(1)
-        more = QPushButton("See all activity")
+        self.btn_activity = more = QPushButton("See all activity")
         more.setToolTip("Open the Activity page: every kept, discarded and filed take, with reasons, "
                         "plus the live log.")
         more.clicked.connect(lambda: win.nav.setCurrentRow(1))
@@ -845,7 +861,7 @@ class SettingsPage(QScrollArea):
         self.saved = label("", "small")
         row.addWidget(self.saved)
         row.addStretch(1)
-        btn = QPushButton("Save settings")
+        self.btn_save = btn = QPushButton("Save settings")
         btn.setObjectName("primary")
         btn.clicked.connect(win.save_settings)
         btn.setToolTip("Write these settings to config.toml. Capture settings apply the next time you press Start.")
@@ -1168,6 +1184,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(canvas)
 
         self._build_tray()
+        self._bind_keys()
         self._tip_filter = _TipFilter(self, self)
         QApplication.instance().installEventFilter(self._tip_filter)
         self.timer = QTimer(self)
@@ -1204,6 +1221,37 @@ class MainWindow(QMainWindow):
         title, sub = self._page_heads.get(i, ("", ""))
         self.page_title.setText(title)
         self.page_sub.setText(sub)
+
+    def _bind_keys(self) -> None:
+        """The keyboard shortcuts in KEYS and PAGE_KEYS. A key that stands for a button presses it, so it does
+        nothing while the button is greyed out, and a key held by a page's own button works only on that page."""
+        def bind(keys: str, holder: QWidget, slot) -> None:
+            shortcut = QShortcut(QKeySequence(keys), holder)
+            shortcut.setAutoRepeat(False)       # holding Ctrl+R down mustn't start and stop the recorder over and over
+            shortcut.activated.connect(slot)
+
+        for row, keys in enumerate(PAGE_KEYS):
+            bind(keys, self, lambda row=row: self.nav.setCurrentRow(row))
+            self.nav.item(row).setData(KEYS_ROLE, keys)
+        st = self.status
+        st.btn_activity.setProperty("keys", PAGE_KEYS[1])
+        for name, button in (("start", st.btn_start), ("pause", st.btn_pause), ("harvest", st.btn_harvest)):
+            bind(KEYS[name], self, button.click)
+            button.setProperty("keys", KEYS[name])
+        bind(KEYS["find"], self, self.find_in_library)
+        self.library.search.setProperty("keys", KEYS["find"])
+        # Qt counts a shortcut only while the widget holding it is shown and enabled, so both pages can use Ctrl+S
+        for name, button in (("save", self.library.btn_save), ("save", self.settings.btn_save),
+                             ("checks", self.setup.btn)):
+            bind(KEYS[name], button, button.click)
+            button.setProperty("keys", KEYS[name])
+
+    @Slot()
+    def find_in_library(self) -> None:
+        self.nav.setCurrentRow(2)
+        self.library.btn_songs.setChecked(True)     # the search box finds songs, so it's in the Songs view
+        self.library.search.setFocus(Qt.ShortcutFocusReason)
+        self.library.search.selectAll()
 
     def _setup_dev_shots(self) -> None:
         """Development aid: with MYNAPHONE_SHOT_DIR set, save an image of each page every few seconds."""

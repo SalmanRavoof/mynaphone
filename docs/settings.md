@@ -119,7 +119,7 @@ These are set on the **Set up** page or in the file.
 | **When Windows starts it, open in the tray** | `start_minimized` | `true` | At sign-in, open hidden in the tray instead of showing the window. Opening Mynaphone yourself always shows the window. Available with **Start with Windows** ticked. |
 | **Shortcut in the Start menu** | None | Off | Adds or removes `Mynaphone.lnk` in your Start menu. Type Mynaphone in Start to open the app, or right-click it there to pin it to the taskbar. It isn't stored in the file. |
 | **Shortcut on the desktop** | None | Off | Adds or removes `Mynaphone.lnk` on your desktop. It isn't stored in the file. |
-| **Show tooltips when the mouse rests on a control** | `show_tooltips` | `true` | Show a short explanation when the mouse rests on a button or setting. |
+| **Show tooltips when the mouse rests on a control** | `show_tooltips` | `true` | Show a short explanation when the mouse rests on a button or setting, with its [keyboard shortcut](window.md#keyboard-shortcuts) when it has one. The keys work either way. |
 
 ## How tiers are ranked
 

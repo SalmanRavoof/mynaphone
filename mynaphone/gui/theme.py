@@ -115,6 +115,7 @@ QPushButton#danger:hover {{ background: {RED_SOFT}; border-color: #e3b4b6; }}
 QPushButton:checked {{ background: {AMBER_SOFT}; border-color: {ACCENT}; color: {AMBER}; }}
 QToolButton {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 7px; min-height: 28px; padding: 0 10px; }}
 QToolButton:hover {{ background: {CARD_TINT}; }}
+QLineEdit QToolButton {{ min-height: 0; padding: 0; border: none; background: transparent; }}
 
 QLineEdit, QComboBox, QSpinBox {{ background: {CARD}; border: 1px solid {BORDER}; border-radius: 7px; \
 padding: 0 8px; min-height: 30px; selection-background-color: {INK}; selection-color: {SIDE_BRIGHT}; }}
@@ -167,6 +168,7 @@ QMenu::separator {{ height: 1px; background: {BORDER_SOFT}; margin: 6px 4px; }}
 QToolTip {{ background: {INK}; color: {SIDE_BRIGHT}; border: none; padding: 6px 8px; }}
 QFrame#tip {{ background: {INK}; border-radius: 8px; }}
 QLabel#tiptext {{ color: {SIDE_BRIGHT}; font-size: 9pt; }}
+QLabel#tipkeys {{ color: {SIDE_MUTED}; font-size: 9pt; font-weight: 600; }}
 """
 
 

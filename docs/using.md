@@ -145,7 +145,8 @@ Most discards mean the song wasn't played cleanly end to end. Play it again from
 
 ## Fix a song's details by hand
 
-1. Open the **Library** page. Tick **Needs attention** to list only songs with something missing.
+1. Open the **Library** page. Tick **Needs attention** to list only songs with something missing, or
+   type part of a song's title, artist, or album in the search box to find it.
 2. Select a song. The right side shows its cover, its file path, what is missing and every field.
 3. Edit any field. Lists such as composers or genres take several names separated by semicolons.
 4. To add lyrics, paste them into the **Lyrics** box. Lines that start with timestamps like

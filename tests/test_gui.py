@@ -1,7 +1,8 @@
 # Copyright (C) 2026 Salman Ravoof
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""GUI tests, run offscreen: the theme, the mark, tooltips, page headers, state pills, tables, shortcuts
-and the single-instance guard. No recorder is started and no audio is touched."""
+"""GUI tests, run offscreen: the theme, the mark, tooltips, page headers, state pills, tables, the Start menu
+shortcut, keyboard shortcuts, the Library search and the single-instance guard. No recorder is started and no
+audio is touched."""
 import ast
 import itertools
 import os
@@ -939,3 +940,242 @@ def test_wanted_albums_open_from_the_status_page(window, monkeypatch):
     assert window.cfg.albums.wanted_min_songs == 0
     assert window.status.btn_wanted.text() == "1 wanted album"                    # only the album you added
     assert wanted.intro_text(0).startswith("The albums you added, with the nearest to whole at the top.")
+
+
+# -- keyboard shortcuts -----------------------------------------------------------------------
+
+def _press(qapp, window, keys: str, target=None) -> None:
+    """Press `keys` the way you would, with the window in front and the focus on `target` (or wherever it is)."""
+    from PySide6.QtGui import QKeySequence
+    from PySide6.QtTest import QTest
+    window.activateWindow()
+    qapp.processEvents()
+    combo = QKeySequence(keys)[0]
+    QTest.keyClick(target or QApplication.focusWidget() or window, combo.key(), combo.keyboardModifiers())
+    qapp.processEvents()
+
+
+def _all_keys() -> list[str]:
+    from mynaphone.gui.app import KEYS, PAGE_KEYS
+    return [*PAGE_KEYS, *KEYS.values()]
+
+
+def test_keys_open_every_page_even_while_you_type(window, qapp):
+    """Ctrl+1 to Ctrl+6 follow the sidebar, and a text box with the focus doesn't swallow them."""
+    from mynaphone.gui.app import PAGE_KEYS
+    box = window.settings.ed_inbox.edit
+    for row, keys in enumerate(PAGE_KEYS):
+        window.nav.setCurrentRow(3)
+        box.setFocus()
+        _press(qapp, window, keys, box)
+        assert window.pages.currentIndex() == row
+        assert window.page_title.text() == window.nav.item(row).text()
+
+
+def test_no_text_box_list_or_dropdown_keeps_a_key_to_itself(window, qapp):
+    """A field that claims a key first leaves that shortcut dead while it has the focus, the way a text box keeps
+    Ctrl+Z for its own undo."""
+    from PySide6.QtGui import QKeyEvent, QKeySequence
+    from PySide6.QtWidgets import (
+        QAbstractButton,
+        QAbstractItemView,
+        QAbstractSpinBox,
+        QComboBox,
+        QLineEdit,
+        QPlainTextEdit,
+        QWidget,
+    )
+
+    def claims(widget, keys: str) -> bool:
+        combo = QKeySequence(keys)[0]
+        ev = QKeyEvent(QEvent.ShortcutOverride, combo.key(), combo.keyboardModifiers())
+        ev.ignore()
+        QApplication.sendEvent(widget, ev)
+        return ev.isAccepted()
+
+    window.library.table.selectRow(0)           # a song open, so the editor's boxes are enabled
+    kinds = (QLineEdit, QPlainTextEdit, QAbstractSpinBox, QComboBox, QAbstractItemView, QAbstractButton)
+    fields = [w for w in window.findChildren(QWidget) if isinstance(w, kinds) and w.isEnabled()]
+    assert {QLineEdit, QPlainTextEdit, QComboBox} <= {type(w) for w in fields}
+    assert claims(window.library.search, "Ctrl+Z") and claims(window.library.lyrics, "Ctrl+A")     # the test sees
+    for keys in _all_keys():
+        assert not [w for w in fields if claims(w, keys)], keys
+
+
+def test_keys_leave_windows_own_keys_alone():
+    """Windows keeps the Alt and Windows key combinations, many keyboards type characters such as @ with Ctrl+Alt
+    (AltGr), F4 opens a dropdown and F10 the menu bar."""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QKeySequence
+    keys = _all_keys()
+    assert len(set(keys)) == len(keys)
+    for k in keys:
+        combo = QKeySequence(k)[0]
+        mods, key = combo.keyboardModifiers(), combo.key()
+        assert mods == Qt.ControlModifier or (mods == Qt.NoModifier and Qt.Key_F1 < key < Qt.Key_F12), k
+        assert key not in (Qt.Key_F4, Qt.Key_F10, Qt.Key_Escape, Qt.Key_Tab, Qt.Key_Space), k
+
+
+def test_tooltips_show_each_controls_key(window, qapp):
+    """The key sits on its own line under the tooltip. Turning tooltips off hides it, and the keys still work."""
+    f = window._tip_filter
+    st = window.status
+
+    def shown(widget):
+        ev = QHelpEvent(QEvent.ToolTip, QPoint(3, 3), widget.mapToGlobal(QPoint(3, 3)))
+        f.eventFilter(widget, ev)
+        return f.tip.text.text(), (f.tip.keys.text() if not f.tip.keys.isHidden() else "")
+
+    window.nav.setCurrentRow(0)
+    qapp.processEvents()
+    assert shown(st.btn_start) == (st.btn_start.toolTip(), "Ctrl+R")
+    assert shown(st.btn_pause)[1] == "Ctrl+P" and shown(st.btn_harvest)[1] == "Ctrl+H"
+    assert shown(st.btn_activity)[1] == "Ctrl+2"
+    assert shown(st.btn_playlist) == (st.btn_playlist.toolTip(), "")        # no key, no key line
+    for widget, keys in ((window.library.search, "Ctrl+F"), (window.library.btn_save, "Ctrl+S"),
+                         (window.settings.btn_save, "Ctrl+S"), (window.setup.btn, "F5")):
+        assert widget.toolTip() and shown(widget)[1] == keys
+    nav = window.nav
+    for row in range(nav.count()):
+        r = nav.visualItemRect(nav.item(row))
+        f.eventFilter(nav.viewport(), QHelpEvent(QEvent.ToolTip, r.center(), nav.viewport().mapToGlobal(r.center())))
+        assert f.tip.text.text() == nav.item(row).toolTip() and f.tip.keys.text() == f"Ctrl+{row + 1}"
+    f.eventFilter(nav.viewport(), QEvent(QEvent.Leave))
+    window.cfg.app.show_tooltips = False
+    f.eventFilter(st.btn_start, QHelpEvent(QEvent.ToolTip, QPoint(3, 3), st.btn_start.mapToGlobal(QPoint(3, 3))))
+    assert not f.tip.isVisible()
+    _press(qapp, window, "Ctrl+3")
+    assert window.pages.currentIndex() == 2
+
+
+def test_recorder_keys_press_start_pause_and_harvest_from_any_page(window, qapp, monkeypatch):
+    """A greyed-out button's key does nothing: Pause while stopped, and Stop while the recorder stops."""
+
+    class Worker:                       # stands in for the recorder thread, so no audio is touched
+        stopped, paused, harvest = False, None, None
+
+        def isRunning(self):
+            return True
+
+        def stop(self):
+            self.stopped = True
+
+        def set_paused(self, on):
+            self.paused = on
+
+        def set_harvest(self, on):
+            self.harvest = on
+
+    def start():
+        window.worker = Worker()
+        window.status.btn_pause.setEnabled(True)
+
+    monkeypatch.setattr(window, "start_recorder", start)
+    st = window.status
+    window.nav.setCurrentRow(2)                         # the Library, so Status and its buttons are out of sight
+    _press(qapp, window, "Ctrl+P")
+    assert not st.btn_pause.isChecked()                 # nothing to pause while the recorder is stopped
+    _press(qapp, window, "Ctrl+R")
+    assert isinstance(window.worker, Worker)
+    _press(qapp, window, "Ctrl+P")
+    assert st.btn_pause.isChecked() and st.btn_pause.text() == "Resume" and window.worker.paused is True
+    assert window.act_pause.isChecked()                 # the tray menu follows
+    _press(qapp, window, "Ctrl+P")
+    assert not st.btn_pause.isChecked() and window.worker.paused is False
+    harvest = st.btn_harvest.isChecked()
+    _press(qapp, window, "Ctrl+H")
+    assert st.btn_harvest.isChecked() is not harvest and window.worker.harvest is not harvest
+    assert window.cfg.rules.harvest_mode is not harvest and window.act_harvest.isChecked() is not harvest
+    _press(qapp, window, "Ctrl+R")
+    assert window.worker.stopped and not st.btn_start.isEnabled() and st.state.text() == "Stopping"
+    window.worker.stopped = False
+    _press(qapp, window, "Ctrl+R")
+    assert not window.worker.stopped
+    window.worker = None
+
+
+def test_ctrl_f_finds_a_song_in_the_library(window, qapp):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+    st = Store(window.cfg.paths.db_path)
+    song = window.cfg.paths.library_dir / "Artists" / "Pedro Infante" / "Singles" / "Las Mañanitas.m4a"
+    song.parent.mkdir(parents=True)
+    song.write_bytes(b"")
+    st.add_track(artist="Pedro Infante", title="Las Mañanitas", album="", album_artist="Pedro Infante",
+                 track_number=0, duration_ms=150000, source_app="Spotify.exe", source_uri="spotify:track:3",
+                 quality_tier="high", file_path=str(song), state="library", missing_json="[]")
+    st.conn.commit()
+    lib = window.library
+    lib.reload()
+
+    def listed():
+        return [lib.table.item(r, 0).text() for r in range(lib.table.rowCount()) if not lib.table.isRowHidden(r)]
+
+    window.nav.setCurrentRow(0)
+    _press(qapp, window, "Ctrl+F")
+    assert window.pages.currentIndex() == 2 and QApplication.focusWidget() is lib.search
+    QTest.keyClicks(lib.search, "mananitas")            # typed without the accent
+    assert listed() == ["Pedro Infante - Las Mañanitas"] and lib.summary.text() == "1 song matches your search"
+    QTest.keyClick(lib.search, Qt.Key_Return)
+    assert QApplication.focusWidget() is lib.table and lib.ed_title_big.text() == "Pedro Infante - Las Mañanitas"
+    lib.search.setText("pedro mañanitas infante")       # every word, in any order
+    assert len(listed()) == 1
+    lib.search.setText("zzz")
+    assert listed() == [] and lib.summary.text() == "No songs match your search"
+    QTest.keyClick(lib.search, Qt.Key_Down)             # nothing found, so nothing to move to
+    lib.search.setText("o")
+    assert len(listed()) == 3 and lib.summary.text() == "3 songs match your search"
+    lib.only_incomplete.setChecked(True)                # the list reloads and keeps the search
+    assert listed() == ["A - Song"]
+    lib.only_incomplete.setChecked(False)
+    lib.search.setFocus()
+    QTest.keyClick(lib.search, Qt.Key_Escape)
+    assert lib.search.text() == "" and len(listed()) == 3
+    assert lib.summary.text() == "3 songs in the library, 1 with something missing"
+    lib.search.setText("done")
+    lib.table.setFocus()
+    _press(qapp, window, "Ctrl+F")                       # the search is selected, ready to type over
+    assert QApplication.focusWidget() is lib.search and lib.search.selectedText() == "done"
+    QTest.keyClick(lib.search, Qt.Key_Down)
+    assert lib.ed_title_big.text() == "B - Done"
+    lib.btn_albums.click()                              # the box finds songs, so the Albums view hides it
+    assert lib.search.isHidden() and lib.summary.text().endswith("with every song")
+    _press(qapp, window, "Ctrl+F")                       # and Ctrl+F comes back to the songs
+    assert lib.lists.currentWidget() is lib.table and not lib.search.isHidden()
+    assert QApplication.focusWidget() is lib.search and lib.summary.text() == "1 song matches your search"
+
+
+def test_save_and_check_keys_work_only_on_their_page(window, qapp, monkeypatch):
+    import mynaphone.gui.app as A
+    lib, s = window.library, window.settings
+    saved, checked = [], []
+    monkeypatch.setattr(lib, "apply", lambda lookup: saved.append(lookup))
+    monkeypatch.setattr(window, "_set_login_item", lambda enabled: None)        # leave the real startup list alone
+    monkeypatch.setattr(window, "_set_shortcut", lambda place, enabled: None)   # and the real Start menu
+    monkeypatch.setattr(A.verify, "run_all", lambda *args: checked.append(True) or [])
+    window.nav.setCurrentRow(0)
+    _press(qapp, window, "Ctrl+S")
+    _press(qapp, window, "F5")
+    assert saved == [] and s.saved.text() == "" and checked == []
+    window.nav.setCurrentRow(2)
+    _press(qapp, window, "Ctrl+S")
+    assert saved == []                                  # no song open, so Save is greyed out
+    lib.table.selectRow(0)
+    lib.fields["title"].setFocus()
+    _press(qapp, window, "Ctrl+S", lib.fields["title"])
+    assert saved == [False]                             # Save, not Look up again
+    window.nav.setCurrentRow(3)
+    _press(qapp, window, "Ctrl+S", s.sp_min)
+    assert s.saved.text() == "Saved." and saved == [False]
+    window.nav.setCurrentRow(4)
+    _press(qapp, window, "F5")
+    assert checked == [True] and window.setup.checked
+
+
+def test_the_keys_are_in_the_docs():
+    from mynaphone.gui.app import KEYS
+    text = (Path(__file__).resolve().parents[1] / "docs" / "window.md").read_text(encoding="utf-8")
+    section = text.split("\n## Keyboard shortcuts\n", 1)[1].split("\n## ", 1)[0]
+    assert "| Ctrl+1 to Ctrl+6 |" in section
+    for keys in KEYS.values():
+        assert f"| {keys} |" in section, keys

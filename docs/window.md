@@ -1,12 +1,13 @@
 # The window and the tray
 
-This page describes every page of Mynaphone's window, the tray icon and its menu, and the export
-dialog. For step-by-step tasks, see [Using Mynaphone](using.md).
+This page describes every page of Mynaphone's window, the tray icon and its menu, the export
+dialog, and the keyboard shortcuts. For step-by-step tasks, see [Using Mynaphone](using.md).
 
 The window has a sidebar with 6 pages. Under the pages, the sidebar shows the recorder's state
 (Stopped, Listening, Paused or Recording), "Harvest mode on" when harvest mode is on, and the version.
-Rest the mouse on any button or setting for a short explanation; **Show tooltips** in Settings turns
-those off.
+Rest the mouse on any button or setting for a short explanation, with its
+[keyboard shortcut](#keyboard-shortcuts) when it has one. **Show tooltips** in Settings turns them off,
+and the keys keep working.
 
 | Page | What it's for |
 |---|---|
@@ -102,6 +103,7 @@ is missing.
 | Song count | How many songs are in the library and how many have something missing |
 | **Needs attention** | Lists only songs with something missing, including those in `Unsorted` |
 | **Export to USB** | Opens the [export dialog](#export-to-usb-dialog) |
+| Search box | Lists only the songs with every word you type somewhere in their title, artist, album, or album artist, accents or not, and the song count says how many match. Esc clears the box, and the first song it found opens when you press the down arrow or Enter |
 
 On the right, the editor shows the selected song: its cover, its path inside the library, the list
 of missing details, and every field.
@@ -232,3 +234,21 @@ the window.
 | **Skip songs already in the library** | Turns harvest mode on or off |
 | **Open inbox folder** | Opens the inbox in File Explorer |
 | **Quit** | Stops the recorder and closes Mynaphone |
+
+## Keyboard shortcuts
+
+These keys work while the window is open and in front, and each control's tooltip shows its key.
+
+| Keys | What they do |
+|---|---|
+| Ctrl+1 to Ctrl+6 | Open Status, Activity, Library, Settings, Setup check, and Set up, in the sidebar's order |
+| Ctrl+R | Start or stop the recorder, like **Start** and **Stop**. Stopping mid-song discards that take |
+| Ctrl+P | Pause or resume, like **Pause** and **Resume** |
+| Ctrl+H | Turn harvest mode on or off, like **Skip songs already in the library** on the Status page |
+| Ctrl+F | Open the Library's **Songs** view with the cursor in its search box |
+| Ctrl+S | Save the song open in the Library editor, or your settings on the Settings page |
+| F5 | Run the checks on the Setup check page |
+
+Windows and the text boxes in the window leave these keys alone, so they work while you type in a field
+too. A key does nothing while its button is greyed out, such as Ctrl+P while the recorder is stopped.
+Alt+F4, Windows' own key, closes the window the way its X button does.

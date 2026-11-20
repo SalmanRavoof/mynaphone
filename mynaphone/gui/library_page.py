@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import unicodedata
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QThread, QTimer, Signal, Slot
@@ -46,6 +47,28 @@ def label(text: str, name: str | None = None, wrap: bool = False) -> QLabel:
         lbl.setObjectName(name)
     lbl.setWordWrap(wrap)
     return lbl
+
+
+def _fold(text: str) -> str:
+    """Lower case with the accents taken off, so a search for "mananitas" finds "Las Mañanitas"."""
+    return "".join(c for c in unicodedata.normalize("NFKD", text.casefold()) if not unicodedata.combining(c))
+
+
+class _SearchBox(QLineEdit):
+    """The search box over the song list. Esc clears it, and the down arrow or Enter moves to the first song it
+    found."""
+
+    def __init__(self, to_first_match):
+        super().__init__()
+        self.to_first_match = to_first_match
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key_Escape and self.text():
+            self.clear()
+        elif event.key() in (Qt.Key_Down, Qt.Key_Return, Qt.Key_Enter):
+            self.to_first_match()
+        else:
+            super().keyPressEvent(event)
 
 
 class _RefreshWorker(QThread):
@@ -92,6 +115,8 @@ class LibraryPage(QWidget):
         super().__init__()
         self.win = win
         self.rows: dict[int, dict] = {}
+        self._haystack: dict[int, str] = {}     # each song's words the search box looks in, folded by _fold
+        self._counts = ""                       # the library's counts, shown under Songs while nothing is searched
         self.current_id: int | None = None
         self.albums: list[A.Album] = []
         self.current_album: str | None = None   # the album shown, by the Spotify id it's counted against
@@ -143,6 +168,13 @@ class LibraryPage(QWidget):
         self.only_partial.hide()
         sub.addWidget(self.only_partial)
         ll.addLayout(sub)
+        self.search = _SearchBox(self.to_first_match)
+        self.search.setPlaceholderText("Find a song")
+        self.search.setClearButtonEnabled(True)
+        self.search.setToolTip("Type part of a title, artist, or album, and the list shows only the songs that "
+                               "match. Press Esc to clear the box.")
+        self.search.textChanged.connect(self._filter)
+        ll.addWidget(self.search)
         self.table = _WrapTable(0, 2)
         self.table.setHorizontalHeaderLabels(["Song", "Missing"])
         hh = self.table.horizontalHeader()
@@ -288,6 +320,7 @@ class LibraryPage(QWidget):
         self.sides.setCurrentIndex(view)
         self.only_incomplete.setVisible(not albums)
         self.only_partial.setVisible(albums)
+        self.search.setVisible(not albums)          # it finds songs
         self.reload()
 
     def showing_albums(self) -> bool:
@@ -308,11 +341,12 @@ class LibraryPage(QWidget):
         except Exception as e:
             self.summary.setText(f"could not read the index: {e}")
             return
-        self.summary.setText(f"{total} songs in the library, {incomplete} with something missing")
+        self._counts = f"{total} songs in the library, {incomplete} with something missing"
         keep = self.current_id
         self.table.blockSignals(True)
         self.table.setRowCount(0)
         self.rows.clear()
+        self._haystack.clear()
         for r in rows:
             miss = json.loads(r["missing_json"] or "[]") if r["missing_json"] else []
             i = self.table.rowCount()
@@ -326,9 +360,12 @@ class LibraryPage(QWidget):
             for c, it in enumerate((song, m)):
                 self.table.setItem(i, c, it)
             self.rows[int(r["id"])] = dict(r)
+            self._haystack[int(r["id"])] = _fold(" ".join(str(r[k] or "") for k in ("title", "artist", "album",
+                                                                                    "album_artist")))
             if keep == int(r["id"]):
                 self.table.selectRow(i)
         self.table.blockSignals(False)
+        self._filter()
         self.table.fit()
         QTimer.singleShot(0, self.table.fit)
         if keep is not None and keep in self.rows:
@@ -357,6 +394,34 @@ class LibraryPage(QWidget):
     def _album_changed(self) -> None:
         self.reload_albums(read=False)
         self.win.refresh_wanted()
+
+    @Slot()
+    def _filter(self) -> None:
+        """Show only the songs with every word typed in the search box somewhere in their title, artist, album or
+        album artist, and say how many that is. The Albums view keeps its own counts."""
+        words = _fold(self.search.text()).split()
+        found = 0
+        for i in range(self.table.rowCount()):
+            hit = all(w in self._haystack.get(self.table.item(i, 0).data(Qt.UserRole), "") for w in words)
+            if self.table.isRowHidden(i) == hit:        # touch only the rows that change, so typing stays quick
+                self.table.setRowHidden(i, not hit)
+            found += hit
+        if self.showing_albums():
+            return
+        if not words:
+            self.summary.setText(self._counts)
+        elif found:
+            self.summary.setText(f"{found} {'song matches' if found == 1 else 'songs match'} your search")
+        else:
+            self.summary.setText("No songs match your search")
+
+    def to_first_match(self) -> None:
+        """From the search box to the first song it found, open in the editor."""
+        for i in range(self.table.rowCount()):
+            if not self.table.isRowHidden(i):
+                self.table.selectRow(i)
+                self.table.setFocus(Qt.OtherFocusReason)
+                return
 
     def _selected(self) -> None:
         items = self.table.selectedItems()
