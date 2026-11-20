@@ -105,7 +105,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (310 tests).
+- Test suite (311 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -145,8 +145,8 @@ All notable changes to Mynaphone are listed here. The format follows
 - Recording a playlist played its last missing song again, for one more try, while Mynaphone was
   still saving its first take, and then paused Spotify a few seconds in. On November 20, 2026 that
   happened to Sicko at the end of Monsoon Season, and the first take was fine. A song now gets one
-  more try only once its verdict says it needs one, and the playlist ends when the last verdicts
-  are in.
+  more try only once its verdict says it needs one, and the playlist ends when the last verdicts are
+  in. A take that can't be saved counts as one that didn't record, so that wait always ends.
 - Recording a playlist recorded a song again when your library had it from another release. Holiday,
   on Monsoon Season, was in the library from its COLORS single, under another Spotify id, with a
   longer title and 4 seconds less, so the playlist counted it as missing and spent 3 minutes on it.

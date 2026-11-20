@@ -855,6 +855,10 @@ class Recorder:
             await asyncio.sleep(max(0.0, take.tail_until - time.monotonic()) + 0.2)
         try:
             await self.loop.run_in_executor(self._writer, self._finalize, a, take, flags, wall_s)
+        except Exception:
+            # no verdict is coming for this take, so a playlist being recorded mustn't wait for one
+            self._job_result(a.meta.source_uri, False, ["not_saved"], a.meta.title, a.meta.expected_ms)
+            raise
         finally:
             take.chunks = []        # written out; whatever still holds the take doesn't keep its audio
 

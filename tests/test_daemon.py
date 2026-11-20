@@ -837,6 +837,27 @@ def test_a_playlist_waits_for_its_last_songs_verdict(recorder, clock, tmp_config
     assert rec.job is None and ("pause", None) in bridge.sent
 
 
+def test_a_take_that_cant_be_saved_gets_its_one_more_try(recorder, clock, tmp_config, monkeypatch):
+    """No verdict comes for a take that couldn't be written, and the job used to wait for one forever."""
+    from mynaphone.playlist_job import PlaylistJob
+    rec, loop = recorder
+    bridge = _job_bridge(rec, loop)
+
+    def full_disk(*args):
+        raise OSError("There is not enough space on the disk")
+
+    monkeypatch.setattr(rec, "_finalize", full_disk)
+    rec.job = PlaylistJob(rec, "spotify:album:a", "Album", _album(rec, tmp_config, have=(0, 2)))
+    run(loop, rec.job.start())
+    run(loop, rec._handle(snap("Song 1"), "media", None))
+    clock.advance(180)
+    run(loop, rec._handle(snap("Song 2"), "media", None))
+    for _ in range(3):
+        run(loop, asyncio.sleep(0))
+    assert _plays(bridge) == ["spotify:track:1", "spotify:track:1"]
+    assert rec.job.tries == {1: 1} and rec.job.failed == {1: ["not_saved"]}
+
+
 def test_a_song_the_library_has_from_another_release_isnt_recorded_again(recorder, clock, tmp_config):
     """Holiday, November 20, 2026: the library had it from its COLORS single, under another Spotify id, a longer title
     and 4 s less, so nothing matched it until Spotify gave the song's ISRC a moment after it started."""
