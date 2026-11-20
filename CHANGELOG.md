@@ -88,6 +88,9 @@ All notable changes to Mynaphone are listed here. The format follows
 - An updated logo brief for a designer, with what the current mark still gets wrong.
 
 ### Changed
+- Per-app capture looks at Windows' process list once a second for all the source apps together.
+  One look took 17 ms with 553 processes running, and each app looked every 2 or 3 seconds on its
+  own, so 3 more browsers would have doubled the cost.
 - The shortest song recorded is now 10 seconds, down from 45, so film themes and interludes record.
   The Spotify bridge reports ads, which are never recorded. On Spotify 1.2.93 the bridge reads track
   and album details with the client's own token and headers; its older route always failed.

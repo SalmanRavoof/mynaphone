@@ -162,6 +162,13 @@ def _kernel32():
     return k32
 
 
+TABLE_SECONDS = 1.0     # how long one look at the process list serves every capture that asks
+
+
+_table_lock = threading.Lock()
+_table: tuple[float, list[tuple[int, int, str]]] = (0.0, [])
+
+
 def process_table() -> list[tuple[int, int, str]]:
     """(pid, parent pid, image name) of every running process, from one Toolhelp snapshot.
 
@@ -169,7 +176,21 @@ def process_table() -> list[tuple[int, int, str]]:
     for every process, holding the GIL throughout. With a few hundred processes that is seconds per call;
     with one capture per source app starting together, the window stopped responding for 10-20 s each
     time the recorder started. ctypes releases the GIL during each call.
+
+    A snapshot of 553 processes took 17 ms on November 20, 2026, and each source app's capture looks every
+    2 or 3 seconds, so the captures share one snapshot a second.
     """
+    global _table
+    with _table_lock:
+        taken, rows = _table
+        if rows and time.perf_counter() - taken < TABLE_SECONDS:
+            return list(rows)
+        rows = _snapshot()
+        _table = (time.perf_counter(), rows)
+        return list(rows)
+
+
+def _snapshot() -> list[tuple[int, int, str]]:
     k32 = _kernel32()
     snap = k32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
     if snap is None or snap == INVALID_HANDLE_VALUE:
