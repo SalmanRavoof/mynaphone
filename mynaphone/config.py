@@ -83,6 +83,11 @@ class Identify:
 
 
 @dataclass
+class Albums:
+    wanted_min_songs: int = 3       # an album you don't have whole is wanted once you have this many of its songs
+
+
+@dataclass
 class App:
     start_minimized: bool = True        # when Windows starts the app; opened by hand, the window always shows
     close_to_tray: bool = True
@@ -101,6 +106,7 @@ class Config:
     identify: Identify
     app: App
     source_file: Path
+    albums: Albums = field(default_factory=Albums)
 
     @classmethod
     def load(cls, path: str | Path) -> "Config":
@@ -133,6 +139,7 @@ class Config:
             identify=Identify(**raw.get("identify", {})),
             app=App(**raw.get("app", {})),
             source_file=path,
+            albums=Albums(**raw.get("albums", {})),
         )
         for d in (paths.inbox_dir, paths.discard_dir, paths.log_dir, paths.db_path.parent):
             d.mkdir(parents=True, exist_ok=True)
@@ -160,6 +167,7 @@ class Config:
             acoustid_key=_s(self.identify.acoustid_key), musicbrainz_contact=_s(self.identify.musicbrainz_contact),
             lastfm_api_key=_s(self.identify.lastfm_api_key), apple_country=_s(self.identify.apple_country),
             jiosaavn_credits=_b(self.identify.jiosaavn_credits),
+            wanted_min_songs=self.albums.wanted_min_songs,
             start_minimized=_b(self.app.start_minimized), close_to_tray=_b(self.app.close_to_tray),
             autostart_recording=_b(self.app.autostart_recording), show_tooltips=_b(self.app.show_tooltips),
         ), encoding="utf-8")
@@ -261,6 +269,11 @@ apple_country = {apple_country}
 # Fill in the lyricist and composer of Indian film songs from JioSaavn when MusicBrainz has none. Its web API isn't
 # published and its terms forbid automated use, so it's off unless you turn it on.
 jiosaavn_credits = {jiosaavn_credits}
+
+[albums]
+# An album you don't have whole goes on the Wanted list once you have this many of its songs. With 0, the list holds
+# only the albums you add with Want this album.
+wanted_min_songs = {wanted_min_songs}
 
 [app]
 # With Start with Windows on, open hidden in the tray at sign-in. Opening it yourself always shows the window.

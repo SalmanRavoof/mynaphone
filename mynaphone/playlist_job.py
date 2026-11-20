@@ -5,7 +5,8 @@
 The job starts the playlist at its first missing song, in order with shuffle and repeat off. When a song the library
 already has comes up, it jumps to the next missing one, so it plays as little as it can of what you already have.
 Songs that don't record all the way through get one more try at the end. When it's done it pauses Spotify, puts the
-playlist's shuffle setting back, and writes the playlist's M3U8. Picking something else in Spotify stops it.
+playlist's shuffle setting back, and writes the playlist's M3U8, except for an album recorded from the Wanted list,
+whose songs are in the library's own folders. Picking something else in Spotify stops it.
 """
 from __future__ import annotations
 
@@ -19,11 +20,12 @@ log = logging.getLogger("mynaphone.job")
 
 
 class PlaylistJob:
-    def __init__(self, recorder, uri: str, name: str, tracks: list[dict]):
+    def __init__(self, recorder, uri: str, name: str, tracks: list[dict], keep_file: bool = True):
         self.rec = recorder
         self.uri = uri
         self.name = name
         self.tracks = tracks
+        self.keep_file = keep_file                      # write the playlist's M3U8 at the end
         s = playlists.summary(recorder.store, tracks)
         self.todo: list[int] = list(s["todo"])          # playlist positions still to record, in playlist order
         self.have = len(s["have"])
@@ -97,6 +99,10 @@ class PlaylistJob:
             await self.finish("done" if not self.todo else "playback left the playlist", stopped=bool(self.todo))
             return False
         self.current = index
+        if archived and index in self.todo:
+            # the recorder knows the song by a match the job's list didn't make, such as its ISRC from another release
+            self.todo.remove(index)
+            self.have += 1
         if archived or index not in self.todo:
             nxt = self._next_todo(index)
             if nxt is None:
@@ -151,10 +157,11 @@ class PlaylistJob:
                     await bridge.request("restore_shuffle", timeout=10.0, context=self.uri, mode=self.shuffle_was)
                 except BridgeError:
                     pass
-        try:
-            playlists.save(self.rec.store, self.rec.cfg.paths.library_dir, self.uri, self.name, self.tracks)
-        except Exception:
-            log.exception("could not write the playlist file for %s", self.name)
+        if self.keep_file:
+            try:
+                playlists.save(self.rec.store, self.rec.cfg.paths.library_dir, self.uri, self.name, self.tracks)
+            except Exception:
+                log.exception("could not write the playlist file for %s", self.name)
         log.info("playlist %s: %s; %d saved, %d didn't record, %d left out", self.name, why, len(self.saved),
                  len(self.failed), len(self.given_up))
         if self.rec.job is self:

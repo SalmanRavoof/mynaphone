@@ -34,6 +34,7 @@ The top card shows the song being recorded.
 | Capture line | The capture method, the sample rate, and whether the Spotify bridge is connected |
 | **Skip songs already in the library** | Harvest mode. When an archived song starts, Spotify is told to skip to the next one |
 | **Record a playlist** | Opens the dialog below. While a playlist records, the button reads **Stop the playlist** and the line beside it shows how many songs are saved and how many are left |
+| **Wanted albums** | Opens the [Wanted albums window](#the-wanted-albums-window). Its label counts the albums on your Wanted list, such as **47 wanted albums** |
 
 Under the card, 4 counts:
 
@@ -64,6 +65,14 @@ where you are.
 | **Save the playlist file** | Writes the playlist to the library's `Playlists` folder, without recording anything |
 | **Record the missing songs** | Plays the playlist in Spotify from the first song your library doesn't have, and records the missing ones |
 
+### The Wanted albums window
+
+The list holds the albums you don't have every song of and have 3 or more songs from, plus any you added
+with **Want this album**. The albums with the fewest songs left to record come first. The line above the
+list counts the albums and their missing songs, and says how long Spotify takes to play those songs.
+
+On the right is the album you picked, the same as in the [Albums view](#the-albums-view) of the Library.
+
 ## Activity
 
 ![The Activity page with kept and discarded takes above the live log](images/activity.png)
@@ -89,6 +98,7 @@ is missing.
 
 | Control | What it does |
 |---|---|
+| **Songs** / **Albums** | Switches the list between your songs and the albums they come from |
 | Song count | How many songs are in the library and how many have something missing |
 | **Needs attention** | Lists only songs with something missing, including those in `Unsorted` |
 | **Export to USB** | Opens the [export dialog](#export-to-usb-dialog) |
@@ -117,6 +127,21 @@ for a film song goes on every song in the film's folder.
 | **Look up again** | Fingerprint the file again and query AcoustID, MusicBrainz and the lyrics sources, keeping your edits |
 | **Folder** | Open the folder that holds the file in File Explorer |
 | **Save** | Write your changes into the file's tags, and move the file if its folder name changed |
+
+### The Albums view
+
+**Albums** lists the albums your songs come from, with how many of each album's songs you have, such as
+5 of 7. **Incomplete** lists only the albums you don't have every song of. Pick an album to see it on the
+right.
+
+| Part | What it shows or does |
+|---|---|
+| Count | How many of its songs you have, and how many more you have from another edition of it |
+| Wanted list line | Whether the album is on your Wanted list, and why |
+| **Record the missing songs** | Plays the album in Spotify from the first song you don't have, and records the missing ones |
+| **Want this album** / **Take it off the Wanted list** | Puts the album on your Wanted list, or keeps it off |
+| **Open in Spotify** | Opens the album in Spotify |
+| **Songs** | Every song of the album, and whether it's in your library, missing, or one Spotify can't play where you are. Mynaphone reads them from Spotify when you pick the album, which needs the recorder running and Spotify open. Until then, the list shows the songs you have |
 
 ## Settings
 

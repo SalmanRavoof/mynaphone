@@ -48,6 +48,8 @@ it hears.
 - Skips any song it already has, unless the song is now playing at a higher quality tier.
 - Remembers which metadata is still missing for every song, retries on its own, and lets you fill
   in the rest by hand.
+- Counts how many of each album's songs you have, and keeps a Wanted list of the albums you're nearest
+  to finishing. With the Spotify bridge, it plays an album's missing songs in Spotify and records them.
 - Records and verifies without internet. Lookups wait for the connection to come back.
 
 | Every take and why it was kept or discarded | Each song's missing details beside the editor |

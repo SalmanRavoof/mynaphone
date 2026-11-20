@@ -71,6 +71,11 @@ CREATE TABLE IF NOT EXISTS playlists (
     uri TEXT PRIMARY KEY,                  -- a Spotify playlist or album saved as an M3U8 in the library
     name TEXT, tracks_json TEXT, file TEXT, updated_at TEXT
 );
+CREATE TABLE IF NOT EXISTS albums (
+    uri TEXT PRIMARY KEY,                  -- a Spotify album: whether you want it whole, and its songs
+    wanted INTEGER, wanted_at TEXT,        -- 1 you put it on the Wanted list, 0 you took it off, NULL its count decides
+    tracks_json TEXT, tracks_at TEXT       -- its songs as Spotify listed them, and when
+);
 """
 
 
@@ -90,6 +95,14 @@ class Store:
                          ("credits_tried_at", "TEXT")):
             if col not in have:
                 self.conn.execute(f"ALTER TABLE tracks ADD COLUMN {col} {typ}")
+        try:
+            # find_archived's ISRC lookup read every row's JSON, 7 ms a song; an album's songs ask it dozens of times
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_tracks_isrc ON tracks(json_extract(identity_json, "
+                              "'$.isrc'))")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_tracks_spotify_isrc ON tracks(json_extract(meta_json, "
+                              "'$.extra.track_info.isrc'))")
+        except sqlite3.Error as e:
+            log.warning("could not index the songs' ISRCs, so looking one up is slower: %s", e)
         self.conn.commit()
         self._migrate()
         self.merge_shared_files()
@@ -283,6 +296,28 @@ class Store:
         """Take a song off the list to play again, for good: you skipped it on purpose, say."""
         self.conn.execute("INSERT OR REPLACE INTO hidden_retries (key, hidden_at) VALUES (?, ?)",
                           (key, dt.datetime.now(dt.timezone.utc).isoformat()))
+        self.conn.commit()
+
+    # -- albums ---------------------------------------------------------------------------
+
+    def album_rows(self) -> dict[str, sqlite3.Row]:
+        return {r["uri"]: r for r in self.conn.execute("SELECT * FROM albums")}
+
+    def set_wanted(self, uri: str, wanted: bool | None) -> None:
+        """Put an album on the Wanted list by hand (True), take it off (False), or leave it to its count (None)."""
+        now = dt.datetime.now(dt.timezone.utc).isoformat()
+        value = None if wanted is None else int(bool(wanted))
+        self.conn.execute("INSERT INTO albums (uri, wanted, wanted_at) VALUES (?, ?, ?) "
+                          "ON CONFLICT(uri) DO UPDATE SET wanted=excluded.wanted, wanted_at=excluded.wanted_at",
+                          (uri, value, now))
+        self.conn.commit()
+
+    def save_album_tracks(self, uri: str, tracks: list[dict]) -> None:
+        """Keep an album's songs as Spotify listed them, so its count holds while Spotify is closed."""
+        now = dt.datetime.now(dt.timezone.utc).isoformat()
+        self.conn.execute("INSERT INTO albums (uri, tracks_json, tracks_at) VALUES (?, ?, ?) ON CONFLICT(uri) "
+                          "DO UPDATE SET tracks_json=excluded.tracks_json, tracks_at=excluded.tracks_at",
+                          (uri, json.dumps(tracks, ensure_ascii=False), now))
         self.conn.commit()
 
     def library_rows(self, only_incomplete: bool = False) -> list[sqlite3.Row]:

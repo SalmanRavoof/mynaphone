@@ -161,11 +161,31 @@ class Recorder:
         return await self.bridge.request("playlists", timeout=30.0)
 
     async def check_playlist(self, uri: str) -> dict:
-        """A playlist's or album's songs and how many of them the library holds."""
+        """A playlist's or album's songs and how many of them the library holds. An album's songs stay in the index,
+        so the Library can count it while Spotify is closed."""
         if self.bridge is None:
             raise BridgeError("the Spotify bridge is turned off in Settings")
         tracks = (await self.bridge.request("tracks", timeout=120.0, uri=uri)).get("tracks") or []
+        if tracks and uri.startswith("spotify:album:"):
+            await self._album_isrcs(tracks)
+            self.store.save_album_tracks(uri, tracks)
         return {"uri": uri, "tracks": tracks, **playlists.summary(self.store, tracks)}
+
+    async def _album_isrcs(self, tracks: list[dict]) -> None:
+        """Give an album's songs their ISRCs when the library doesn't know them by their Spotify ids, so a song you
+        have from its single or another edition counts as the album's. An older bridge has no ISRCs to give."""
+        uris = [t["uri"] for t in tracks if (t.get("uri") or "").startswith("spotify:track:") and not t.get("isrc")
+                and playlists.match(self.store, t) is None]
+        if not uris:
+            return
+        try:
+            got = (await self.bridge.request("isrcs", timeout=len(uris) * 2.0 + 30.0, uris=uris)).get("isrcs") or {}
+        except BridgeError as e:
+            log.info("no ISRCs from Spotify for %d songs of an album: %s", len(uris), e)
+            return
+        for t in tracks:
+            if t.get("uri") in got:
+                t["isrc"] = got[t["uri"]]
 
     async def save_playlist(self, uri: str, name: str) -> dict:
         """Write a playlist's M3U8 without recording anything."""
@@ -173,12 +193,15 @@ class Recorder:
         path, listed, missing = playlists.save(self.store, self.cfg.paths.library_dir, uri, name, checked["tracks"])
         return {"path": str(path), "listed": listed, "missing": missing}
 
-    async def start_job(self, uri: str, name: str) -> dict:
+    async def start_job(self, uri: str, name: str, keep_file: bool = True) -> dict:
+        """Record a playlist's or album's missing songs. `keep_file` writes its M3U8 at the end."""
         from .playlist_job import PlaylistJob
         if self.job is not None:
             raise BridgeError(f"{self.job.name} is still being recorded")
         checked = await self.check_playlist(uri)
-        self.job = PlaylistJob(self, uri, name, checked["tracks"])
+        if not checked["tracks"]:
+            raise BridgeError("Spotify didn't list any songs in it")
+        self.job = PlaylistJob(self, uri, name, checked["tracks"], keep_file=keep_file)
         await self.job.start()
         return self.job.progress()
 
@@ -837,7 +860,7 @@ class Recorder:
                           state="inbox", meta_json={"album_uri": meta.album_uri, "artist_uris": meta.artist_uris,
                                                     "cover_url": meta.cover_url, "quality": meta.quality_raw,
                                                     "played_title": meta.title, "played_artist": meta.artist,
-                                                    "extra": meta.extra})
+                                                    "played_album": meta.album, "extra": meta.extra})
             if a.replace_id is not None:
                 old = store.conn.execute("SELECT file_path FROM tracks WHERE id=?", (a.replace_id,)).fetchone()
                 store.replace_track(a.replace_id, **fields)

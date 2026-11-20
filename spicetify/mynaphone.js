@@ -4,7 +4,7 @@
 // Sends exact track uri, duration, position, paused/buffering flags and the playback quality tier
 // over a WebSocket to ws://127.0.0.1:8765. Reconnects automatically; harmless when mynaphone is off.
 // It also answers the app's commands: list your playlists, read one's songs, play it from a song,
-// pause, and look up track details for songs recorded earlier.
+// pause, look up track details for songs recorded earlier, and give the ISRCs of an album's songs.
 (function mynaphone() {
   if (!window.Spicetify || !Spicetify.Player || !Spicetify.Player.addEventListener) {
     setTimeout(mynaphone, 500);
@@ -407,9 +407,13 @@
     const out = [];
     if (uri.includes(":album:")) {
       const q = Spicetify.GraphQL.Definitions.queryAlbumTracks;
+      if (!q) throw new Error("GraphQL: no queryAlbumTracks query in this Spotify version");
       for (let offset = 0; offset < 2000; offset += 100) {
         const r = await Spicetify.GraphQL.Request(q, { uri: uri, offset: offset, limit: 100 });
-        const page = r && r.data && r.data.albumUnion && r.data.albumUnion.tracksV2;
+        const album = r && r.data && r.data.albumUnion;
+        if (!album) throw new Error("GraphQL: " + clean(JSON.stringify((r && r.errors) || r || {})));
+        // the field's name has changed between Spotify versions, so both are read
+        const page = album.tracksV2 || album.tracks;
         const items = (page && page.items) || [];
         for (const x of items) {
           const t = x.track || {};
@@ -417,6 +421,7 @@
             index: out.length, uri: t.uri || "", uid: x.uid || "", name: t.name || "",
             artists: names(t.artists && t.artists.items), album: { name: "", uri: uri },
             duration_ms: (t.duration && t.duration.totalMilliseconds) || 0,
+            track_number: t.trackNumber || 0, disc_number: t.discNumber || 0,
             playable: !(t.playability && t.playability.playable === false), local: false, episode: false,
           });
         }
@@ -497,8 +502,23 @@
     }
     return { done: n };
   }
+  // the ISRCs of an album's songs, so the app can tell a song you have from its single or another edition
+  async function isrcs(cmd) {
+    const out = {};
+    for (const uri of cmd.uris || []) {
+      if (!uri.startsWith("spotify:track:")) continue;
+      let info = trackCache.get(uri);
+      if (!info) {
+        try { info = await trackFromSpclient(uri.split(":")[2]); } catch (e) { info = null; }
+        await new Promise(r => setTimeout(r, 250));
+      }
+      if (info && info.isrc) out[uri] = info.isrc;
+    }
+    return { isrcs: out };
+  }
   const COMMANDS = { playlists: listPlaylists, tracks: cmd => contextTracks(cmd.uri).then(t => ({ tracks: t })),
-                     play: play, pause: pause, restore_shuffle: restoreShuffle, track_details: trackDetails };
+                     play: play, pause: pause, restore_shuffle: restoreShuffle, track_details: trackDetails,
+                     isrcs: isrcs };
   async function onCommand(cmd) {
     const reply = { type: "reply", id: cmd.id };
     try {

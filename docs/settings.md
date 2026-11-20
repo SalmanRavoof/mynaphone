@@ -101,6 +101,12 @@ These are set on the **Set up** page or in the file.
 | None | `enabled` | `true` | Listen for the Spicetify and browser extensions. |
 | None | `port` | `8765` | Local port the extensions connect to on 127.0.0.1. If it clashes, change it here, at the top of `spicetify/mynaphone.js` and in `browser-extension/background.js`, then reinstall both. |
 
+## Albums (`[albums]`)
+
+| On the Settings page | In `config.toml` | Default | What it does |
+|---|---|---|---|
+| **Wanted list** | `wanted_min_songs` | `3` | An album you don't have every song of goes on the Wanted list once you have this many of its songs. With 0, only the albums you add with **Want this album** go on it. |
+
 ## Application (`[app]`)
 
 ![The Application card of the Settings page](images/settings-application.png)

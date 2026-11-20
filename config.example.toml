@@ -79,6 +79,11 @@ lastfm_api_key = ""
 # The Apple store searched for genres, as a two-letter country code. US covers Indian film songs too.
 apple_country = "US"
 
+[albums]
+# An album you don't have whole goes on the Wanted list once you have this many of its songs. With 0, the list holds
+# only the albums you add with Want this album.
+wanted_min_songs = 3
+
 [app]
 # With Start with Windows on, open hidden in the tray at sign-in. Opening it yourself always shows the window.
 start_minimized = true

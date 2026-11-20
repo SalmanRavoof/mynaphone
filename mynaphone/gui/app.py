@@ -65,7 +65,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import __version__, browsers, shortcuts, silence
+from .. import __version__, albums, browsers, shortcuts, silence
 from ..capture import list_devices
 from ..config import Config
 from ..store import Store, local_time
@@ -476,9 +476,14 @@ class StatusPage(QWidget):
         self.btn_playlist.setToolTip("Pick a Spotify playlist or album. Mynaphone plays it in Spotify and records the "
                                      "songs your library doesn't have.")
         self.btn_playlist.clicked.connect(win.playlist_button)
+        self.btn_wanted = QPushButton("Wanted albums")
+        self.btn_wanted.setToolTip("Albums you don't have every song of yet, nearest to whole first. Pick one, and "
+                                   "Mynaphone plays its missing songs in Spotify and records them.")
+        self.btn_wanted.clicked.connect(win.show_wanted)
         self.job_line = label("", "small")
         self.job_line.setWordWrap(True)
         job_row.addWidget(self.btn_playlist)
+        job_row.addWidget(self.btn_wanted)
         job_row.addWidget(self.job_line, 1)
         c.addLayout(job_row)
         lay.addWidget(self.card)
@@ -566,6 +571,9 @@ class StatusPage(QWidget):
                 self.cover.setPixmap(_rounded(pm, COVER))
                 return
         self.cover.setPixmap(app_icon(state).pixmap(COVER_MARK, COVER_MARK))
+
+    def set_wanted(self, count: int) -> None:
+        self.btn_wanted.setText(f"{count} wanted album{'' if count == 1 else 's'}" if count else "Wanted albums")
 
     def set_play_again(self, count: int) -> None:
         self.btn_again.setText(f"{count} song{'' if count == 1 else 's'} to play again")
@@ -792,6 +800,23 @@ class SettingsPage(QScrollArea):
         self.sp_keep.setToolTip("How long rejected recordings stay in the discard folder before they are deleted.")
         self._row(form, "Keep rejected takes", self.sp_keep,
                   "Rejected recordings stay in the discard folder this long, with a note on why, then are deleted.")
+        c.addLayout(form)
+        lay.addWidget(f)
+
+        # albums
+        f, c = card()
+        c.addWidget(label("Albums", "h2"))
+        form = self._form()
+        self.sp_wanted = no_wheel(QSpinBox())
+        self.sp_wanted.setRange(0, 99)
+        self.sp_wanted.setSuffix(" songs")
+        self.sp_wanted.setFixedWidth(140)
+        self.sp_wanted.setButtonSymbols(QSpinBox.NoButtons)
+        self.sp_wanted.setValue(cfg.albums.wanted_min_songs)
+        self.sp_wanted.setToolTip("How many of an album's songs you need before it goes on the Wanted list.")
+        self._row(form, "Wanted list", self.sp_wanted,
+                  "An album you don't have every song of goes on the Wanted list once you have this many of its "
+                  "songs. With 0, only the albums you add with Want this album go on it.")
         c.addLayout(form)
         lay.addWidget(f)
 
@@ -1075,7 +1100,8 @@ class MainWindow(QMainWindow):
         nav_tips = {
             "Status": "What is recording right now, counts, and the last few takes.",
             "Activity": "Every take with its verdict and reason, and the live log.",
-            "Library": "Your filed songs, what each one is still missing, and an editor to fix details by hand.",
+            "Library": "Your filed songs and the albums they come from, what each one is still missing, and an "
+                       "editor to fix details by hand.",
             "Settings": "Folders, capture, format, rules and app behavior.",
             "Setup check": "Automatic checks of this PC plus the Spotify settings to confirm by eye.",
             "Set up": "The first-run steps: tools, AcoustID key, library folder, bridges.",
@@ -1112,7 +1138,8 @@ class MainWindow(QMainWindow):
         self._page_heads = {
             0: ("Status", "What the recorder is doing right now, and the last few takes."),
             1: ("Activity", "Every take with its verdict and the reason, plus the live log."),
-            2: ("Library", "Your filed songs, what each one is still missing, and the editor."),
+            2: ("Library", "Your filed songs and the albums they come from, what each one is still missing, and the "
+                           "editor."),
             3: ("Settings", "Folders, capture, format, rules and how the app behaves."),
             4: ("Setup check", "Automatic checks of this PC, plus the Spotify settings to confirm by eye."),
             5: ("Set up", "Four short steps. Each shows whether it is done, and you can come back here any time."),
@@ -1234,6 +1261,25 @@ class MainWindow(QMainWindow):
             self.status.set_play_again(len(st.songs_to_play_again()))
         except Exception as e:
             self.activity.summary.setText(f"could not read the index: {e}")
+        self.refresh_wanted()
+
+    def refresh_wanted(self) -> None:
+        try:
+            found = albums.build(Store(self.cfg.paths.db_path))
+        except Exception:
+            log.exception("could not count the albums")
+            return
+        self.status.set_wanted(len(albums.wanted_list(found, self.cfg.albums.wanted_min_songs)))
+
+    @Slot()
+    def show_wanted(self) -> None:
+        from .wanted import WantedDialog
+        dlg = WantedDialog(self)
+        dlg.exec()
+        dlg.deleteLater()
+        self.refresh_wanted()
+        if self.library.showing_albums():
+            self.library.reload_albums(read=False)
 
     @Slot()
     def show_play_again(self) -> None:
@@ -1264,6 +1310,7 @@ class MainWindow(QMainWindow):
         c.rules.harvest_mode = s.ck_harvest.isChecked()
         c.identify.jiosaavn_credits = s.ck_jiosaavn.isChecked()
         c.rules.keep_discards_days = s.sp_keep.value()
+        c.albums.wanted_min_songs = s.sp_wanted.value()
         if self.status.btn_harvest.isChecked() != c.rules.harvest_mode:
             self.status.btn_harvest.setChecked(c.rules.harvest_mode)
         c.quality.upgrade_on_higher_tier = s.ck_upgrade.isChecked()
@@ -1281,6 +1328,9 @@ class MainWindow(QMainWindow):
             s.saved.setText("Saved. Capture settings take effect the next time you press Start.")
         else:
             s.saved.setText("Saved.")
+        self.refresh_wanted()
+        if self.library.showing_albums():
+            self.library.reload_albums(read=False)
 
     def _login_command(self) -> str:
         return shortcuts.login_command(self.config_path, minimized=self.cfg.app.start_minimized)
@@ -1395,9 +1445,9 @@ class MainWindow(QMainWindow):
         from .playlist_dialog import PlaylistDialog
         PlaylistDialog(self).exec()
 
-    def start_playlist(self, uri: str, name: str) -> None:
+    def start_playlist(self, uri: str, name: str, keep_file: bool = True) -> None:
         self.status.job_line.setText(f"Starting {name} in Spotify...")
-        if not self.ask_recorder(lambda rec: rec.start_job(uri, name), -1):
+        if not self.ask_recorder(lambda rec: rec.start_job(uri, name, keep_file), -1):
             self.status.job_line.setText("Start the recorder first.")
 
     def _job_failed(self, token: int, result, error: str) -> None:
@@ -1504,6 +1554,7 @@ class MainWindow(QMainWindow):
             st.tiles["inbox"].setText(str(max(0, int(st.tiles["inbox"].text() or 0) - 1)))
             st.tiles["library"].setText(str(int(st.tiles["library"].text() or 0) + 1))
             self.library.reload()
+            self.refresh_wanted()
         elif kind == "duplicate":
             rel = ev.get("path", "")
             try:

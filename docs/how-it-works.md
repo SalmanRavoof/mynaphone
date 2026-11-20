@@ -227,6 +227,30 @@ A car's player may want something else. Mazda Connect, as its owners describe it
 reads playlist paths from the stick's root, with a leading backslash and no drive letter, which these
 files don't use yet.
 
+## Counting an album's songs
+
+Mynaphone counts each album against the edition you played. That's the Spotify album your songs came
+from, with Spotify's count of its songs.
+
+Spotify sometimes lists one album more than once. Metallica's Master of Puppets is there as the remastered
+album with 8 songs and as a deluxe box set with 137 songs. A game soundtrack can come from 2 labels.
+
+Listings whose names differ only by the words that tell editions apart count as one album when they share
+an album artist. The listing with the fewest songs is the one counted, so the extra songs of a bigger
+edition never count as missing. A dubbed album, such as Master (Telugu), and a film's background score
+keep counts of their own.
+
+When you open an album, Mynaphone reads its songs from Spotify through the recorder. It keeps the list in
+the index, so it can count the album while Spotify is closed.
+
+Each song counts as yours when the library has it from any release. Mynaphone matches it the same way it
+skips a song you already have, by its Spotify id or the ids of its other releases, then by its ISRC, then
+by artist, title and length. For songs the library doesn't know by their Spotify ids, it asks Spotify for
+their ISRCs first. That's how a song you recorded from a single counts toward its album.
+
+An album you don't have every song of goes on the Wanted list once you have 3 of its songs from any of
+its listings, or when you add it yourself.
+
 ## Tracking what is still missing
 
 Each library song keeps 3 records: the identity that was found, the fields a person typed, which are

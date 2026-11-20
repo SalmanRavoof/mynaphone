@@ -185,6 +185,33 @@ const d = sent.find(m => m.type === "track_details");
 assert.equal(d.info.isrc, "QMBZ1");
 assert.ok(fetches.some(f => f[1]["Spotify-App-Version"] === "1.2.93.666"), "the client's own headers");
 
+// an album's songs come from the album page's GraphQL query, whose list was called tracks before tracksV2
+const albumItems = Array.from({ length: 12 }, (_, i) => ({ uid: `a${i}`, track: {
+  uri: `spotify:track:j${i}`, name: `Song ${i}`, trackNumber: i + 1, discNumber: 1,
+  duration: { totalMilliseconds: 180000 + i }, playability: { playable: i !== 4 },
+  artists: { items: [{ uri: "spotify:artist:ar", profile: { name: "Anirudh Ravichander" } }] } } }));
+Spicetify.GraphQL.Definitions.queryAlbumTracks = { name: "queryAlbumTracks" };
+Spicetify.GraphQL.Request = async (q, v) => ({ data: { albumUnion: { tracks: {
+  totalCount: 12, items: albumItems.slice(v.offset, v.offset + v.limit) } } } });
+r = await command({ id: 8, do: "tracks", uri: "spotify:album:jailer2" });
+assert.ok(r.ok, r.error);
+assert.equal(r.result.tracks.length, 12);
+assert.equal(r.result.tracks[4].playable, false);
+assert.equal(r.result.tracks[11].track_number, 12);
+assert.equal(r.result.tracks[0].artists[0], "Anirudh Ravichander");
+assert.equal(r.result.tracks[0].album.uri, "spotify:album:jailer2");
+Spicetify.GraphQL.Request = async () => ({ errors: [{ message: "album not found" }] });
+r = await command({ id: 9, do: "tracks", uri: "spotify:album:gone" });
+assert.equal(r.ok, false); assert.match(r.error, /album not found/);
+delete Spicetify.GraphQL.Definitions.queryAlbumTracks;
+r = await command({ id: 10, do: "tracks", uri: "spotify:album:jailer2" });
+assert.equal(r.ok, false); assert.match(r.error, /queryAlbumTracks/);
+
+// and the ISRCs of the album's songs, from the metadata service
+r = await command({ id: 11, do: "isrcs", uris: ["spotify:track:j1", "spotify:album:not-a-song"] });
+assert.ok(r.ok, r.error);
+assert.equal(JSON.stringify(r.result.isrcs), JSON.stringify({ "spotify:track:j1": "QMBZ1" }));
+
 r = await command({ id: 7, do: "nonsense" });
 assert.equal(r.ok, false);
 console.log("extension: all checks passed");

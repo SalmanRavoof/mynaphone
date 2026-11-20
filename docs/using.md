@@ -64,6 +64,25 @@ pointed at the right songs.
 
 The warning below about sleep applies here too.
 
+## Finish an album
+
+Mynaphone counts how many of each album's songs you have, and keeps a Wanted list of the albums you're
+nearest to finishing. Recording the missing songs needs the [Spotify bridge](install.md) connected.
+
+1. On the **Status** page, press the button beside **Record a playlist**, such as **47 wanted albums**.
+2. Pick an album. The ones with the fewest songs left to record are at the top. On the right, Mynaphone
+   reads the album's songs from Spotify and marks each one as in your library, missing, or one Spotify
+   can't play where you are.
+3. Press **Record the missing songs**. Spotify plays the album from the first song you don't have and
+   jumps past the ones you have, the same way **Record a playlist** does.
+
+An album goes on the Wanted list once you have 3 of its songs. To add one with fewer, open it in the
+**Albums** view of the **Library** page and press **Want this album**.
+
+**Take it off the Wanted list** keeps an album off the list until you add it again. You can change how
+many songs that takes in Settings, under **Wanted list**. The [album counts](how-it-works.md#counting-an-albums-songs)
+section explains how Mynaphone tells which songs of an album you have.
+
 ## Record a playlist unattended with harvest mode
 
 Harvest mode tells Spotify to skip any song that is already archived, so a long playlist captures

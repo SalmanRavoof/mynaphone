@@ -1,6 +1,7 @@
 # Copyright (C) 2026 Salman Ravoof
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Library page: every filed song, what it is missing, and an editor to fix things by hand."""
+"""Library page: every filed song, what it is missing, and an editor to fix things by hand. Its Albums view lists
+the albums those songs come from, with how many of each album's songs you have."""
 from __future__ import annotations
 
 import json
@@ -11,6 +12,7 @@ from PySide6.QtCore import Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QBrush, QColor, QPixmap
 from PySide6.QtWidgets import (
     QApplication,
+    QButtonGroup,
     QCheckBox,
     QComboBox,
     QFileDialog,
@@ -25,15 +27,17 @@ from PySide6.QtWidgets import (
     QPushButton,
     QScrollArea,
     QSplitter,
+    QStackedWidget,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
     QWidget,
 )
 
-from .. import metadata
+from .. import albums as A, metadata
 from ..store import Store
 from . import theme
+from .album_panel import AlbumPanel, AlbumTable
 
 
 def label(text: str, name: str | None = None, wrap: bool = False) -> QLabel:
@@ -89,6 +93,8 @@ class LibraryPage(QWidget):
         self.win = win
         self.rows: dict[int, dict] = {}
         self.current_id: int | None = None
+        self.albums: list[A.Album] = []
+        self.current_album: str | None = None   # the album shown, by the Spotify id it's counted against
         self.worker: _RefreshWorker | None = None
         self._new_cover: tuple[bytes, str] | None = None
 
@@ -104,7 +110,19 @@ class LibraryPage(QWidget):
         ll = QVBoxLayout(left)
         ll.setContentsMargins(18, 16, 18, 16)
         head = QHBoxLayout()
-        head.addWidget(label("Songs", "h2"))
+        head.setSpacing(0)
+        self.btn_songs = QPushButton("Songs")
+        self.btn_songs.setToolTip("Your songs, with the details each one is still missing.")
+        self.btn_albums = QPushButton("Albums")
+        self.btn_albums.setToolTip("The albums your songs come from, with how many of each album's songs you have.")
+        self.views = QButtonGroup(self)
+        for i, b in enumerate((self.btn_songs, self.btn_albums)):
+            b.setCheckable(True)
+            b.setMinimumWidth(84)
+            self.views.addButton(b, i)
+            head.addWidget(b)
+        self.btn_songs.setChecked(True)
+        self.views.idToggled.connect(self._view_toggled)
         head.addStretch(1)
         self.btn_export = QPushButton("Export to USB")
         self.btn_export.clicked.connect(self.export_usb)
@@ -119,6 +137,11 @@ class LibraryPage(QWidget):
         self.only_incomplete.toggled.connect(self.reload)
         self.only_incomplete.setToolTip("List only songs with missing metadata.")
         sub.addWidget(self.only_incomplete)
+        self.only_partial = QCheckBox("Incomplete")
+        self.only_partial.toggled.connect(lambda _on: self.reload_albums())
+        self.only_partial.setToolTip("List only the albums you don't have every song of.")
+        self.only_partial.hide()
+        sub.addWidget(self.only_partial)
         ll.addLayout(sub)
         self.table = _WrapTable(0, 2)
         self.table.setHorizontalHeaderLabels(["Song", "Missing"])
@@ -136,7 +159,12 @@ class LibraryPage(QWidget):
         self.table.setAlternatingRowColors(True)
         self.table.setWordWrap(True)
         self.table.itemSelectionChanged.connect(self._selected)
-        ll.addWidget(self.table, 1)
+        self.album_table = AlbumTable()
+        self.album_table.itemSelectionChanged.connect(self._album_selected)
+        self.lists = QStackedWidget()
+        self.lists.addWidget(self.table)
+        self.lists.addWidget(self.album_table)
+        ll.addWidget(self.lists, 1)
         split.addWidget(left)
 
         # right: editor
@@ -229,7 +257,17 @@ class LibraryPage(QWidget):
         rl.addWidget(self.status)
         rl.addStretch(1)
         right.setWidget(body)
-        split.addWidget(right)
+        album_side = QScrollArea()
+        album_side.setWidgetResizable(True)
+        album_side.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.album_panel = AlbumPanel(win)
+        self.album_panel.setMinimumWidth(0)
+        self.album_panel.changed.connect(self._album_changed)
+        album_side.setWidget(self.album_panel)
+        self.sides = QStackedWidget()
+        self.sides.addWidget(right)
+        self.sides.addWidget(album_side)
+        split.addWidget(self.sides)
         split.setStretchFactor(0, 4)
         split.setStretchFactor(1, 5)
         split.setSizes([400, 560])
@@ -241,8 +279,25 @@ class LibraryPage(QWidget):
 
     # -- list ------------------------------------------------------------------------------
 
+    @Slot(int, bool)
+    def _view_toggled(self, view: int, on: bool) -> None:
+        if not on:
+            return
+        albums = view == 1
+        self.lists.setCurrentIndex(view)
+        self.sides.setCurrentIndex(view)
+        self.only_incomplete.setVisible(not albums)
+        self.only_partial.setVisible(albums)
+        self.reload()
+
+    def showing_albums(self) -> bool:
+        return self.views.checkedId() == 1
+
     @Slot()
     def reload(self) -> None:
+        if self.showing_albums():
+            self.reload_albums(read=False)
+            return
         try:
             st = Store(self.win.cfg.paths.db_path)
             rows = st.library_rows(only_incomplete=self.only_incomplete.isChecked())
@@ -278,6 +333,30 @@ class LibraryPage(QWidget):
         QTimer.singleShot(0, self.table.fit)
         if keep is not None and keep in self.rows:
             self._load(keep)
+
+    def reload_albums(self, read: bool = True) -> None:
+        """List the albums and count each one again. With `read`, the album on show may be read from Spotify again."""
+        try:
+            self.albums = A.build(Store(self.win.cfg.paths.db_path))
+        except Exception as e:
+            self.summary.setText(f"could not read the index: {e}")
+            return
+        whole = sum(1 for a in self.albums if a.whole)
+        self.summary.setText(f"{len(self.albums)} albums, {whole} with every song")
+        self.album_table.fill([a for a in self.albums if not (self.only_partial.isChecked() and a.whole)],
+                              self.current_album)
+        album = A.find(self.albums, self.current_album) if self.current_album else None
+        self.album_panel.show_album(album, read=read)
+
+    def _album_selected(self) -> None:
+        uri = self.album_table.selected_uri()
+        if uri is not None:
+            self.current_album = uri
+            self.album_panel.show_album(A.find(self.albums, uri))
+
+    def _album_changed(self) -> None:
+        self.reload_albums(read=False)
+        self.win.refresh_wanted()
 
     def _selected(self) -> None:
         items = self.table.selectedItems()

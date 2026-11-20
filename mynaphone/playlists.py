@@ -31,8 +31,13 @@ def artist_text(track: dict) -> str:
 
 def match(store: Store, track: dict):
     """The library's copy of a playlist song, or None. Inbox songs count as not there yet."""
-    row = store.find_archived(artist_text(track), track.get("name", ""), int(track.get("duration_ms") or 0),
-                              track.get("uri") or None)
+    duration = int(track.get("duration_ms") or 0)
+    row = store.find_archived(artist_text(track), track.get("name", ""), duration, track.get("uri") or None,
+                              isrc=track.get("isrc") or None)
+    artists = [a for a in track.get("artists") or [] if a]
+    if row is None and len(artists) > 1:
+        # Spotify's media session names only a song's first artist, and the library keeps that name to match on
+        row = store.find_archived(artists[0], track.get("name", ""), duration)
     if row is None or row["state"] != "library" or not row["file_path"]:
         return None
     return row

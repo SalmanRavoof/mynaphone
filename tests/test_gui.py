@@ -831,3 +831,111 @@ def test_record_a_playlist_from_the_status_page(window, monkeypatch):
     assert window.status.btn_playlist.text() == "Record a playlist" and window.job is None
     assert window.status.job_line.text() == \
         "Car Songs: done. 1 song saved, 1 didn't record (they're on the list to play again)."
+
+
+# -- albums ----------------------------------------------------------------------------------
+
+def _fake_spotify(window, monkeypatch, songs_of):
+    """Stand in for the recorder reading an album's songs from Spotify. Returns the albums it was asked for."""
+    import asyncio
+    asked = []
+
+    class Recorder:
+        async def check_playlist(self, uri):
+            asked.append(uri)
+            tracks = songs_of(uri)
+            Store(window.cfg.paths.db_path).save_album_tracks(uri, tracks)
+            return {"uri": uri, "tracks": tracks}
+
+    def ask(make, token):
+        window.worker_answer.emit(token, asyncio.run(make(Recorder())), "")
+        return True
+
+    monkeypatch.setattr(window, "ask_recorder", ask)
+    return asked
+
+
+def test_library_albums_view_counts_each_album(window, monkeypatch):
+    from tests.test_albums import _song, _tracks, _uri
+    st = Store(window.cfg.paths.db_path)
+    leo = ["Naa Ready", "Badass", "Ordinary Person", "Villain Yaaru", "I'm Scared", "Bloody Sweet", "Anbenum"]
+    for i in range(5):
+        _song(st, window.cfg, _uri("spotify:album:leo", i), leo[i], "spotify:album:leo", "Leo", 7, i + 1)
+    for i in range(3):
+        _song(st, window.cfg, _uri("spotify:album:kal", i), f"Song {i}", "spotify:album:kal", "Kalari", 3, i + 1,
+              artists=("Hanumankind",))
+    lib = window.library
+    window.nav.setCurrentRow(2)
+    lib.btn_albums.click()
+    assert lib.lists.currentWidget() is lib.album_table and lib.sides.currentIndex() == 1
+    assert lib.only_partial.isVisible() and not lib.only_incomplete.isVisible()
+    t = lib.album_table
+    assert [(t.item(r, 0).text(), t.item(r, 1).text()) for r in range(t.rowCount())] == [
+        ("Anirudh Ravichander - Leo", "5 of 7"), ("Hanumankind - Kalari", "3 of 3")]
+    assert lib.summary.text() == "2 albums, 1 with every song"
+    lib.only_partial.setChecked(True)
+    assert t.rowCount() == 1
+    asked = _fake_spotify(window, monkeypatch, lambda uri: _tracks(uri, leo))
+    t.selectRow(0)
+    panel = lib.album_panel
+    assert asked == ["spotify:album:leo"]
+    assert panel.title.text() == "Leo" and panel.facts.text() == "Album  ·  2023  ·  Anirudh Ravichander"
+    assert panel.count.text() == "You have 5 of its 7 songs."
+    assert panel.wanted.text() == "It's on your Wanted list, since you have 3 or more of its songs."
+    assert [panel.table.item(r, 2).text() for r in range(panel.table.rowCount())] == \
+        ["In your library"] * 5 + ["Missing"] * 2
+    assert window.status.btn_wanted.text() == "1 wanted album"
+    panel.toggle_wanted()
+    assert panel.wanted.text() == "You took it off your Wanted list." and panel.btn_want.text() == "Want this album"
+    assert window.status.btn_wanted.text() == "Wanted albums"
+    started = []
+    monkeypatch.setattr(window, "start_playlist", lambda uri, name, keep_file=True: started.append((uri, name,
+                                                                                                    keep_file)))
+    assert panel.btn_record.isEnabled()
+    panel.record()
+    assert started == [("spotify:album:leo", "Leo", False)] and not panel.btn_record.isEnabled()
+    lib.btn_songs.click()
+    assert lib.lists.currentWidget() is lib.table and lib.only_incomplete.isVisible()
+
+
+def test_wanted_albums_open_from_the_status_page(window, monkeypatch):
+    from PySide6.QtWidgets import QDialog
+
+    from mynaphone.gui import wanted
+    from tests.test_albums import _song, _uri
+    st = Store(window.cfg.paths.db_path)
+
+    def album(uri, name, total, have):
+        for i in range(have):
+            _song(st, window.cfg, _uri(uri, i), f"{name} {i}", uri, name, total, i + 1)
+
+    album("spotify:album:bg3", "Baldur's Gate 3", 43, 38)
+    album("spotify:album:div", "Divinity", 42, 41)
+    album("spotify:album:petta", "Petta", 11, 2)
+    window.refresh_wanted()
+    assert window.status.btn_wanted.text() == "2 wanted albums"
+    monkeypatch.setattr(window, "ask_recorder", lambda make, token: False)          # the recorder isn't running
+    dlg = wanted.WantedDialog(window)
+    assert [dlg.table.item(r, 0).text() for r in range(dlg.table.rowCount())] == [
+        "Anirudh Ravichander - Divinity", "Anirudh Ravichander - Baldur's Gate 3"]
+    assert dlg.summary.text().startswith("2 albums, 6 songs to record, about ")
+    assert dlg.panel.title.text() == "Divinity"                                    # the nearest to whole, on show
+    assert "start the recorder" in dlg.panel.note.text()
+    started = []
+    monkeypatch.setattr(window, "start_playlist", lambda uri, name, keep_file=True: started.append((uri, name,
+                                                                                                    keep_file)))
+    dlg.panel.record()
+    assert started == [("spotify:album:div", "Divinity", False)] and dlg.result() == QDialog.Accepted
+    dlg.deleteLater()
+    dlg = wanted.WantedDialog(window)
+    dlg.panel.toggle_wanted()                                                      # take Divinity off
+    assert dlg.table.rowCount() == 1 and dlg.panel.title.text() == "Baldur's Gate 3"
+    dlg.deleteLater()
+    st.set_wanted("spotify:album:petta", True)                                     # Want this album
+    window.settings.sp_wanted.setValue(0)
+    monkeypatch.setattr(window, "_set_login_item", lambda enabled: None)          # leave the real startup list alone
+    monkeypatch.setattr(window, "_set_shortcut", lambda place, enabled: None)
+    window.save_settings()
+    assert window.cfg.albums.wanted_min_songs == 0
+    assert window.status.btn_wanted.text() == "1 wanted album"                    # only the album you added
+    assert wanted.intro_text(0).startswith("The albums you added, with the nearest to whole at the top.")

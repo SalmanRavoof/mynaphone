@@ -6,6 +6,16 @@ All notable changes to Mynaphone are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- Album counts. The Library page has an **Albums** view that lists the albums your songs come from,
+  with how many of each album's songs you have, such as 5 of 7. **Incomplete** lists only the albums
+  you don't have whole. Mynaphone counts each album against the edition you played, and the extra
+  songs of a bigger edition never count as missing.
+- A Wanted list, opened from the Status page. It holds the albums you have 3 or more songs from, and
+  any you add with **Want this album**, nearest to whole first. Pick one to see its missing songs,
+  which Mynaphone reads from Spotify through the bridge. **Record the missing songs** then plays them
+  in Spotify and records them. You can change how many songs it takes in Settings.
+- The Spotify bridge gives the ISRCs of an album's songs, so a song you have from its single or
+  another edition counts toward the album. Install the extension again to get it.
 - A warning when Spotify says it's playing and no sound reaches Mynaphone. Once a song has played for
   15 seconds in silence, Mynaphone tells you why and what to do in a card at the top of the Status
   page, and Windows shows one notification. It tells apart Spotify Connect playing on another device,
@@ -89,7 +99,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (246 tests).
+- Test suite (273 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -141,6 +151,9 @@ All notable changes to Mynaphone are listed here. The format follows
   Library page goes on the film's other songs too.
   New songs take their film's album artist when they're filed. Songs filed earlier are re-tagged,
   and each change is written to `album-artists.json` next to the index.
+- Record a playlist no longer goes back at the end to a song the recorder already has from another
+  release. It also knows such a song when several artists sing it, since Spotify's media session
+  gives the recorder only the first artist's name, so it jumps past the song before it plays.
 - Opening Mynaphone while it was quitting brought back the window of the copy that was quitting,
   which then closed with it, so nothing kept recording. The new launch now waits for that copy to
   close and then opens.
