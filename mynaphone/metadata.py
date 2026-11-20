@@ -12,7 +12,7 @@ import json
 import logging
 from pathlib import Path
 
-from . import genres, identify, lyrics as lyr, tools
+from . import films, genres, identify, lyrics as lyr, tools
 from .config import Config
 from .identify import Identity
 from .library import classify, place, resolve_cover, tag, write_lyrics_sidecar
@@ -168,6 +168,7 @@ def refresh_track(cfg: Config, store: Store, row, lookup: bool = True, manual: d
     if identify.looks_like_count(ident.album):
         ident.album = ""
         ident.release_type = ident.release_type or "single"
+    ident.album_credit = ident.album_credit or ident.album_artist      # its own release's, before an edit or its film's
     apply_manual(ident, manual_all)
 
     cover, lyrics_text = read_file_extras(path)
@@ -194,6 +195,26 @@ def refresh_track(cfg: Config, store: Store, row, lookup: bool = True, manual: d
         lyr_state = "instrumental"
 
     kind = manual_all.get("kind") or classify(ident)
+    rows = None
+    target = path
+    if move:
+        pl = place(ident)
+        if manual_all.get("kind"):
+            pl.kind = manual_all["kind"]
+            pl = _place_with_kind(ident, manual_all["kind"])
+        if pl.kind == "soundtrack":
+            # a song gathered in its film's folder stays there
+            rows = films.soundtrack_rows(store)
+            into = films.folder_for(cfg.paths.library_dir, rows, ident.album, ident.title, ident.year)
+            if into is not None:
+                pl = films.in_folder(pl, ident, into)
+        target = cfg.paths.library_dir / pl.rel_dir / f"{pl.filename}{path.suffix}"
+    folder = films.film_folder(cfg.paths.library_dir, target)
+    if folder is not None and not manual_all.get("album_artist"):
+        # a film's songs share one album artist, so a lookup can't give this one its release's again
+        rows = films.soundtrack_rows(store) if rows is None else rows
+        films.take_album_artist(ident, films.album_artist_for(cfg.paths.library_dir, rows, folder,
+                                                              films.credit_from(ident), int(row["id"])))
     capture = {"source_app": row["source_app"] or "", "source_uri": row["source_uri"] or "",
                "quality_tier": row["quality_tier"] or "", "captured_at": row["created_at"] or "", "kind": kind}
     tag(path, ident, cover, lyrics_text, capture)
@@ -205,29 +226,16 @@ def refresh_track(cfg: Config, store: Store, row, lookup: bool = True, manual: d
             pass
 
     new_path = path
-    if move:
-        pl = place(ident)
-        if manual_all.get("kind"):
-            pl.kind = manual_all["kind"]
-            pl = _place_with_kind(ident, manual_all["kind"])
-        if pl.kind == "soundtrack":
-            # a song gathered in its film's folder stays there
-            from . import films
-            into = films.folder_for(cfg.paths.library_dir, films.soundtrack_rows(store), ident.album, ident.title,
-                                    ident.year)
-            if into is not None:
-                pl = films.in_folder(pl, ident, into)
-        target = cfg.paths.library_dir / pl.rel_dir / f"{pl.filename}{path.suffix}"
-        if target != path:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            if target.exists():
-                target.unlink()
-            path.rename(target)
-            lrc = path.with_suffix(".lrc")
-            if lrc.exists():
-                lrc.rename(target.with_suffix(".lrc"))
-            new_path = target
-            _prune_empty(path.parent, cfg.paths.library_dir)
+    if target != path:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if target.exists():
+            target.unlink()
+        path.rename(target)
+        lrc = path.with_suffix(".lrc")
+        if lrc.exists():
+            lrc.rename(target.with_suffix(".lrc"))
+        new_path = target
+        _prune_empty(path.parent, cfg.paths.library_dir)
 
     missing = missing_fields(ident, cover is not None, lyr_state)
     store.conn.execute(

@@ -177,7 +177,8 @@ wrongly moves to the right place when you press **Look up again** on the Library
 The singers go in the artist tag, and the music director goes in the album-artist and composer
 tags. A soundtrack is filed by album, so every song from a film stays in one folder under
 `Soundtracks` whoever sings it, and a player that groups by album artist shows the film under its
-composer.
+composer. When a film's releases credit it differently, its songs share the names every credit has, so
+"Himesh Reshammiya & Sameer" and "Himesh Reshammiya" both become "Himesh Reshammiya".
 
 ### Why are ordinary YouTube videos ignored?
 

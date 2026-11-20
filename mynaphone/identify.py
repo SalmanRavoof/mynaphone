@@ -35,6 +35,7 @@ class Identity:
     artists: list[str] = field(default_factory=list)
     album: str = ""
     album_artist: str = ""
+    album_credit: str = ""              # the album artist its own release credits, before its film's replaces it
     year: int = 0
     date: str = ""
     track_number: int = 0
@@ -261,6 +262,7 @@ def choose(result: dict, hint_album: str = "", hint_track: int = 0, hint_artist:
                     ident.mb_recording_id = rec.get("id", "")
                     ident.album = rel.get("title", "") or rg.get("title", "")
                     ident.album_artist = _join_artists(rg.get("artists")) or ident.artist
+                    ident.album_credit = ident.album_artist
                     d = rel.get("date") or {}
                     if d.get("year"):
                         ident.year = int(d["year"])
@@ -325,6 +327,7 @@ def from_tags(meta: dict) -> Identity:
                      or [ident.artist])
     ident.album = "" if looks_like_count(meta.get("album", "")) else meta.get("album", "")
     ident.album_artist = meta.get("album_artist", "") or ident.artist
+    ident.album_credit = ident.album_artist
     ident.track_number = int(meta.get("track_number") or 0)
     ident.disc_number = int(meta.get("disc_number") or 0)
     if looks_like_soundtrack(ident.album, ident.title):
@@ -652,6 +655,7 @@ def from_youtube(meta: dict) -> Identity | None:
             elif ident.album_artist:
                 ident.composers = [ident.album_artist]
         ident.album_artist = ident.album_artist or ident.artist
+        ident.album_credit = ident.album_artist
         if not ident.year and str(m.get("year") or info.get("year") or "").isdigit():
             ident.year = int(m.get("year") or info.get("year"))
         if ident.year and not ident.date:
@@ -719,6 +723,7 @@ def enrich_from_musicbrainz(ident: Identity, contact: str = "", shown_artist: st
         if rel:
             ident.album = rel["title"] or ident.album
             ident.album_artist = rel["artist"] or ident.album_artist
+            ident.album_credit = rel["artist"] or ident.album_credit
             ident.album_artist_sort = rel["artist_sort"]
             ident.mb_album_artist_ids = rel["artist_ids"]
             ident.date = rel["date"] or ident.date

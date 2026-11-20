@@ -161,6 +161,16 @@ as vocal performers, the app swaps the singers into the artist tag itself, as lo
 the singers and none of the credited artists. A band keeps its name that way, since Spotify shows
 Metallica, not James Hetfield. Backing and choir singers never go into the artist tag.
 
+All the songs in a film's folder share one album artist. A film's releases on MusicBrainz often credit it
+differently. One release of Aashiq Banaya Aapne credits "Himesh Reshammiya & Sameer" and another credits
+"Himesh Reshammiya", and a player that groups by album artist would show the film twice. So each song gets
+the names every song's credit has, usually the music director, and all of Aashiq Banaya Aapne's songs say
+"Himesh Reshammiya". The album artist's sort name and MusicBrainz ids go with it, so a player that sorts by
+the sort name keeps the film together too. "Various Artists" counts only when no song names people, and an
+album artist you type in the Library editor goes on the film's other songs too. A new song takes its film's album artist when it's
+filed. If it names fewer of those people, the whole film keeps the ones they share. Each change to a song
+filed earlier is written to `album-artists.json` next to the index.
+
 Tags follow [MusicBrainz Picard's tag mapping](https://picard-docs.musicbrainz.org/en/latest/appendices/tag_mapping.html),
 so other players and taggers understand them. [mutagen](https://github.com/quodlibet/mutagen) writes them.
 

@@ -39,7 +39,7 @@ def test_choose_reads_release_track_and_types():
     ident = choose(ACOUSTID, hint_album="Mersal (Original Motion Picture Soundtrack)", hint_title="Neethanae")
     assert ident.source == "acoustid" and ident.score == pytest.approx(0.97)
     assert ident.artist == "A. R. Rahman & Shreya Ghoshal"
-    assert ident.album_artist == "A. R. Rahman"
+    assert ident.album_artist == ident.album_credit == "A. R. Rahman"     # the credit stays when its film's replaces it
     assert ident.year == 2017 and ident.date == "2017-08-20"
     assert ident.track_number == 3 and ident.track_total == 4 and ident.disc_number == 1
     assert ident.is_soundtrack and ident.release_type == "album"
@@ -72,7 +72,7 @@ def test_from_tags_uses_spotify_extras_and_composer_fallback():
     }
     i = from_tags(meta)
     assert i.source == "spotify" and i.year == 2019 and i.track_total == 5
-    assert i.is_soundtrack and i.composers == ["A.R. Rahman"]
+    assert i.is_soundtrack and i.composers == ["A.R. Rahman"] and i.album_credit == "A.R. Rahman"
     assert i.isrc == "INX" and i.explicit is False and i.popularity == 55 and i.label == "Sony"
 
 

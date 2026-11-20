@@ -75,7 +75,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (201 tests).
+- Test suite (206 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -108,6 +108,16 @@ All notable changes to Mynaphone are listed here. The format follows
   `SUPPORT.md` says where to get help.
 
 ### Fixed
+- A film whose songs matched 2 of its MusicBrainz releases showed up twice in a player that groups
+  by album artist, since each song kept its own release's credit. On November 20, 2026, 9 films did,
+  among them Aashiq Banaya Aapne under "Himesh Reshammiya & Sameer" and "Himesh Reshammiya". A
+  film's songs now share the names all their credits have, usually the music director, so all of
+  Aashiq Banaya Aapne's songs say "Himesh Reshammiya". The sort name and MusicBrainz ids that go
+  with that name come along, so a player that sorts by the sort name keeps the film together too.
+  "Various Artists" counts only when no song names people, and an album artist you type on the
+  Library page goes on the film's other songs too.
+  New songs take their film's album artist when they're filed. Songs filed earlier are re-tagged,
+  and each change is written to `album-artists.json` next to the index.
 - Opening Mynaphone while it was quitting brought back the window of the copy that was quitting,
   which then closed with it, so nothing kept recording. The new launch now waits for that copy to
   close and then opens.
