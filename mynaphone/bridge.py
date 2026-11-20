@@ -49,12 +49,21 @@ class SpotifyState:
     context: str = ""             # the playlist, album or library the song plays from
     uid: str = ""                 # the song's place in that context
     provider: str = ""            # "context", or "queue" and "autoplay" when it comes from elsewhere
+    device: dict | None = None    # Spotify Connect's active device: name, type, isLocal
     received_at: float = 0.0      # monotonic
     client_ts: int = 0
 
     @property
     def artist_names(self) -> str:
         return ", ".join(a.get("name", "") for a in self.artists if a.get("name"))
+
+    @property
+    def remote_device(self) -> str:
+        """The device's name while Spotify Connect plays the song somewhere other than this PC, else ""."""
+        d = self.device or {}
+        if d.get("isLocal") is False:
+            return str(d.get("name") or "another device")
+        return ""
 
     # Spotify desktop bitrateLevel enum, as observed in Spicetify.Player.data.playbackQuality.
     # Free accounts top out at 3 (High, ~160 kbps Vorbis); Premium 4 (Very High, ~320); 5/6 lossless.
@@ -311,6 +320,7 @@ class Bridge:
                     context=msg.get("context", "") or "",
                     uid=msg.get("uid", "") or "",
                     provider=msg.get("provider", "") or "",
+                    device=msg.get("device") if isinstance(msg.get("device"), dict) else None,
                     received_at=time.monotonic(),
                     client_ts=int(msg.get("ts") or 0),
                 )

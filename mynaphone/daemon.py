@@ -13,14 +13,14 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import browsers, playlists, smtc as S
+from . import browsers, playlists, silence, smtc as S
 from .bridge import Bridge, BridgeError, BridgeEvent, SpotifyState, YouTubeEvent, YouTubeState
 from .capture import LoopbackCapture, ProcessCapture, Take
 from .config import Config
 from .postprocess import PostProcessor
 from .sessions import ForeignAudioMonitor, app_session_volume
 from .store import Store, tier_rank
-from .takes import TakeMeta, judge, longest_hole_ms, output_path, sidecar, tag_flac, trim, write_flac
+from .takes import TakeMeta, is_silent, judge, longest_hole_ms, output_path, sidecar, tag_flac, trim, write_flac
 
 log = logging.getLogger("mynaphone")
 
@@ -49,6 +49,7 @@ END_TAIL_SECONDS = 3.0   # audio kept past a track change; Spotify's sound trail
 TIMELINE_LOG_SECONDS = 20.0   # log each timeline reading this far into a take, to diagnose seek and stall flags
 COVER_WAIT_SECONDS = 5.0   # a media-session thumbnail read that takes longer won't finish
 COVER_RETRY_SECONDS = 3.0   # Spotify attaches the thumbnail a moment after the track change
+READING_GAP_MS = 5000   # Spotify's media session sends a timeline reading about every 4.5 s while it plays
 
 
 class Recorder:
@@ -89,6 +90,8 @@ class Recorder:
         self._covers: set[asyncio.Task] = set()     # thumbnail reads, each holding a media session
         self.job = None                             # a playlist being recorded (playlist_job.PlaylistJob)
         self._details_asked = False                 # the track-details backfill runs once per start
+        self.silence = silence.SilenceWatch(cfg.rules.silence_warning_seconds)
+        self._now_playing: dict[str, S.Snapshot] = {}   # each source app's latest media-session reading
         if self.bridge is not None:
             self.bridge.on_track_details = self._got_track_details
 
@@ -312,11 +315,18 @@ class Recorder:
     async def _on_smtc(self, ev: S.SmtcEvent) -> None:
         if ev.kind == "sessions":
             seen_source = False
+            present = set()
             for sess in self.smtc.sessions():
                 app = sess.source_app_user_model_id or ""
                 if self.cfg.rules.is_source(app):
                     seen_source = True
+                    present.add(app)
                     await self._handle(await S.snapshot(sess), "sessions", sess)
+            for app in [a for a in self._now_playing if a not in present]:
+                del self._now_playing[app]
+                ended = self.silence.quiet.get(app)
+                if self.silence.forget(app):
+                    self._quiet_ended(app, ended, "its player closed")
             if not seen_source and self.active:
                 await self._finish("session_gone")
             return
@@ -326,6 +336,8 @@ class Recorder:
         await self._handle(snap, ev.kind, ev.session)
 
     async def _handle(self, snap: S.Snapshot, kind: str, session) -> None:
+        if self.cfg.rules.is_source(snap.app):
+            self._now_playing[snap.app] = snap
         a = self.active
         if a and a.app.lower() == snap.app.lower() and snap.key != a.key and not self._is_blank(snap):
             # boundary: the session now reports a different track. Start the next take first, since it can only
@@ -738,6 +750,11 @@ class Recorder:
                 log.info("other apps made sound during the take (%s) but per-app capture kept it out",
                          ", ".join(report.apps))
         self.foreign.forget_before(take.t_begin)
+        # a no-sound warning stood for this app, and none of the take's own sound ever arrived
+        q = self.silence.quiet.get(a.app)
+        heard = getattr(a.capture, "last_sound_at", None)
+        if q is not None and q.cause and (heard is None or heard < take.t_begin + silence.TAIL_SECONDS):
+            flags["no_sound"] = q.cause
         wall_s = (take.t_end or time.monotonic()) - a.t_event
         if reason == "track_change" and wall_s < BLIP_SECONDS:
             # Spotify names the last song for a moment when you press play on the next one; that isn't a take
@@ -779,6 +796,8 @@ class Recorder:
                               cfg.capture.lead_margin_seconds + 1.5, cfg.rules.duration_tolerance_seconds)
         captured_s = len(audio) / float(take.rate)
         flags["hole_ms"] = longest_hole_ms(audio, take.rate)
+        if flags.get("no_sound"):
+            flags["silent"] = is_silent(audio)
         verdict = judge(meta, captured_s, wall_s, flags, cfg)
         verdict.trimmed_lead_ms = lead_ms
         root = cfg.paths.inbox_dir if verdict.keep else cfg.paths.discard_dir
@@ -860,6 +879,105 @@ class Recorder:
         if time.monotonic() - self._last_prune > 3600:
             self._last_prune = time.monotonic()
             self._prune_discards()
+        await self._watch_silence()
+
+    # -- playing but silent ----------------------------------------------------------------
+
+    async def _watch_silence(self) -> None:
+        """Warn when a source app plays a song and no sound reaches its capture (silence.py)."""
+        if self.silence.seconds <= 0:
+            return
+        for app, snap in list(self._now_playing.items()):
+            cap = self.capture_for(app)
+            playing, position = self._playing_now(snap)
+            standing = self.silence.quiet.get(app)
+            what = self.silence.step(app, snap.key, playing and not self.paused, position, cap)
+            if what == silence.QUIET:
+                await self._quiet_started(app, snap, cap)
+            elif what == silence.SOUND:
+                self._quiet_ended(app, standing, "sound came back")
+        now = time.monotonic()
+        for app, q in list(self.silence.quiet.items()):
+            if q.cause and now - q.checked >= silence.RECHECK_SECONDS:
+                await self._recheck_quiet(app, q)
+
+    def _playing_now(self, snap: S.Snapshot) -> tuple[bool, int]:
+        """Whether a source app is playing a song right now, and where in it (ms), for the silence watch. The position
+        is the player's own, so a stall stands still. For Spotify it's the media session's last reading, brought up to
+        now by one reading's gap at most, and for a browser the extension's, which goes quiet while a video loads. A
+        report Windows couldn't trace to a browser stands in for any of them, so a browser counts only while its song
+        records."""
+        if snap.status != S.PLAYING or self._is_blank(snap) or self.cfg.rules.is_ignored_title(snap.title):
+            return False, 0
+        if self._is_browser(snap.app):
+            yt = self.bridge.youtube_for(snap.app) if self.bridge is not None else None
+            a = self.active
+            if (yt is None or not yt.fresh or not yt.is_music or yt.paused or yt.ended or yt.seeking
+                    or a is None or a.app != snap.app):
+                return False, 0
+            ahead = min(max(time.monotonic() - yt.received_at, 0.0), 2.0)
+            return True, int((yt.position_s + ahead) * 1000)
+        if snap.app.lower().startswith("spotify") and self.bridge is not None and self.bridge.state.fresh:
+            st = self.bridge.state
+            if st.is_paused or st.is_buffering or st.is_ad:
+                return False, 0
+        if snap.last_updated is None:
+            return True, snap.position_ms
+        ahead = (dt.datetime.now(dt.timezone.utc) - snap.last_updated).total_seconds() * 1000.0
+        return True, snap.position_ms + int(min(max(ahead, 0.0), READING_GAP_MS))
+
+    async def _silence_cause(self, app: str, cap, q: silence.Quiet) -> tuple[str, str]:
+        """Why no sound arrives, and the Spotify Connect device when that's why. The surest causes come first."""
+        st = self.bridge.state if self.bridge is not None else None
+        spotify = st is not None and st.fresh and app.lower().startswith("spotify")
+        if spotify and st.remote_device:
+            return silence.CONNECT, st.remote_device
+        if cap is None or not cap.healthy:
+            return silence.CAPTURE, ""
+        # the Volume Mixer lookup can take seconds, so it waits on another thread
+        mixer = await self.loop.run_in_executor(None, app_session_volume, app)
+        if mixer is not None and (mixer[1] or mixer[0] < 0.005):
+            return silence.MUTED, ""
+        if spotify and st.volume is not None and st.volume < 0.005:
+            return silence.APP_VOLUME, ""
+        yt = self.bridge.youtube_for(app) if self.bridge is not None and self._is_browser(app) else None
+        if yt is not None and yt.fresh and (yt.muted or (yt.volume is not None and yt.volume < 0.005)):
+            return silence.APP_VOLUME, ""
+        last = getattr(cap, "last_audio_at", None)
+        if last is None or last < q.since:
+            return silence.NO_AUDIO, ""
+        return silence.SILENT_AUDIO, ""
+
+    async def _quiet_started(self, app: str, snap: S.Snapshot, cap) -> None:
+        q = self.silence.quiet[app]
+        q.title = snap.title
+        cause, device = await self._silence_cause(app, cap, q)
+        if self.silence.quiet.get(app) is not q:        # it ended while the cause was looked up
+            return
+        q.cause, q.device, q.checked = cause, device, time.monotonic()
+        log.warning("no sound from %s for %.0f s of %s: %s", app, self.silence.seconds, snap.title,
+                    silence.explain(cause, app, device))
+        self._emit_quiet(q, new=True)
+
+    async def _recheck_quiet(self, app: str, q: silence.Quiet) -> None:
+        cause, device = await self._silence_cause(app, self.capture_for(app), q)
+        q.checked = time.monotonic()
+        if self.silence.quiet.get(app) is q and (cause, device) != (q.cause, q.device):
+            q.cause, q.device = cause, device
+            log.info("still no sound from %s: %s", app, silence.explain(cause, app, device))
+            self._emit_quiet(q, new=False)
+
+    def _emit_quiet(self, q: silence.Quiet, new: bool) -> None:
+        self._emit("silence", app=q.app, cause=q.cause, device=q.device, title=q.title, new=new,
+                   headline=silence.headline(q.app), text=silence.explain(q.cause, q.app, q.device),
+                   tip=silence.tray_tip(q.app))
+
+    def _quiet_ended(self, app: str, q: silence.Quiet | None, why: str) -> None:
+        if q is None:
+            return
+        if q.cause:
+            log.info("the no-sound warning for %s ended after %.0f s: %s", app, time.monotonic() - q.since, why)
+        self._emit("sound", app=app)
 
     def _prune_discards(self) -> None:
         days = self.cfg.rules.keep_discards_days

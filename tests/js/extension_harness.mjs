@@ -72,6 +72,7 @@ const spicetifyBase = () => ({ CosmosAsync: { get: async () => ({}) }, GraphQL: 
   assert.ok(st.position >= 32000 && st.position < 33000, "position brought up to now: " + st.position);
   assert.equal(st.isPaused, false);
   assert.equal(st.context, "spotify:album:k3g");
+  assert.equal(st.device, null, "no device without Spotify's Connect API");
   // Spotify's player says when the song changes, since Spicetify's events come from its empty copy
   assert.ok(listeners.some(l => l[0] === "update"), "listens to Spotify's player");
   const n = states().length;
@@ -128,6 +129,7 @@ const { sent, socket, fetches } = await load(Spicetify);
 const st = sent.find(m => m.type === "state");
 assert.ok(st && st.isAd === true && st.context === "spotify:playlist:p" && st.provider === "ad", "ad state");
 assert.equal(st.spicetifyEmpty, false);
+assert.equal(JSON.stringify(st.device), JSON.stringify({ name: "", type: "", isLocal: true }), "this PC plays it");
 
 async function command(cmd) {
   const n = sent.length;
@@ -164,6 +166,14 @@ assert.ok(calls.some(c => c[0] === "P.setShuffle" && c[1] === false) && calls.so
 Spicetify.Platform.ConnectDevicesAPI.getActiveDevice = () => ({ isLocal: false });
 r = await command({ id: 4, do: "play", context: "spotify:playlist:p", uri: "spotify:track:t9" });
 assert.equal(r.ok, false); assert.match(r.error, /another device/);
+
+// Spotify Connect plays the song on another device: every state says which one
+Spicetify.Platform.ConnectDevicesAPI.getActiveDevice = () => ({ id: "d1", name: "Living Room", type: "Speaker",
+                                                                 isActive: true, isLocal: false });
+socket.onopen();
+await wait(10);
+assert.equal(JSON.stringify(sent.filter(m => m.type === "state").at(-1).device),
+             JSON.stringify({ name: "Living Room", type: "Speaker", isLocal: false }));
 
 r = await command({ id: 5, do: "pause" });
 assert.ok(r.ok && calls.some(c => c[0] === "pause"));

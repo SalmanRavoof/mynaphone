@@ -48,6 +48,9 @@ discard_on_foreign_audio = true
 foreign_audio_threshold_db = -120.0
 # Harvest mode: when a song that is already archived starts, skip Spotify to the next one.
 harvest_mode = false
+# Warn on the Status page, with one notification, when a song plays this many seconds and no sound
+# reaches Mynaphone. 0 turns the warning off.
+silence_warning_seconds = 15.0
 
 [bridge]
 # Local WebSocket the Spicetify extension connects to for exact track ids, quality tier and buffering.

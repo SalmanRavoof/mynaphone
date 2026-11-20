@@ -41,6 +41,7 @@ class Rules:
     discard_on_foreign_audio: bool = True
     foreign_audio_threshold_db: float = -120.0   # <= -100 means any sound at all
     harvest_mode: bool = False                   # skip songs already archived so a queue captures only new ones
+    silence_warning_seconds: float = 15.0        # warn when a song plays this long with no sound reaching us; 0 = off
 
     def is_source(self, app_id: str) -> bool:
         a = (app_id or "").lower()
@@ -152,7 +153,7 @@ class Config:
             keep_discards_days=self.rules.keep_discards_days,
             discard_on_foreign_audio=_b(self.rules.discard_on_foreign_audio),
             foreign_audio_threshold_db=self.rules.foreign_audio_threshold_db,
-            harvest_mode=_b(self.rules.harvest_mode),
+            harvest_mode=_b(self.rules.harvest_mode), silence_warning=self.rules.silence_warning_seconds,
             bridge_enabled=_b(self.bridge.enabled), bridge_port=self.bridge.port,
             upgrade=_b(self.quality.upgrade_on_higher_tier),
             lib_format=_s(self.library.format), aac_bitrate=self.library.aac_bitrate,
@@ -227,6 +228,9 @@ discard_on_foreign_audio = {discard_on_foreign_audio}
 foreign_audio_threshold_db = {foreign_audio_threshold_db}
 # Harvest mode: when a song that is already archived starts, skip Spotify to the next one.
 harvest_mode = {harvest_mode}
+# Warn on the Status page, with one notification, when a song plays this many seconds and no sound
+# reaches Mynaphone. 0 turns the warning off.
+silence_warning_seconds = {silence_warning}
 
 [bridge]
 # Local WebSocket the Spicetify extension connects to for exact track ids, quality tier and buffering.

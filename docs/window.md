@@ -25,6 +25,7 @@ The top card shows the song being recorded.
 
 | Part | What it shows or does |
 |---|---|
+| **Mynaphone can't hear Spotify** | A card above the others, shown when a song has played for 15 seconds and no sound has reached Mynaphone. It says the likely cause and what to do, and it goes away when sound comes back. See [the warning's causes](troubleshooting.md#mynaphone-cant-hear-spotify) |
 | State pill | Stopped, Listening, Recording or Paused |
 | Cover, title and artist | The song being recorded, with its album. With no song, the myna mark in the recorder's state |
 | Progress line and time | How far into the song the take is, against the song's length |
@@ -191,6 +192,10 @@ the recorder's state.
 | <img src="../mynaphone/gui/assets/mark/png/paused/mynaphone-paused-tile-32.png" width="24" alt="Myna icon, paused"> | Paused |
 
 Click the icon to show or hide the window. Right-click it for the menu.
+
+When Mynaphone can't hear a song, Windows shows one notification with the cause, and until sound
+comes back the icon's tooltip reads **Mynaphone can't hear Spotify**. Click the notification to open
+the window.
 
 ![The tray menu](images/tray-menu.png)
 

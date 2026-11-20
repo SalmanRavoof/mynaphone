@@ -30,6 +30,7 @@ import numpy as np
 log = logging.getLogger("mynaphone.capture")
 
 HELPER = Path(__file__).resolve().parent.parent / "tools" / "mynaphone-capture.exe"
+SOUND = 10 ** (-80 / 20)    # -80 dBFS: quieter is what a player sends while it waits or is paused (takes.HOLE)
 
 
 @dataclass
@@ -66,9 +67,15 @@ class _RingCapture:
         self._lock = threading.Lock()
         self._take: Take | None = None
         self._tails: list[Take] = []      # ended takes still collecting their tail
+        # for the playing-but-silent check (silence.py): monotonic times of the last audio and the last sound
+        self.last_audio_at: float | None = None
+        self.last_sound_at: float | None = None
 
     def _push(self, chunk: np.ndarray, glitch: bool = False) -> None:
         now = time.monotonic()
+        self.last_audio_at = now
+        if len(chunk) and float(np.max(np.abs(chunk))) > SOUND:
+            self.last_sound_at = now
         with self._lock:
             if self._take is not None:
                 if glitch:

@@ -27,6 +27,8 @@ class FakeCapture:
         self._take = None
         self.ring_seconds = 3.0
         self.sends_audio = True
+        self.tone = 0.3                 # 0 sends digital silence
+        self.last_audio_at = self.last_sound_at = None     # set by hand for the silence watch
 
     def start(self): ...
     def stop(self): ...
@@ -42,7 +44,7 @@ class FakeCapture:
         t.t_end = self.clock()
         seconds = max(0.0, t.t_end - t.t_begin)
         n = int(seconds * self.rate)
-        x = (0.3 * np.sin(2 * np.pi * 440 * np.arange(n) / self.rate)).astype(np.float32)
+        x = (self.tone * np.sin(2 * np.pi * 440 * np.arange(n) / self.rate)).astype(np.float32)
         t.chunks = [np.stack([x, x], axis=1)] if self.sends_audio else []
         return t
 
@@ -554,3 +556,227 @@ def test_saving_a_song_does_not_hold_up_the_next_one(recorder, clock, monkeypatc
     release.set()
     loop.run_until_complete(rec.settle())
     assert [e["title"] for e in rec.events if e["kind"] == "kept"] == ["One"]
+
+
+# -- playing but silent (silence.py) ---------------------------------------------------------
+
+def spotify_bridge(rec, loop, clock, **state):
+    """The Spotify bridge, not started, with Spotify's own state; plays() keeps the state fresh."""
+    from mynaphone.bridge import Bridge
+    rec.bridge = Bridge(loop, rec.queue, 0)
+    rec.bridge.state = SpotifyState(received_at=clock(), is_paused=False, **state)
+    return rec.bridge
+
+
+def plays(rec, loop, clock, seconds, title="One", start_ms=0, packets=False, bridge=None, moving=True):
+    """Spotify plays title for this many seconds: a timeline reading and a tick each second. With packets, silent
+    audio arrives; without, none. moving=False holds the position, as while Spotify loads the song."""
+    cap = rec.captures["*"]
+    for i in range(1, seconds + 1):
+        clock.advance(1.0)
+        if bridge is not None:
+            bridge.state.received_at = clock()
+        if packets:
+            cap.last_audio_at = clock()
+        run(loop, rec._handle(snap(title, pos_ms=start_ms + (i * 1000 if moving else 0)), "timeline", None))
+        run(loop, rec._tick())
+
+
+def begin(rec, loop, title="One", **kw):
+    run(loop, rec._handle(snap(title, **kw), "media", None))
+    run(loop, rec._tick())
+
+
+def quiet_events(rec):
+    return [e for e in rec.events if e["kind"] == "silence"]
+
+
+def test_spotify_playing_with_no_audio_warns_once_and_names_why(recorder, clock, caplog):
+    rec, loop = recorder
+    rec.captures["*"].sends_audio = False
+    begin(rec, loop)
+    with caplog.at_level(logging.INFO, logger="mynaphone"):
+        plays(rec, loop, clock, 14)
+        assert not quiet_events(rec)
+        plays(rec, loop, clock, 1, start_ms=14_000)
+    q = quiet_events(rec)
+    assert len(q) == 1 and q[0]["new"] and q[0]["cause"] == "no_audio" and q[0]["app"] == "Spotify.exe"
+    assert q[0]["headline"] == "Mynaphone can't hear Spotify" and "exclusive mode" in q[0]["text"]
+    assert q[0]["tip"] == "Mynaphone can't hear Spotify"
+    warned = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
+    assert warned == ["no sound from Spotify.exe for 15 s of One: " + q[0]["text"]]
+    # it goes on into the next song: one warning for the whole stretch, and each take names the cause first
+    plays(rec, loop, clock, 165, start_ms=15_000)
+    run(loop, rec._handle(snap("Two"), "media", None))
+    plays(rec, loop, clock, 60, title="Two")
+    assert len(quiet_events(rec)) == 1
+    clock.advance(120)
+    run(loop, rec._handle(snap("Three"), "media", None))
+    d = [e for e in rec.events if e["kind"] == "discarded"]
+    assert [x["title"] for x in d] == ["One", "Two"] and all(x["reasons"][0] == "no_sound:no_audio" for x in d)
+
+
+def test_a_song_that_opens_quietly_is_kept_and_the_warning_ends(recorder, clock, caplog):
+    """Silent audio arriving is also how a song with a long, quiet opening looks, so it doesn't spoil the take."""
+    rec, loop = recorder
+    begin(rec, loop)
+    plays(rec, loop, clock, 20, packets=True)
+    assert [e["cause"] for e in quiet_events(rec)] == ["silent_audio"]
+    rec.captures["*"].last_sound_at = clock()
+    with caplog.at_level(logging.INFO, logger="mynaphone"):
+        plays(rec, loop, clock, 1, start_ms=20_000)
+    assert [e for e in rec.events if e["kind"] == "sound"] == [{"kind": "sound", "app": "Spotify.exe"}]
+    assert "the no-sound warning for Spotify.exe ended after 21 s: sound came back" in caplog.text
+    clock.advance(159)
+    run(loop, rec._handle(snap("Two"), "media", None))
+    assert [e["title"] for e in rec.events if e["kind"] == "kept"] == ["One"]
+
+
+def test_a_recording_that_came_out_silent_is_not_kept(recorder, clock):
+    rec, loop = recorder
+    rec.captures["*"].tone = 0.0
+    begin(rec, loop)
+    plays(rec, loop, clock, 20, packets=True)
+    clock.advance(160)
+    run(loop, rec._handle(snap("Two"), "media", None))
+    d = [e for e in rec.events if e["kind"] == "discarded"]
+    assert d and d[0]["reasons"] == ["no_sound:silent_audio"]
+
+
+def test_muted_in_the_volume_mixer(recorder, clock, monkeypatch):
+    import threading
+
+    import mynaphone.daemon as D
+    rec, loop = recorder
+    rec.captures["*"].tone = 0.0
+    asked = []
+    monkeypatch.setattr(D, "app_session_volume", lambda app: asked.append(threading.get_ident()) or (1.0, True))
+    begin(rec, loop)
+    plays(rec, loop, clock, 15, packets=True)
+    q = quiet_events(rec)
+    assert [e["cause"] for e in q] == ["muted"] and "Volume Mixer" in q[0]["text"]
+    assert threading.get_ident() in asked                  # the check at the take's start, as before
+    assert len(set(asked)) == 2                            # and the warning's, on another thread
+    clock.advance(165)
+    run(loop, rec._handle(snap("Two"), "media", None))
+    d = [e for e in rec.events if e["kind"] == "discarded"][0]
+    assert "mixer_volume:0" in d["reasons"] and not [r for r in d["reasons"] if r.startswith("no_sound")]
+
+
+def test_spotify_connect_playing_on_another_device(recorder, clock):
+    rec, loop = recorder
+    spotify_bridge(rec, loop, clock, name="One", device={"name": "Living Room", "type": "Speaker", "isLocal": False})
+    rec.captures["*"].sends_audio = False
+    begin(rec, loop)
+    plays(rec, loop, clock, 15, bridge=rec.bridge)
+    q = quiet_events(rec)
+    assert [(e["cause"], e["device"]) for e in q] == [("connect", "Living Room")] and "Living Room" in q[0]["text"]
+
+
+def test_spotifys_own_volume_at_zero(recorder, clock):
+    rec, loop = recorder
+    spotify_bridge(rec, loop, clock, name="One", volume=0.0, device={"name": "This PC", "isLocal": True})
+    rec.captures["*"].tone = 0.0
+    begin(rec, loop)
+    plays(rec, loop, clock, 15, packets=True, bridge=rec.bridge)
+    assert [e["cause"] for e in quiet_events(rec)] == ["app_volume"]
+
+
+def test_a_capture_that_never_attached(recorder, clock):
+    """No take starts ("audio capture not running yet"), and the warning says why every song is skipped."""
+    rec, loop = recorder
+    rec.captures["*"].healthy = False
+    begin(rec, loop)
+    assert rec.active is None
+    plays(rec, loop, clock, 15)
+    assert [e["cause"] for e in quiet_events(rec)] == ["capture"]
+
+
+def test_spotify_buffering_or_stuck_at_the_start_never_warns(recorder, clock):
+    """Spotify's bridge says when it buffers, and without the bridge its position stands still: on October 28, 2026
+    it said it was playing at 0:00 for 5 s while it started up."""
+    rec, loop = recorder
+    rec.captures["*"].sends_audio = False
+    spotify_bridge(rec, loop, clock, name="One", is_buffering=True)
+    begin(rec, loop)
+    plays(rec, loop, clock, 30, bridge=rec.bridge)
+    rec.bridge = None
+    plays(rec, loop, clock, 30, start_ms=30_000, moving=False)
+    assert not quiet_events(rec)
+
+
+def test_a_paused_spotify_or_recorder_never_warns(recorder, clock):
+    rec, loop = recorder
+    rec.captures["*"].sends_audio = False
+    begin(rec, loop)
+    plays(rec, loop, clock, 10)
+    for _ in range(30):
+        clock.advance(1.0)
+        run(loop, rec._handle(snap("One", status=S.PAUSED, pos_ms=10_000), "playback", None))
+        run(loop, rec._tick())
+    rec.paused = True
+    plays(rec, loop, clock, 30, start_ms=10_000)
+    assert not quiet_events(rec)
+
+
+def test_a_player_that_closes_ends_the_warning(recorder, clock):
+    rec, loop = recorder
+    rec.captures["*"].sends_audio = False
+    begin(rec, loop)
+    plays(rec, loop, clock, 15)
+    assert quiet_events(rec)
+    run(loop, rec._on_smtc(S.SmtcEvent("sessions", "", None)))          # Spotify's media session is gone
+    assert {"kind": "sound", "app": "Spotify.exe"} in rec.events and not rec.silence.quiet
+
+
+def test_the_warning_can_be_turned_off(recorder, clock):
+    rec, loop = recorder
+    rec.silence.seconds = 0
+    rec.captures["*"].sends_audio = False
+    begin(rec, loop)
+    plays(rec, loop, clock, 30)
+    assert not quiet_events(rec)
+
+
+def test_the_cause_is_looked_at_again_while_the_warning_stands(recorder, clock):
+    rec, loop = recorder
+    rec.captures["*"].sends_audio = False
+    begin(rec, loop)
+    plays(rec, loop, clock, 15)
+    rec.captures["*"].healthy = False                                  # the capture helper went away
+    plays(rec, loop, clock, 12, start_ms=15_000)
+    assert [(e["cause"], e["new"]) for e in quiet_events(rec)] == [("no_audio", True), ("capture", False)]
+
+
+def youtube_music(rec, loop, clock):
+    from mynaphone.bridge import Bridge
+    rec.bridge = Bridge(loop, rec.queue, 0)
+    yt = rec.bridge.youtube_by_browser["chrome.exe"] = _youtube(clock, "chrome.exe", video_id="v1", title="One")
+    rec.captures["*"].sends_audio = False
+    return yt
+
+
+def test_youtube_music_in_a_browser_counts_while_its_song_records(recorder, clock):
+    rec, loop = recorder
+    yt = youtube_music(rec, loop, clock)
+    begin(rec, loop, app="chrome.exe")
+    assert rec.active is not None and rec.active.app == "chrome.exe"
+    for i in range(1, 16):
+        clock.advance(1.0)
+        yt.position_s, yt.received_at = float(i), clock()
+        run(loop, rec._tick())
+    q = quiet_events(rec)
+    assert [(e["app"], e["cause"]) for e in q] == [("chrome.exe", "no_audio")]
+    assert q[0]["headline"] == "Mynaphone can't hear Chrome"
+    assert "tab isn't muted" in q[0]["text"]
+
+
+def test_a_video_that_is_loading_never_counts(recorder, clock):
+    """The extension reports a playing video once a second, and goes quiet while it loads."""
+    rec, loop = recorder
+    yt = youtube_music(rec, loop, clock)
+    begin(rec, loop, app="chrome.exe")
+    for _ in range(30):
+        clock.advance(1.0)
+        run(loop, rec._tick())
+    assert yt.position_s == 0 and not quiet_events(rec)

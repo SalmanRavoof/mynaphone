@@ -36,6 +36,8 @@ it hears.
 - Records per app, so notifications and other programs never end up in a recording.
 - Keeps a take only when the song played from the first second to the last, with no pause, seek,
   stall or dropout. Anything else is discarded and the reason is written down.
+- Tells you when Spotify says it's playing and no sound reaches Mynaphone, with the likely cause, such
+  as Spotify muted in the Volume Mixer or playing on another device (the Spotify bridge spots that one).
 - Identifies each song by acoustic fingerprint through AcoustID and MusicBrainz, and fills in artist,
   album, year, track number, composer, singers, label, ISRC and more. This needs the free AcoustID
   key; without it, songs are filed with the tags Spotify reported.

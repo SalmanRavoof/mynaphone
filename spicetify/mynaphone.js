@@ -272,6 +272,16 @@
     return Math.max(0, d.duration ? Math.min(p, d.duration) : p);
   }
 
+  // the device Spotify Connect plays on; while it's another one, none of the song reaches this PC
+  function activeDevice() {
+    try {
+      const api = Spicetify.Platform.ConnectDevicesAPI;
+      const dev = api && api.getActiveDevice ? api.getActiveDevice() : null;
+      if (dev) return { name: dev.name || "", type: dev.type || "", isLocal: dev.isLocal !== false };
+    } catch (e) {}
+    return null;
+  }
+
   function snapshot() {
     const d = playerState();
     if (!d) return null;
@@ -312,6 +322,7 @@
       context: (d.context && d.context.uri) || "",
       uid: it.uid || "",
       provider: it.provider || (md.provider || ""),
+      device: activeDevice(),
       // so the app's log can say when Spicetify's copy of the player is empty
       spicetifyEmpty: !(Spicetify.Player.data && Spicetify.Player.data.item),
       albumInfo: null,

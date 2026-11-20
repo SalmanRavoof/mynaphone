@@ -39,7 +39,11 @@ def test_the_log_says_when_spicetifys_copy_is_empty(caplog):
                 await ext.send(json.dumps({"type": "state", "uri": "spotify:track:k",
                                            "name": "Kabhi Khushi Kabhie Gham", "spicetifyEmpty": empty}))
             await asyncio.sleep(0.1)
-            assert bridge.state.uri == "spotify:track:k"
+            assert bridge.state.uri == "spotify:track:k" and bridge.state.remote_device == ""
+            await ext.send(json.dumps({"type": "state", "uri": "spotify:track:k", "name": "Kabhi Khushi Kabhie Gham",
+                                       "device": {"name": "Living Room", "type": "Speaker", "isLocal": False}}))
+            await asyncio.sleep(0.1)
+            assert bridge.state.remote_device == "Living Room"
         await bridge.stop()
 
     with caplog.at_level(logging.INFO, logger="mynaphone"):

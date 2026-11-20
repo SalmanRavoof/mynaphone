@@ -4,6 +4,7 @@ Start with **Setup check** > **Run checks** in the app. It finds most setup prob
 Then find your symptom below.
 
 - [Nothing is recorded](#nothing-is-recorded)
+- ["Mynaphone can't hear Spotify"](#mynaphone-cant-hear-spotify)
 - [Every take is discarded](#every-take-is-discarded), and [every discard reason](#every-discard-reason)
 - [Songs are kept but not filed](#songs-are-kept-but-not-filed)
 - [Wrong song or wrong album](#wrong-song-or-wrong-album)
@@ -24,6 +25,26 @@ Then find your symptom below.
 | The app is not in the sources list. | For YouTube, tick the YouTube option in Settings, save, then select **Stop** and **Start** on the Status page. |
 | Per-app capture could not attach. | The log shows "no live capture". Stop and start the recorder. If it repeats, run `setup-tools --force` to rebuild the helper, or switch **Capture method** to Whole output device in Settings. |
 | The song is shorter than 10 seconds or longer than 15 minutes. | Those are taken as stray clips, podcasts, or mixes. Change **Minimum length** in Settings, or `max_duration_seconds` in `config.toml`. |
+
+## "Mynaphone can't hear Spotify"
+
+This warning shows on the Status page, with one Windows notification, when Spotify says it's playing
+a song and no sound has reached Mynaphone for 15 seconds of it. The sentence under it names the cause
+Mynaphone found, and [how it works](how-it-works.md#noticing-when-no-sound-arrives) covers how it decides.
+
+| The warning says | Fix |
+|---|---|
+| Spotify is playing on another device | Spotify Connect sends the song to that device. Click the devices button at the bottom right of Spotify and pick **This computer**. Mynaphone tells this cause apart only with the Spotify bridge. |
+| Mynaphone couldn't hook into Spotify's audio | Select **Stop**, then **Start**, on the Status page. If it keeps happening, see "Per-app capture could not attach" under [Nothing is recorded](#nothing-is-recorded). |
+| Spotify is muted or all the way down in the Windows Volume Mixer | Right-click the speaker icon by the clock, open the Volume Mixer and set Spotify to 100 %. |
+| Spotify's own volume is all the way down | Set the volume slider at the bottom right of Spotify to 100 %. |
+| Spotify isn't sending any audio to Windows | If **Enable exclusive mode for this device** is on in Spotify's settings, switch it off. Exclusive mode hands Spotify the audio device, and its sound then skips the Windows mixer that per-app capture records from. |
+| Spotify is sending only silence | If the song starts quietly, the warning goes away when the music begins. |
+
+For YouTube Music in a browser, you'll see the browser, such as Brave, in place of Spotify. When
+the browser sends no audio or only silence, check that the song's tab isn't muted.
+
+To turn the warning off, set `silence_warning_seconds` to `0` in `config.toml`.
 
 ## Every take is discarded
 
@@ -61,6 +82,12 @@ to see them all.
 | another app made sound | Another app played sound during the take, in device mode |
 | app at N% in the Windows Volume Mixer | The source app's mixer slider was below 100 % |
 | app's own volume at N% | The player's own volume was below 100 % |
+| played on another device | Spotify Connect played the song on another device, so none of it reached Mynaphone |
+| couldn't hook into the app's audio | Per-app capture wasn't attached to the app, so no sound reached Mynaphone |
+| muted in the Windows Volume Mixer | The app was muted, or at 0, in the Volume Mixer, so no sound reached Mynaphone |
+| app's own volume at 0% | The player's own volume was at 0, so no sound reached Mynaphone |
+| app sent no audio | The app sent Windows no audio at all, which is how exclusive mode should look |
+| recording came out silent | The app sent only silence, and the whole recording is silent |
 | playback stopped | The player stopped before the song's end |
 | player closed | The player quit during the song |
 | recorder stopped | Mynaphone was stopped or closed during the song |

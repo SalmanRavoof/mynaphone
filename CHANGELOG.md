@@ -6,6 +6,14 @@ All notable changes to Mynaphone are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- A warning when Spotify says it's playing and no sound reaches Mynaphone. Once a song has played for
+  15 seconds in silence, Mynaphone tells you why and what to do in a card at the top of the Status
+  page, and Windows shows one notification. It tells apart Spotify Connect playing on another device,
+  Mynaphone's capture failing to attach, Spotify muted in the Volume Mixer, Spotify's own volume at
+  zero, no audio at all (most likely exclusive mode), and audio that is only silence. A song that
+  plays meanwhile is discarded with that cause as its reason. To name the device, the Spotify bridge
+  now says which one Spotify Connect plays on, so run `install-spicetify` again to update the
+  extension.
 - YouTube and YouTube Music in Brave, Vivaldi, and Opera, through the same browser extension as Chrome
   and Edge. The YouTube option in Settings now records in all 5 browsers, and a `config.toml` that
   had it ticked before gets the 3 new ones when Mynaphone reads it. They haven't been tested end to
@@ -81,7 +89,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (218 tests).
+- Test suite (246 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.

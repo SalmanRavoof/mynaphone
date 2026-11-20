@@ -55,7 +55,8 @@ The Spotify bridge adds what Windows doesn't know. It is optional and needs [Spi
 installed. A Spicetify extension inside Spotify, [`spicetify/mynaphone.js`](../spicetify/mynaphone.js), reports the
 exact track id and album id, the track and disc numbers, and the quality tier the song played at.
 It also passes on buffering, Spotify's own synced lyrics, album facts such as the release date
-and label, and whether the item playing is an ad, all over a local WebSocket. The app can ask the
+and label, whether the item playing is an ad, and which device Spotify Connect plays it on, all over a
+local WebSocket. The app can ask the
 extension for your playlists and their songs, and, when you record a playlist, have it play the
 playlist from a given song and pause it at the end.
 
@@ -85,6 +86,35 @@ A take is kept only if all of these are true:
 Every take, kept or not, is logged with its measurements, so you can see why a verdict went the way
 it did and the rules can be revisited later. The [troubleshooting guide](troubleshooting.md#every-discard-reason)
 lists every reason a take can be discarded.
+
+## Noticing when no sound arrives
+
+Spotify can say it's playing while none of its sound reaches Mynaphone, for example when it's muted
+in the Windows Volume Mixer or Spotify Connect plays the song on another device. When a song has
+played for 15 seconds and Mynaphone still hasn't heard a sound, it warns you on the Status page, with
+one Windows notification, and in the tray icon's tooltip.
+
+Those 15 seconds are the song's own, read from the position Spotify reports, so a pause, an ad, or
+Spotify loading the song never adds to them. They start over with each song and each time you resume.
+Any sound in between means the song is fine, so a quiet stretch later in a song, such as the silence
+before a hidden track, doesn't set it off. The warning stays until sound comes back, however many
+songs that takes.
+
+The warning names the first cause it finds, in this order:
+
+1. Spotify Connect plays the song on another device. Only the Spotify bridge can tell this one.
+2. Mynaphone's per-app capture isn't attached to the app.
+3. The app is muted, or at 0, in the Windows Volume Mixer.
+4. The player's own volume is at 0.
+5. The app sends Windows no audio at all. Spotify's exclusive mode should cause this, since
+   [Windows' loopback recording](https://learn.microsoft.com/en-us/windows/win32/coreaudio/loopback-recording)
+   works only with shared-mode audio, though that's untested.
+6. The app sends audio, and all of it is silence.
+
+Mynaphone discards a song that plays while the warning stands, and its reasons on the Activity page
+start with what the warning found. When only silence arrives, it discards the song only if the whole
+recording turns out silent, because a song that opens quietly looks the same early on. To turn the
+warning off, set `silence_warning_seconds` to `0` in `config.toml`.
 
 ## Identifying the song
 

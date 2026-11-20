@@ -54,6 +54,7 @@ rejected takes kept for inspection, and divides the rest by the size of an avera
 | None | `ignore_titles` | `["Advertisement", "Spotify"]` | Media titles treated as not music, such as Spotify Free's ads. |
 | **Keep rejected takes** | `keep_discards_days` | `3` | Days to keep rejected recordings. `0` deletes them at once. |
 | **Skip songs already in the library (harvest mode)** | `harvest_mode` | `false` | Skip songs that are already archived. Also on the Status page and in the tray menu. |
+| None | `silence_warning_seconds` | `15` | How many seconds of a song can play with no sound reaching Mynaphone before the Status page and a Windows notification warn you. `0` turns the warning off. |
 
 ## Re-recording (`[quality]`)
 

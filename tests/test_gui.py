@@ -241,6 +241,50 @@ def test_detail_wording():
     assert _detail(["buffering"]) == ("playback stalled", "playback stalled")
     short, full = _detail(["paused", "cut_short"])
     assert short == "paused during the song, and 1 more" and full == "paused during the song, ended early"
+    short, _ = _detail(["no_sound:connect", "length_mismatch:0.0s_vs_180.0s"])
+    assert short == "played on another device, and 1 more"
+
+
+def _quiet(**kw):
+    return {"kind": "silence", "app": "Spotify.exe", "cause": "no_audio", "device": "", "title": "One", "new": True,
+            "headline": "Mynaphone can't hear Spotify", "text": "Spotify isn't sending any audio to Windows.",
+            "tip": "Mynaphone can't hear Spotify", **kw}
+
+
+def test_no_sound_shows_on_the_status_page_with_one_notification(window, monkeypatch):
+    shown = []
+    monkeypatch.setattr(window.tray, "showMessage", lambda *a: shown.append(a))
+    st = window.status
+    assert st.quiet_card.isHidden()
+    window.on_event({"kind": "recording", "artist": "A", "title": "One", "expected_ms": 200_000})
+    window.on_event(_quiet())
+    assert not st.quiet_card.isHidden() and st.quiet_title.text() == "Mynaphone can't hear Spotify"
+    assert st.quiet_text.text() == "Spotify isn't sending any audio to Windows."
+    assert window.tray.toolTip() == "Mynaphone can't hear Spotify"
+    assert [m[:2] for m in shown] == [("Mynaphone can't hear Spotify", "Spotify isn't sending any audio to Windows.")]
+    # the cause changes while it stands: new words, no second notification
+    window.on_event(_quiet(cause="capture", text="Mynaphone couldn't hook into Spotify's audio.", new=False))
+    assert len(shown) == 1 and st.quiet_text.text() == "Mynaphone couldn't hook into Spotify's audio."
+    window.on_event({"kind": "recording", "artist": "A", "title": "Two", "expected_ms": 200_000})
+    assert window.tray.toolTip() == "Mynaphone can't hear Spotify"
+    window.on_event({"kind": "sound", "app": "Spotify.exe"})
+    assert st.quiet_card.isHidden() and window.tray.toolTip() == "Mynaphone: recording A - Two"
+
+
+def test_the_warning_goes_when_the_recorder_stops(window, monkeypatch):
+    monkeypatch.setattr(window.tray, "showMessage", lambda *a: None)
+    window.on_event(_quiet())
+    window.on_event({"kind": "stopped"})
+    assert window.status.quiet_card.isHidden() and not window.quiet
+
+
+def test_clicking_the_notification_opens_the_window(window, monkeypatch):
+    opened = []
+    monkeypatch.setattr(window, "show_from_tray", lambda: opened.append(True))
+    monkeypatch.setattr(window.tray, "showMessage", lambda *a: None)
+    window.on_event(_quiet())
+    window.tray.messageClicked.emit()
+    assert opened == [True]
 
 
 # -- single instance ----------------------------------------------------------------------

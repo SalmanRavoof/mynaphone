@@ -123,9 +123,22 @@ def longest_hole_ms(audio: np.ndarray, rate: int, tail_s: float = 10.0) -> int:
     return longest * blk * 1000 // rate
 
 
+def is_silent(audio: np.ndarray) -> bool:
+    """Nothing in the recording rises above HOLE: no sound reached the capture at all."""
+    return len(audio) == 0 or float(np.max(np.abs(audio))) <= HOLE
+
+
 def judge(meta: TakeMeta, captured_s: float, wall_s: float, flags: dict, cfg) -> Verdict:
     reasons: list[str] = []
     tol = cfg.rules.duration_tolerance_seconds
+    # The no-sound warning stood through the take (silence.py), so that's the cause, named first. Its last cause,
+    # only silence arriving, is also what a song that opens quietly looks like, so it counts once the whole
+    # recording turns out silent. A mixer or player volume the start-up check already named isn't said twice.
+    cause = flags.get("no_sound")
+    if cause and (cause != "silent_audio" or flags.get("silent")) and not (
+            (cause == "muted" and flags.get("mixer_volume") is not None)
+            or (cause == "app_volume" and flags.get("app_volume") is not None)):
+        reasons.append(f"no_sound:{cause}")
     exp_s = meta.expected_ms / 1000.0
     # A stall only spoils the file when it left a hole in the music (see longest_hole_ms). Without the
     # audio to look at, assume it did.

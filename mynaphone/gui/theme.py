@@ -74,7 +74,10 @@ def build_qss(a: dict[str, str]) -> str:
 QMainWindow, QWidget#canvas {{ background: {CANVAS}; }}
 
 QFrame#card {{ background: {CARD}; border: 1px solid {BORDER_SOFT}; border-radius: 10px; }}
+QFrame#quietcard {{ background: {AMBER_SOFT}; border: 1px solid {ACCENT}; border-radius: 10px; }}
 QLabel {{ background: transparent; }}
+QLabel#quiettitle {{ color: {AMBER}; font-size: 11pt; font-weight: 600; }}
+QLabel#quiettext {{ color: {INK}; }}
 QLabel#h1 {{ font-size: 19pt; font-weight: 600; color: {INK}; }}
 QLabel#h2 {{ font-size: 12pt; font-weight: 600; color: {INK}; }}
 QLabel#title {{ font-size: 16pt; font-weight: 600; color: {INK}; }}

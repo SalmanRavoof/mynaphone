@@ -65,7 +65,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import __version__, browsers, shortcuts
+from .. import __version__, browsers, shortcuts, silence
 from ..capture import list_devices
 from ..config import Config
 from ..store import Store, local_time
@@ -169,6 +169,8 @@ def _humanize(reason: str) -> str:
         return f"app at {rest}% in the Windows Volume Mixer"
     if key == "app_volume":
         return f"app's own volume at {rest}%"
+    if key == "no_sound":
+        return silence.reason_words(rest)
     return {
         "paused": "paused during the song", "seek": "seeked within the song", "buffering": "playback stalled",
         "started_mid_track": "started mid-song", "length_mismatch": "length did not match",
@@ -381,6 +383,19 @@ class StatusPage(QWidget):
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
         lay.setSpacing(12)
+
+        # the no-sound warning, while a source plays a song and nothing reaches the recorder (silence.py)
+        self.quiet_card = QFrame()
+        self.quiet_card.setObjectName("quietcard")
+        ql = QVBoxLayout(self.quiet_card)
+        ql.setContentsMargins(18, 12, 18, 12)
+        ql.setSpacing(4)
+        self.quiet_title = label("", "quiettitle")
+        self.quiet_text = label("", "quiettext", wrap=True)
+        ql.addWidget(self.quiet_title)
+        ql.addWidget(self.quiet_text)
+        self.quiet_card.hide()
+        lay.addWidget(self.quiet_card)
 
         # now-playing card: a row (cover + text) sized below for its busiest state, then the transport row
         self.card, c = card()
@@ -1031,6 +1046,9 @@ class MainWindow(QMainWindow):
         self.recording_expected_ms = 0
         self._quitting = False
         self._tray_hint_shown = False
+        self.quiet: dict[str, dict] = {}        # standing no-sound warnings by source app, as the recorder sent them
+        self._tip = "Mynaphone"                 # the tray icon's tooltip for the recorder's state
+        self._last_message = ""                 # which tray notification showed last
 
         self.setWindowTitle("Mynaphone")
         self.setWindowIcon(app_icon("stopped", tile=True))
@@ -1438,7 +1456,7 @@ class MainWindow(QMainWindow):
             st.set_cover(None, "recording")
             self.side_state.setText("Recording")
             self._set_icon("recording")
-            self.tray.setToolTip(f"Mynaphone: recording {ev.get('artist')} - {ev.get('title')}")
+            self._tray_tip(f"Mynaphone: recording {ev.get('artist')} - {ev.get('title')}")
         elif kind == "cover":
             if ev.get("title") == st.title.text():
                 st.set_cover(ev.get("data"), "recording")
@@ -1509,11 +1527,42 @@ class MainWindow(QMainWindow):
             self._refresh_state_labels()
         elif kind == "paused":
             self._refresh_state_labels()
+        elif kind == "silence":
+            self.quiet[ev.get("app", "")] = ev
+            self._show_quiet()
+            if ev.get("new"):
+                self._last_message = "quiet"
+                self.tray.showMessage(ev.get("headline", ""), ev.get("text", ""), QSystemTrayIcon.Warning, 15000)
+        elif kind == "sound":
+            self.quiet.pop(ev.get("app", ""), None)
+            self._show_quiet()
         elif kind == "stopped":
             self.recording_since = None
             self.recording_song = None
             st.progress.setValue(0)
             st.progress.hide()
+            self.quiet.clear()
+            self._show_quiet()
+
+    def _show_quiet(self) -> None:
+        """The newest standing no-sound warning, on the Status page and in the tray icon's tooltip."""
+        ev = next(reversed(self.quiet.values()), None)
+        st = self.status
+        st.quiet_card.setVisible(ev is not None)
+        if ev is not None:
+            st.quiet_title.setText(ev.get("headline", ""))
+            st.quiet_text.setText(ev.get("text", ""))
+        self._tray_tip(self._tip)
+
+    def _tray_tip(self, text: str) -> None:
+        """Set the tooltip for the recorder's state; a standing no-sound warning shows in its place."""
+        self._tip = text
+        ev = next(reversed(self.quiet.values()), None)
+        self.tray.setToolTip((ev.get("tip") or text) if ev is not None else text)
+
+    def _message_clicked(self) -> None:
+        if self._last_message == "quiet":
+            self.show_from_tray()
 
     def _refresh_chain(self) -> None:
         parts = [p for p in (self.status.device.text(), self.status.bridge.text()) if p]
@@ -1530,7 +1579,7 @@ class MainWindow(QMainWindow):
             st.set_cover(None, "stopped")
             self.side_state.setText("Stopped")
             self._set_icon("stopped")
-            self.tray.setToolTip("Mynaphone: stopped")
+            self._tray_tip("Mynaphone: stopped")
         elif st.btn_pause.isChecked():
             st.state.setText("Paused")
             theme.set_tone(st.state, "warn")
@@ -1539,7 +1588,7 @@ class MainWindow(QMainWindow):
             st.set_cover(None, "paused")
             self.side_state.setText("Paused")
             self._set_icon("paused")
-            self.tray.setToolTip("Mynaphone: paused")
+            self._tray_tip("Mynaphone: paused")
         elif self.recording_since is None:
             st.state.setText("Listening")
             theme.set_tone(st.state, "ok")
@@ -1548,7 +1597,7 @@ class MainWindow(QMainWindow):
             st.set_cover(None)
             self.side_state.setText("Listening")
             self._set_icon("idle")
-            self.tray.setToolTip("Mynaphone: listening")
+            self._tray_tip("Mynaphone: listening")
 
     @Slot(str)
     def on_failed(self, msg: str) -> None:
@@ -1569,6 +1618,8 @@ class MainWindow(QMainWindow):
         st.chain.setText("")
         self.bridge_connected = None
         self.extension_seen = None
+        self.quiet.clear()
+        self._show_quiet()
         self._refresh_state_labels()
         self._load_recent()
         if self._quitting:
@@ -1612,6 +1663,7 @@ class MainWindow(QMainWindow):
         menu.aboutToShow.connect(self._sync_tray_menu)
         self.tray.setContextMenu(menu)
         self.tray.activated.connect(self._tray_activated)
+        self.tray.messageClicked.connect(self._message_clicked)
         self.tray.setToolTip("Mynaphone")
         self.tray.show()
 
@@ -1755,6 +1807,7 @@ class MainWindow(QMainWindow):
         if not self._tray_hint_shown:
             self._tray_hint_shown = True
             # Windows hides new tray icons under the ^ by the clock, so say where this one went
+            self._last_message = "hint"
             self.tray.showMessage("Mynaphone is still running",
                                   "Its tray icon may be under the ^ arrow by the clock. Drag it next to the clock "
                                   "to keep it in view.", QSystemTrayIcon.Information, 5000)
