@@ -570,7 +570,10 @@ def spotify_bridge(rec, loop, clock, **state):
 
 def plays(rec, loop, clock, seconds, title="One", start_ms=0, packets=False, bridge=None, moving=True):
     """Spotify plays title for this many seconds: a timeline reading and a tick each second. With packets, silent
-    audio arrives; without, none. moving=False holds the position, as while Spotify loads the song."""
+    audio arrives; without, none. moving=False holds the position, as while Spotify loads the song.
+
+    The warning can come a second after the 15 s mark. Before Python 3.13 Windows' clock ticks every 15.6 ms, so a
+    reading's age can take up to 15 ms off the song's time, and the mark then falls on the next tick."""
     cap = rec.captures["*"]
     for i in range(1, seconds + 1):
         clock.advance(1.0)
@@ -598,7 +601,7 @@ def test_spotify_playing_with_no_audio_warns_once_and_names_why(recorder, clock,
     with caplog.at_level(logging.INFO, logger="mynaphone"):
         plays(rec, loop, clock, 14)
         assert not quiet_events(rec)
-        plays(rec, loop, clock, 1, start_ms=14_000)
+        plays(rec, loop, clock, 2, start_ms=14_000)
     q = quiet_events(rec)
     assert len(q) == 1 and q[0]["new"] and q[0]["cause"] == "no_audio" and q[0]["app"] == "Spotify.exe"
     assert q[0]["headline"] == "Mynaphone can't hear Spotify" and "exclusive mode" in q[0]["text"]
@@ -606,7 +609,7 @@ def test_spotify_playing_with_no_audio_warns_once_and_names_why(recorder, clock,
     warned = [r.getMessage() for r in caplog.records if r.levelno == logging.WARNING]
     assert warned == ["no sound from Spotify.exe for 15 s of One: " + q[0]["text"]]
     # it goes on into the next song: one warning for the whole stretch, and each take names the cause first
-    plays(rec, loop, clock, 165, start_ms=15_000)
+    plays(rec, loop, clock, 164, start_ms=16_000)
     run(loop, rec._handle(snap("Two"), "media", None))
     plays(rec, loop, clock, 60, title="Two")
     assert len(quiet_events(rec)) == 1
@@ -652,12 +655,12 @@ def test_muted_in_the_volume_mixer(recorder, clock, monkeypatch):
     asked = []
     monkeypatch.setattr(D, "app_session_volume", lambda app: asked.append(threading.get_ident()) or (1.0, True))
     begin(rec, loop)
-    plays(rec, loop, clock, 15, packets=True)
+    plays(rec, loop, clock, 16, packets=True)
     q = quiet_events(rec)
     assert [e["cause"] for e in q] == ["muted"] and "Volume Mixer" in q[0]["text"]
     assert threading.get_ident() in asked                  # the check at the take's start, as before
     assert len(set(asked)) == 2                            # and the warning's, on another thread
-    clock.advance(165)
+    clock.advance(164)
     run(loop, rec._handle(snap("Two"), "media", None))
     d = [e for e in rec.events if e["kind"] == "discarded"][0]
     assert "mixer_volume:0" in d["reasons"] and not [r for r in d["reasons"] if r.startswith("no_sound")]
@@ -668,7 +671,7 @@ def test_spotify_connect_playing_on_another_device(recorder, clock):
     spotify_bridge(rec, loop, clock, name="One", device={"name": "Living Room", "type": "Speaker", "isLocal": False})
     rec.captures["*"].sends_audio = False
     begin(rec, loop)
-    plays(rec, loop, clock, 15, bridge=rec.bridge)
+    plays(rec, loop, clock, 16, bridge=rec.bridge)
     q = quiet_events(rec)
     assert [(e["cause"], e["device"]) for e in q] == [("connect", "Living Room")] and "Living Room" in q[0]["text"]
 
@@ -678,7 +681,7 @@ def test_spotifys_own_volume_at_zero(recorder, clock):
     spotify_bridge(rec, loop, clock, name="One", volume=0.0, device={"name": "This PC", "isLocal": True})
     rec.captures["*"].tone = 0.0
     begin(rec, loop)
-    plays(rec, loop, clock, 15, packets=True, bridge=rec.bridge)
+    plays(rec, loop, clock, 16, packets=True, bridge=rec.bridge)
     assert [e["cause"] for e in quiet_events(rec)] == ["app_volume"]
 
 
@@ -688,7 +691,7 @@ def test_a_capture_that_never_attached(recorder, clock):
     rec.captures["*"].healthy = False
     begin(rec, loop)
     assert rec.active is None
-    plays(rec, loop, clock, 15)
+    plays(rec, loop, clock, 16)
     assert [e["cause"] for e in quiet_events(rec)] == ["capture"]
 
 
@@ -723,7 +726,7 @@ def test_a_player_that_closes_ends_the_warning(recorder, clock):
     rec, loop = recorder
     rec.captures["*"].sends_audio = False
     begin(rec, loop)
-    plays(rec, loop, clock, 15)
+    plays(rec, loop, clock, 16)
     assert quiet_events(rec)
     run(loop, rec._on_smtc(S.SmtcEvent("sessions", "", None)))          # Spotify's media session is gone
     assert {"kind": "sound", "app": "Spotify.exe"} in rec.events and not rec.silence.quiet
@@ -742,9 +745,9 @@ def test_the_cause_is_looked_at_again_while_the_warning_stands(recorder, clock):
     rec, loop = recorder
     rec.captures["*"].sends_audio = False
     begin(rec, loop)
-    plays(rec, loop, clock, 15)
+    plays(rec, loop, clock, 16)
     rec.captures["*"].healthy = False                                  # the capture helper went away
-    plays(rec, loop, clock, 12, start_ms=15_000)
+    plays(rec, loop, clock, 12, start_ms=16_000)
     assert [(e["cause"], e["new"]) for e in quiet_events(rec)] == [("no_audio", True), ("capture", False)]
 
 
