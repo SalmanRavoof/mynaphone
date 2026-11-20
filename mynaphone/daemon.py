@@ -161,15 +161,16 @@ class Recorder:
         return await self.bridge.request("playlists", timeout=30.0)
 
     async def check_playlist(self, uri: str) -> dict:
-        """A playlist's or album's songs and how many of them the library holds. An album's songs stay in the index,
-        so the Library can count it while Spotify is closed."""
+        """A playlist's or album's name and songs, and how many of them the library holds. An album's songs stay in
+        the index, so the Library can count it while Spotify is closed."""
         if self.bridge is None:
             raise BridgeError("the Spotify bridge is turned off in Settings")
-        tracks = (await self.bridge.request("tracks", timeout=120.0, uri=uri)).get("tracks") or []
+        got = await self.bridge.request("tracks", timeout=120.0, uri=uri)
+        tracks = got.get("tracks") or []
         if tracks and uri.startswith("spotify:album:"):
             await self._album_isrcs(tracks)
             self.store.save_album_tracks(uri, tracks)
-        return {"uri": uri, "tracks": tracks, **playlists.summary(self.store, tracks)}
+        return {"uri": uri, "name": got.get("name") or "", "tracks": tracks, **playlists.summary(self.store, tracks)}
 
     async def _album_isrcs(self, tracks: list[dict]) -> None:
         """Give an album's songs their ISRCs when the library doesn't know them by their Spotify ids, so a song you
@@ -201,7 +202,7 @@ class Recorder:
         checked = await self.check_playlist(uri)
         if not checked["tracks"]:
             raise BridgeError("Spotify didn't list any songs in it")
-        self.job = PlaylistJob(self, uri, name, checked["tracks"], keep_file=keep_file)
+        self.job = PlaylistJob(self, uri, name or checked["name"] or "Playlist", checked["tracks"], keep_file=keep_file)
         await self.job.start()
         return self.job.progress()
 

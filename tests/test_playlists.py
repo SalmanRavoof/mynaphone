@@ -184,6 +184,14 @@ def test_playlist_files_follow_the_songs(tmp_config):
     assert "../Artists/A/Other/Song 1.m4a" in path.read_text(encoding="utf-8")
 
 
+def test_a_renamed_playlist_leaves_no_old_file(tmp_config):
+    store = Store(tmp_config.paths.db_path)
+    tracks = _tracks(2)
+    old, _, _ = playlists.save(store, tmp_config.paths.library_dir, "spotify:album:a", "Playlist 0AVJyPXZ", tracks)
+    new, _, _ = playlists.save(store, tmp_config.paths.library_dir, "spotify:album:a", "Monsoon Season", tracks)
+    assert new.name == "Monsoon Season.m3u8" and new.exists() and not old.exists()
+
+
 def test_a_song_that_fails_twice_is_left_for_later(tmp_config):
     store = Store(tmp_config.paths.db_path)
     rec = FakeRecorder(tmp_config, store)

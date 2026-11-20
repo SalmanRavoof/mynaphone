@@ -95,6 +95,15 @@ const playlistItems = Array.from({ length: 1203 }, (_, i) => ({
   artists: [{ name: "A", uri: "spotify:artist:a" }], album: { name: "Al", uri: "spotify:album:al" },
   duration: { milliseconds: 200000 + i }, isPlayable: i !== 3, isLocal: i === 5,
 }));
+// an album's songs come from the album page's own query, a page of them at a time
+const monsoonItems = [
+  { uid: "a7", track: { uri: "spotify:track:m7", name: "29.11.23.", duration: { totalMilliseconds: 58000 },
+                        artists: { items: [{ uri: "spotify:artist:h", profile: { name: "Hanumankind" } }] },
+                        playability: { playable: true } } },
+  { uid: "a8", track: { uri: "spotify:track:m8", name: "Monsoon Season", duration: { totalMilliseconds: 172000 },
+                        artists: { items: [{ uri: "spotify:artist:h", profile: { name: "Hanumankind" } }] },
+                        playability: { playable: false } } },
+];
 let state = {
   item: { type: "ad", uri: "spotify:ad:123", name: "", metadata: { title: "Brand" }, provider: "ad" },
   duration: 30000, isPaused: false, isBuffering: false, context: { uri: "spotify:playlist:p" },
@@ -103,6 +112,12 @@ let state = {
 const calls = [];
 const Spicetify = {
   ...spicetifyBase(),
+  GraphQL: {
+    Definitions: { queryAlbumTracks: "queryAlbumTracks" },
+    Request: async (q, v) => (q !== "queryAlbumTracks" ? {} : { data: { albumUnion: {
+      name: "Monsoon Season", tracksV2: { totalCount: monsoonItems.length, items: monsoonItems.slice(v.offset, v.offset + v.limit) },
+    } } }),
+  },
   Player: { addEventListener() {}, getProgress: () => 1000, getVolume: () => 1, data: state },
   Platform: {
     ...platformBase(),
@@ -111,7 +126,8 @@ const Spicetify = {
       { type: "folder", name: "Films", items: [{ type: "playlist", uri: "spotify:playlist:q", name: "Leo", totalLength: 9 }] },
       { type: "placeholder", uri: "spotify:playlist:gone" }] }) },
     LibraryAPI: { _likedSongsUri: "spotify:user:s:collection", getTracks: async () => ({ totalLength: 412, items: [] }) },
-    PlaylistAPI: { getContents: async (uri, { offset, limit }) => ({ offset: 0, totalLength: 1203, items: playlistItems.slice(offset, offset + limit) }) },
+    PlaylistAPI: { getContents: async (uri, { offset, limit }) => ({ offset: 0, totalLength: 1203, items: playlistItems.slice(offset, offset + limit) }),
+                   getMetadata: async uri => ({ name: uri === "spotify:playlist:p" ? "Car" : "" }) },
     ShuffleAPI: { getShuffle: async () => 1, setShuffle: async (ctx, mode) => calls.push(["setShuffle", ctx, mode]) },
     ConnectDevicesAPI: { getActiveDevice: () => ({ isLocal: true }) },
     PlayerAPI: {
@@ -155,6 +171,18 @@ assert.equal(t.length, 1203, "every page read");
 assert.equal(t[1202].uri, "spotify:track:t1202");
 assert.equal(t[3].playable, false); assert.equal(t[5].local, true); assert.equal(t[7].episode, true);
 assert.equal(t[9].duration_ms, 200009);
+assert.equal(r.result.name, "Car", "a pasted link's playlist comes with its name");
+
+// an album pasted as a link: Monsoon Season was "Playlist 0AVJyPXZ" on November 20, 2026
+r = await command({ id: 20, do: "tracks", uri: "spotify:album:0AVJyPXZnYYxrqwqhcTzfX" });
+assert.ok(r.ok, r.error);
+assert.equal(r.result.name, "Monsoon Season");
+assert.equal(JSON.stringify(r.result.tracks.map(x => [x.index, x.uri, x.uid, x.name, x.duration_ms, x.artists[0], x.playable])),
+             JSON.stringify([[0, "spotify:track:m7", "a7", "29.11.23.", 58000, "Hanumankind", true],
+                             [1, "spotify:track:m8", "a8", "Monsoon Season", 172000, "Hanumankind", false]]));
+r = await command({ id: 21, do: "tracks", uri: "spotify:user:s:collection" });
+assert.ok(r.ok, r.error);
+assert.equal(r.result.name, "Liked Songs");
 
 r = await command({ id: 3, do: "play", context: "spotify:playlist:p", uri: "spotify:track:t9", uid: "u9" });
 assert.ok(r.ok, r.error);

@@ -856,6 +856,35 @@ def test_record_a_playlist_from_the_status_page(window, monkeypatch):
         "Car Songs: done. 1 song saved, 1 didn't record (they're on the list to play again)."
 
 
+def test_a_pasted_link_gets_the_name_spotify_gives_it(window, monkeypatch):
+    """An album from a link was "Playlist 0AVJyPXZ", file and all, on November 20, 2026."""
+    import asyncio
+
+    from mynaphone.gui import playlist_dialog as PD
+
+    class Recorder:
+        async def list_playlists(self):
+            return {"playlists": []}
+
+        async def check_playlist(self, uri):
+            return {"uri": uri, "name": "Monsoon Season", "tracks": [], "total": 12, "have": list(range(9)),
+                    "todo": [9, 10, 11], "unplayable": []}
+
+    def ask(make, token):
+        window.worker_answer.emit(token, asyncio.run(make(Recorder())), "")
+        return True
+
+    started = []
+    monkeypatch.setattr(window, "ask_recorder", ask)
+    monkeypatch.setattr(window, "start_playlist", lambda uri, name: started.append((uri, name)))
+    dlg = PD.PlaylistDialog(window)
+    dlg.link.setText("https://open.spotify.com/album/0AVJyPXZnYYxrqwqhcTzfX")
+    assert dlg.summary.text() == "9 of 12 songs are in your library. 3 to record."
+    dlg.record()
+    assert started == [("spotify:album:0AVJyPXZnYYxrqwqhcTzfX", "Monsoon Season")]
+    dlg.deleteLater()
+
+
 # -- albums ----------------------------------------------------------------------------------
 
 def _fake_spotify(window, monkeypatch, songs_of):

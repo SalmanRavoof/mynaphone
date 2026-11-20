@@ -105,7 +105,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (294 tests).
+- Test suite (296 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -142,6 +142,9 @@ All notable changes to Mynaphone are listed here. The format follows
   Deezer's API.
 
 ### Fixed
+- An album or playlist pasted as a link was named after its Spotify id, so Monsoon Season's file
+  was `Playlist 0AVJyPXZ.m3u8`. The Spotify bridge now sends each one's name with its songs, and a
+  playlist saved again under a new name leaves no file under the old one.
 - Re-tagging an M4A song swapped its cover's type between JPEG and PNG, since Mynaphone read the
   type the wrong way round. By November 20, 2026, 230 songs had a JPEG cover marked as PNG. A re-tag
   now reads the type from the picture itself, so each of those covers gets its right type back the

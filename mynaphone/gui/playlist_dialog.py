@@ -160,8 +160,12 @@ class PlaylistDialog(QDialog):
         return self.items[rows[0].row()]["uri"] if rows else ""
 
     def _name(self) -> str:
-        if spotify_uri(self.link.text()):
-            return "Playlist " + spotify_uri(self.link.text()).rsplit(":", 1)[-1][:8]
+        pasted = spotify_uri(self.link.text())
+        if pasted:
+            # a link doesn't say what it points at, so the name is the one Spotify gave with its songs
+            checked = self.checked or {}
+            named = checked.get("name") if checked.get("uri") == pasted else ""
+            return named or "Playlist " + pasted.rsplit(":", 1)[-1][:8]
         rows = self.table.selectionModel().selectedRows()
         return (self.items[rows[0].row()].get("name") or "Playlist") if rows else "Playlist"
 

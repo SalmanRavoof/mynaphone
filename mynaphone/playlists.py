@@ -84,8 +84,15 @@ def write(store: Store, library_dir: Path, name: str, tracks: list[dict]) -> tup
 
 
 def save(store: Store, library_dir: Path, uri: str, name: str, tracks: list[dict]) -> tuple[Path, int, int]:
-    """Keep a playlist's songs in the index and write its M3U8."""
+    """Keep a playlist's songs in the index and write its M3U8. A playlist saved before under another name (an album
+    from a pasted link was "Playlist 0AVJyPXZ" until links came with their names) leaves no file under the old one."""
+    old = store.conn.execute("SELECT file FROM playlists WHERE uri=?", (uri,)).fetchone()
     path, listed, missing = write(store, library_dir, name, tracks)
+    if old and old["file"] and old["file"] != str(path):
+        try:
+            Path(old["file"]).unlink(missing_ok=True)
+        except OSError:
+            pass
     store.conn.execute(
         "INSERT OR REPLACE INTO playlists (uri, name, tracks_json, file, updated_at) VALUES (?, ?, ?, ?, ?)",
         (uri, name, json.dumps(tracks, ensure_ascii=False), str(path), dt.datetime.now(dt.timezone.utc).isoformat()))
