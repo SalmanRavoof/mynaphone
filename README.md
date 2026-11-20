@@ -10,9 +10,9 @@
 Keeps a private, properly tagged copy of the songs you play on your Windows PC, so you can listen
 when the internet is down.
 
-Mynaphone runs in the system tray. When a song plays in Spotify, or in YouTube Music in Chrome
-(through a small browser extension that comes in this repository), it records that app's own audio
-and keeps the recording only if it captured the whole song cleanly.
+Mynaphone runs in the system tray. When a song plays in Spotify, or in YouTube Music in Chrome,
+Edge, Brave, Vivaldi, or Opera (through a small browser extension that comes in this repository), it
+records that app's own audio and keeps the recording only if it captured the whole song cleanly.
 
 Then it finds out which song it was, using a free AcoustID key you register once, adds lyrics and
 cover art, and files it as an AAC file in a folder layout you can copy to a phone or to a USB stick
@@ -63,7 +63,7 @@ it hears.
 
 | | Supported today | Notes |
 |---|---|---|
-| Music sources | Spotify desktop app; YouTube and YouTube Music in Chrome or Edge with the bundled browser extension | Any other Windows app that reports what it plays can be added by process name, untested |
+| Music sources | Spotify desktop app; YouTube and YouTube Music in Chrome, Edge, Brave, Vivaldi, or Opera with the bundled browser extension | Brave, Vivaldi, and Opera haven't been tested end to end yet. Any other Windows app that reports what it plays can be added by process name, untested |
 | Spotify plans | Free, Premium, Premium with lossless | The recording matches the plan's stream quality; lossless captures stay FLAC |
 | Output formats | AAC (default), MP3, Opus, FLAC | Full tags, cover art and lyrics in every format |
 | Players for the result | Car head units, iPhone, Android, any computer; foobar2000, MusicBee, Poweramp, Navidrome, Jellyfin, Plexamp | Synced lyrics are embedded and also saved as `.lrc` files |
@@ -79,7 +79,7 @@ it hears.
 | Disk | About 9 MB per archived song as AAC, 30 MB as FLAC, plus 2 GB of working space; 5,000 songs need about 45 GB |
 | Audio | Any output device; the recording does not depend on your speakers or the Windows volume |
 | Network | Needed only for identification, lyrics and cover art, about 100 KB per song; recording works offline |
-| Optional | Spicetify for the Spotify bridge (exact ids, quality tier, Spotify's lyrics); Chrome or Edge with the bundled extension for YouTube |
+| Optional | Spicetify for the Spotify bridge (exact ids, quality tier, Spotify's lyrics); Chrome, Edge, Brave, Vivaldi, or Opera with the bundled extension for YouTube |
 
 macOS and Linux are not supported, because per-app audio capture and the media-session data the
 recorder depends on are Windows features. The library it produces plays on any device.

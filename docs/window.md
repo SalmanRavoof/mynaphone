@@ -149,6 +149,7 @@ matching line in `config.toml`.
 | Audio enhancements | Audio processing such as Nahimic that alters the sound before capture |
 | Spotify | Whether Spotify reports what it's playing to Windows |
 | Spicetify bridge | Whether the Spotify bridge is installed and connected |
+| Browser extension | Which browsers the extension connected from since the recorder started |
 | Volume Mixer | Whether each source app's slider in the Windows Volume Mixer is at 100 % |
 | Disk space | Free space on the library's and inbox's drives, and how many songs fit |
 | Tools | Whether ffmpeg and Chromaprint are present |

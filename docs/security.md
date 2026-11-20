@@ -43,7 +43,7 @@ only to the recorder. When the network is down nothing is sent and nothing is lo
 
 The app keeps at most 2 credentials in `config.toml`: your AcoustID application key and, if you
 added one, your Last.fm API key. `.gitignore` keeps that file out of any fork you push. The app never asks for your Spotify, Google or any other
-password, and the bridges use the sessions already signed in to Spotify and Chrome.
+password, and the bridges use the sessions already signed in to Spotify and your browser.
 
 ## Code you can read
 

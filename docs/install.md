@@ -13,8 +13,8 @@ Check that you have:
 - Windows 10 version 2004 or later, or Windows 11, 64-bit. To check, press <kbd>Win</kbd>+<kbd>R</kbd>,
   type `winver` and press <kbd>Enter</kbd>. Version 2004 is build 19041.
 - The Spotify desktop app from [spotify.com/download](https://www.spotify.com/download/windows/), or
-  Chrome or Edge for YouTube Music. The Microsoft Store edition of Spotify works for recording, but
-  Spicetify can't modify it, so it can't take the Spotify bridge.
+  Chrome, Edge, Brave, Vivaldi, or Opera for YouTube Music. The Microsoft Store edition of Spotify
+  works for recording, but Spicetify can't modify it, so it can't take the Spotify bridge.
 - A few gigabytes of free disk space on the drive where you want the library.
 
 ## Step 1: Install Python
@@ -172,20 +172,34 @@ be missing.
 
 ![Card 4 of the Set up page, with the steps for the browser extension and a button that opens its folder](images/set-up-bridges.png)
 
-1. In Mynaphone's **Settings**, tick **Also record YouTube and YouTube Music playing in Chrome or
-   Edge**, then select **Save settings**.
-2. In Chrome, open `chrome://extensions`. In Edge, open `edge://extensions`.
+You can use the extension in Chrome, Edge, Brave, Vivaldi, and Opera. Load it into each browser you
+play YouTube Music in.
+
+1. In Mynaphone's **Settings**, tick **Also record YouTube and YouTube Music playing in a browser**,
+   then select **Save settings**.
+2. Type your browser's extensions page into its address bar.
+
+   | Browser | Extensions page |
+   |---|---|
+   | Chrome | `chrome://extensions` |
+   | Edge | `edge://extensions` |
+   | Brave | `brave://extensions` |
+   | Vivaldi | `vivaldi://extensions` |
+   | Opera | `opera://extensions` |
+
 3. Switch on **Developer mode**.
 4. Select **Load unpacked** and choose the `browser-extension` folder inside the Mynaphone folder.
    **Open the extension folder** on card 4 of the **Set up** page shows you where it is.
 
 Google's guide to [loading an unpacked extension](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked)
-and Microsoft's guide to [sideloading an extension in Edge](https://learn.microsoft.com/en-us/microsoft-edge/extensions/getting-started/extension-sideloading)
-show the same steps with pictures.
+shows these steps with pictures, and Brave's are the same. Edge, Vivaldi, and Opera explain theirs in
+Microsoft's guide to [sideloading an extension in Edge](https://learn.microsoft.com/en-us/microsoft-edge/extensions/getting-started/extension-sideloading),
+Vivaldi's [help page on extensions](https://help.vivaldi.com/desktop/appearance-customization/extensions/),
+and Opera's [extension testing guide](https://help.opera.com/en/extensions/testing/).
 
 The extension runs only on youtube.com and music.youtube.com and talks only to Mynaphone on your own
-PC. Chrome shows a reminder about developer-mode extensions on each start, which is normal for an
-extension that didn't come from the store.
+PC. Chrome shows a reminder about developer-mode extensions on each start, and other browsers may
+too. That's normal for an extension that didn't come from a store.
 
 ## Step 10: Choose how it starts
 
@@ -212,9 +226,9 @@ You're ready. [Record your first song](first-song.md) shows what happens next.
 3. Run `.\.venv\Scripts\pip install -e .` again in case dependencies changed.
 4. If the [changelog](../CHANGELOG.md) mentions the capture helper or the tools, run
    `.\.venv\Scripts\python -m mynaphone setup-tools --force`.
-5. If it mentions the browser extension, select the reload button on the Mynaphone card in
-   `chrome://extensions`. If it mentions the Spotify bridge, run the `install-spicetify --apply`
-   command from step 8 again.
+5. If it mentions the browser extension, select the reload button on the Mynaphone card on each
+   browser's extensions page, such as `chrome://extensions`. If it mentions the Spotify bridge, run
+   the `install-spicetify --apply` command from step 8 again.
 6. Start the app again.
 
 Updates don't touch your `config.toml`, your library or the database.
@@ -226,7 +240,7 @@ Updates don't touch your `config.toml`, your library or the database.
    `.\.venv\Scripts\python -m mynaphone shortcut --remove` and delete the `Mynaphone` value under
    `HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Run` with Registry Editor. A taskbar
    pin is separate: right-click it and select **Unpin from taskbar**.
-3. Remove the extension from `chrome://extensions`.
+3. Remove the extension from each browser's extensions page, such as `chrome://extensions`.
 4. To remove the Spotify bridge, run `spicetify config extensions mynaphone.js-` and then
    `spicetify apply`. `spicetify restore` removes Spicetify itself.
 5. Delete the Mynaphone folder.

@@ -1,12 +1,15 @@
 # Copyright (C) 2026 Salman Ravoof
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Local WebSocket bridge for the Spicetify extension.
+"""Local WebSocket bridge for the Spicetify extension and the browser extension.
 
-The extension pushes Spotify's own player state (exact track uri, duration, position, paused,
+The Spicetify extension pushes Spotify's own player state (exact track uri, duration, position, paused,
 buffering, quality tier, album/artist uris, cover url). The daemon treats it as an enrichment of
 the Windows media-session signal for Spotify.exe and as the authoritative quality-tier source.
 The app can also send it commands (list playlists, read one's songs, play one from a song, pause,
 look up track details), each answered with a reply that carries the command's id.
+
+The browser extension connects on /youtube from each browser it is loaded in, and the bridge keeps each
+browser's latest report apart, so one browser's tab can't vouch for what another one plays.
 """
 from __future__ import annotations
 
@@ -18,6 +21,8 @@ import time
 from dataclasses import dataclass, field
 
 import websockets
+
+from . import browsers
 
 log = logging.getLogger("mynaphone.bridge")
 
@@ -105,6 +110,7 @@ class YouTubeState:
     event: str = ""
     received_at: float = 0.0
     client_ts: int = 0
+    browser: str = ""               # the browser's program file (brave.exe), '' when Windows didn't say
 
     @property
     def fresh(self) -> bool:
@@ -135,18 +141,20 @@ class BridgeError(RuntimeError):
 
 
 class Bridge:
-    def __init__(self, loop: asyncio.AbstractEventLoop, queue: asyncio.Queue, port: int, on_status=None):
+    def __init__(self, loop: asyncio.AbstractEventLoop, queue: asyncio.Queue, port: int, on_status=None,
+                 on_extension=None):
         self.loop = loop
         self.queue = queue
         self.port = port
         self.state = SpotifyState()
         self.lyrics: dict[str, dict] = {}       # track uri -> {"lrc": str, "synced": bool, "language": str}
-        self.youtube = YouTubeState()
-        self.youtube_connected = False
+        self.youtube_by_browser: dict[str, YouTubeState] = {}  # each browser's latest report, by its program file
+        self.youtube_sockets: dict[object, str] = {}           # each connected browser extension and its browser
         self.buffering_seen_since: float | None = None
         self.connected = False
         self._server = None
         self._on_status = on_status
+        self._on_extension = on_extension       # callable(the browser's program file or '', connected)
         self._detail_errors: set[tuple[str, str]] = set()
         self._spotify_ws = None
         self._next_id = 0
@@ -202,6 +210,34 @@ class Bridge:
                 self._on_status(connected)
             except Exception:
                 log.exception("bridge status listener failed")
+
+    @property
+    def youtube_connected(self) -> bool:
+        return bool(self.youtube_sockets)
+
+    def youtube_for(self, app: str) -> YouTubeState:
+        """The latest report from the browser whose media session is `app`. A report from a connection Windows didn't
+        trace to a browser stands in for any browser, as every report did before the bridge could tell them apart."""
+        st = self.youtube_by_browser.get(browsers.program(app))
+        if st is None:
+            st = self.youtube_by_browser.get("")
+        return st if st is not None else YouTubeState()
+
+    async def _browser_of(self, ws) -> str:
+        """The program file of the browser at the other end of `ws`, or '' when Windows doesn't say."""
+        try:
+            port = int(ws.remote_address[1])
+            return await self.loop.run_in_executor(None, browsers.program_on_port, port, self.port)
+        except Exception as e:
+            log.debug("could not tell which browser the extension connected from: %s", e)
+            return ""
+
+    def _extension_status(self, browser: str, connected: bool) -> None:
+        if self._on_extension:
+            try:
+                self._on_extension(browser, connected)
+            except Exception:
+                log.exception("browser extension status listener failed")
 
     async def start(self) -> None:
         self._server = await websockets.serve(self._handler, "127.0.0.1", self.port)
@@ -333,8 +369,11 @@ class Bridge:
         self.loop.call_soon_threadsafe(self.queue.put_nowait, BridgeEvent(kind="lyrics", state=self.state))
 
     async def _youtube_handler(self, ws):
-        self.youtube_connected = True
-        log.info("browser extension connected")
+        browser = await self._browser_of(ws)
+        where = f" in {browsers.name_of(browser)}" if browser else ""
+        self.youtube_sockets[ws] = browser
+        log.info("browser extension connected%s", where)
+        self._extension_status(browser, True)
         try:
             async for raw in ws:
                 try:
@@ -343,7 +382,7 @@ class Bridge:
                     continue
                 if msg.get("type") != "youtube":
                     continue
-                prev = self.youtube
+                prev = self.youtube_by_browser.get(browser) or YouTubeState()
                 st = YouTubeState(
                     video_id=msg.get("videoId", "") or "", url=msg.get("url", "") or "", host=msg.get("host", "") or "",
                     title=msg.get("title", "") or "", channel=msg.get("channel", "") or "",
@@ -356,12 +395,12 @@ class Bridge:
                     muted=bool(msg.get("muted")),
                     music=_clean_music(msg.get("music")), description=(msg.get("description") or "")[:4000],
                     event=msg.get("event", "") or "", received_at=time.monotonic(),
-                    client_ts=int(msg.get("ts") or 0),
+                    client_ts=int(msg.get("ts") or 0), browser=browser,
                 )
                 # a background tab that is paused must not override the tab that is playing
                 if st.paused and not prev.paused and st.video_id != prev.video_id and prev.fresh:
                     continue
-                self.youtube = st
+                self.youtube_by_browser[browser] = st
                 changed = (st.video_id != prev.video_id or st.paused != prev.paused or st.ended != prev.ended
                            or st.event in ("seeking", "seeked", "ratechange"))
                 if changed:
@@ -369,5 +408,6 @@ class Bridge:
         except websockets.ConnectionClosed:
             pass
         finally:
-            self.youtube_connected = False
-            log.info("browser extension disconnected")
+            self.youtube_sockets.pop(ws, None)
+            log.info("browser extension disconnected%s", where)
+            self._extension_status(browser, False)

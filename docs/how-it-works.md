@@ -29,7 +29,7 @@ loopback, arrived with Windows 10 version 2004. Microsoft documents it as the
 [process loopback activation type](https://learn.microsoft.com/en-us/windows/win32/api/audioclientactivationparams/ne-audioclientactivationparams-audioclient_activation_type)
 and shows it in its [application loopback sample](https://learn.microsoft.com/en-us/samples/microsoft/windows-classic-samples/applicationloopbackaudio-sample/).
 
-Mynaphone's helper, a 300-line C# program in [`helper/ProcessLoopback.cs`](../helper/ProcessLoopback.cs), asks Windows for Spotify's stream, or Chrome's, and
+Mynaphone's helper, a 300-line C# program in [`helper/ProcessLoopback.cs`](../helper/ProcessLoopback.cs), asks Windows for Spotify's stream, or a browser's, and
 passes it to the app as raw audio. Because only that process's audio is in the stream, a
 notification chime, a video in another window or a game cannot get into a recording.
 
@@ -60,9 +60,13 @@ extension for your playlists and their songs, and, when you record a playlist, h
 playlist from a given song and pause it at the end.
 
 YouTube gets the same treatment from the browser extension in [`browser-extension/`](../browser-extension/),
-which is loaded into Chrome or Edge by hand. On a YouTube page it reports the video id,
+which you load by hand into Chrome, Edge, Brave, Vivaldi, or Opera. On a YouTube page it reports the video id,
 whether YouTube marks the video as music, and every play, pause, seek and speed change. On YouTube
 Music it also reads the artist, album and year from the player bar.
+
+The extension can't reliably tell which browser it runs in, since several of them send Chrome's user
+agent. So the bridge asks Windows which program owns each connection and keeps each browser's
+reports apart. A track playing in Brave records only when the extension in Brave says it's music.
 
 ## Deciding whether a take is kept
 

@@ -25,7 +25,8 @@ lead_margin_seconds = 0.5
 
 [rules]
 # Which media apps to record. Matched against the Windows media-session app id (case-insensitive).
-sources = ["Spotify.exe", "chrome.exe", "msedge.exe"]
+# The YouTube option in Settings adds the browsers: chrome.exe, msedge.exe, brave.exe, vivaldi.exe, opera.exe.
+sources = ["Spotify.exe", "chrome.exe", "msedge.exe", "brave.exe", "vivaldi.exe", "opera.exe"]
 # A take is kept only if its length is within this many seconds of the track's reported duration,
 # and only if wall-clock time from start to end also matches (catches buffering stalls).
 duration_tolerance_seconds = 1.5

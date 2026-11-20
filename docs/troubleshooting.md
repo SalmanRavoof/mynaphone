@@ -70,7 +70,7 @@ to see them all.
 | already in the archive | The song is already in the library at the same or a higher tier |
 | already in the archive, skipped | As above, and harvest mode skipped it in Spotify |
 | not a music video | A YouTube video that YouTube doesn't mark as music |
-| couldn't confirm the browser tab's song | The browser extension didn't report, so the app couldn't be sure which tab played |
+| couldn't confirm the browser tab's song | The extension in the browser that played it didn't report, so the app couldn't be sure what the tab played |
 
 ## Songs are kept but not filed
 
@@ -114,14 +114,23 @@ with Spicetify itself.
 
 ## The browser extension connects and disconnects
 
-Chrome suspends an extension's background part after 30 seconds without activity and wakes it when a
-YouTube tab reports. The log shows connect and disconnect pairs while nothing is playing. This is normal.
+Your browser suspends an extension's background part after 30 seconds without activity and wakes it
+when a YouTube tab reports. So the log shows connect and disconnect pairs while nothing is playing.
+Each line names the browser, and you can leave them be.
 
-## Chrome shows an Errors button on the extension
+## A song in one browser is skipped while another browser records
+
+Each browser needs the extension loaded in it. Mynaphone takes a browser's word only for what that
+browser plays, so with the extension in Chrome alone, it skips a song in Brave as "couldn't confirm
+the browser tab's song". Load the extension in Brave too, following
+[step 9 of the install guide](install.md#step-9-optional-load-the-browser-extension-for-youtube).
+The **Setup check** page lists the browsers the extension connected from.
+
+## The browser shows an Errors button on the extension
 
 Open it. An entry that says the WebSocket connection to port 8765 failed with
 "ERR_CONNECTION_REFUSED" means the extension tried to reach the recorder while Mynaphone wasn't
-running, or was restarting. Chrome records every refused attempt.
+running, or was restarting. The browser records every refused attempt.
 
 Nothing is broken, and the extension tries less often the longer the recorder stays off. Select
 **Clear all** once Mynaphone is running again. Any other entry is worth reporting.

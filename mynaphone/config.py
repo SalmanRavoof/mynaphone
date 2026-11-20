@@ -6,6 +6,8 @@ import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import browsers
+
 
 @dataclass
 class Paths:
@@ -118,10 +120,12 @@ class Config:
             db_path=p("db_path", "mynaphone.db"),
             log_dir=p("log_dir", "logs"),
         )
+        rules = Rules(**raw.get("rules", {}))
+        rules.sources = browsers.with_new_browsers(rules.sources)
         cfg = cls(
             paths=paths,
             capture=Capture(**raw.get("capture", {})),
-            rules=Rules(**raw.get("rules", {})),
+            rules=rules,
             bridge=Bridge(**raw.get("bridge", {})),
             quality=Quality(**raw.get("quality", {})),
             library=Library(**raw.get("library", {})),
@@ -200,6 +204,7 @@ lead_margin_seconds = {lead}
 
 [rules]
 # Which media apps to record. Matched against the Windows media-session app id (case-insensitive).
+# The YouTube option in Settings adds the browsers: chrome.exe, msedge.exe, brave.exe, vivaldi.exe, opera.exe.
 sources = {sources}
 # A take is kept only if its length is within this many seconds of the track's reported duration,
 # and only if wall-clock time from start to end also matches (catches buffering stalls).

@@ -140,10 +140,11 @@ around is the one tested. Synced lyrics are embedded and also written as `.lrc` 
 
 ### Which services can it record?
 
-Spotify's desktop app, and YouTube and YouTube Music in Chrome or Edge once the bundled browser
-extension is loaded. Any other Windows app that reports what it plays, which most players do, can be
-added by process name in `config.toml`, untested. Metadata is then limited to what the app reports,
-with fingerprinting doing the rest, which needs the free AcoustID key.
+Spotify's desktop app, and YouTube and YouTube Music in Chrome, Edge, Brave, Vivaldi, or Opera once
+the bundled browser extension is loaded. Brave, Vivaldi, and Opera run the same extension as Chrome,
+and they haven't been tested end to end yet. Any other Windows app that reports what it plays, which
+most players do, can be added by process name in `config.toml`, untested. Metadata is then limited
+to what the app reports, with fingerprinting doing the rest, which needs the free AcoustID key.
 
 ### What about Apple Music, Amazon Music, Tidal, JioSaavn or Gaana?
 

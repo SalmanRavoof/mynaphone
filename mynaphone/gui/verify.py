@@ -11,6 +11,7 @@ import winreg
 from dataclasses import dataclass
 from pathlib import Path
 
+from .. import browsers
 from ..config import Config
 
 OK, WARN, FAIL, INFO = "ok", "warn", "fail", "info"
@@ -152,6 +153,24 @@ def check_spicetify(cfg: Config, bridge_connected: bool | None) -> Result:
     return Result("Spicetify bridge", INFO, "installed and enabled; connection is reported while the recorder runs")
 
 
+def check_browser_extension(cfg: Config, seen: list[str] | None) -> Result:
+    """`seen` holds the browsers the extension connected from since the recorder started, None while it's stopped."""
+    watched = [s for s in cfg.rules.sources if browsers.find(s)]
+    if not watched:
+        return Result("Browser extension", INFO, "The YouTube option in Settings is off, so Mynaphone doesn't record "
+                                                 "YouTube in a browser.")
+    if seen is None:
+        return Result("Browser extension", INFO, f"Mynaphone watches {browsers.names(watched)}. Start the recorder "
+                                                 "to see which of them the extension connects from.")
+    if seen:
+        return Result("Browser extension", OK, f"The extension has connected from {browsers.listed(seen)} since "
+                                               "the recorder started.")
+    return Result("Browser extension", WARN, "The extension hasn't connected since the recorder started. It connects "
+                                             "when you open a YouTube tab in a browser that has it loaded. If it "
+                                             "still doesn't, select the reload button on the Mynaphone card on that "
+                                             "browser's extensions page.")
+
+
 def check_disk(cfg: Config) -> Result:
     from .. import storage
     try:
@@ -179,13 +198,14 @@ def check_ffmpeg() -> Result:
                                  "filing waits until they are there")
 
 
-def run_all(cfg: Config, bridge_connected: bool | None) -> list[Result]:
+def run_all(cfg: Config, bridge_connected: bool | None, extension_seen: list[str] | None = None) -> list[Result]:
     return [
         check_capture_device(cfg),
         check_default_format(),
         check_enhancements(),
         check_spotify(),
         check_spicetify(cfg, bridge_connected),
+        check_browser_extension(cfg, extension_seen),
         check_app_volumes(cfg),
         check_disk(cfg),
         check_ffmpeg(),

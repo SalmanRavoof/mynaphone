@@ -627,6 +627,31 @@ def test_opening_the_app_by_hand_shows_the_window(qapp, gui_config, monkeypatch)
     assert opened == [False, True]
 
 
+def test_youtube_option_records_every_supported_browser(window, monkeypatch):
+    from mynaphone import browsers
+    from mynaphone.config import Config
+    monkeypatch.setattr(window, "_set_login_item", lambda enabled: None)       # leave the real startup list alone
+    monkeypatch.setattr(window, "_set_shortcut", lambda place, enabled: None)
+    s = window.settings
+    assert not s.ck_youtube.isChecked()
+    s.ck_youtube.setChecked(True)
+    window.save_settings()
+    assert Config.load(window.config_path).rules.sources == ["Spotify.exe", *browsers.PROCESSES]
+    s.ck_youtube.setChecked(False)
+    window.save_settings()
+    assert Config.load(window.config_path).rules.sources == ["Spotify.exe"]
+
+
+def test_setup_check_names_the_browsers_the_extension_connected_from(window):
+    window.on_event({"kind": "started", "device": "per-app capture", "rate": 48000})
+    window.on_event({"kind": "extension", "browser": "Brave", "connected": True})
+    window.on_event({"kind": "extension", "browser": "Brave", "connected": False})
+    window.on_event({"kind": "extension", "browser": "", "connected": True})
+    assert window.extension_seen == ["Brave", "a browser"]
+    window.on_finished()
+    assert window.extension_seen is None
+
+
 def test_tray_at_sign_in_is_a_start_with_windows_option(window):
     s = window.settings
     s.ck_login.setChecked(True)

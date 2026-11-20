@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import playlists, smtc as S
+from . import browsers, playlists, smtc as S
 from .bridge import Bridge, BridgeError, BridgeEvent, SpotifyState, YouTubeEvent, YouTubeState
 from .capture import LoopbackCapture, ProcessCapture, Take
 from .config import Config
@@ -68,7 +68,8 @@ class Recorder:
         else:
             self.captures["*"] = LoopbackCapture(cfg.capture.device, cfg.capture.preroll_seconds)
         self.smtc = S.SmtcListener(self.loop, self.queue)
-        self.bridge = (Bridge(self.loop, self.queue, cfg.bridge.port, on_status=self._bridge_status)
+        self.bridge = (Bridge(self.loop, self.queue, cfg.bridge.port, on_status=self._bridge_status,
+                              on_extension=self._extension_status)
                        if cfg.bridge.enabled else None)
         self.active: ActiveTake | None = None
         self.pending: S.Snapshot | None = None      # a source track seen while not playing
@@ -106,6 +107,10 @@ class Recorder:
         if connected and not self._details_asked:
             self._details_asked = True
             self.loop.call_later(10.0, lambda: asyncio.ensure_future(self._backfill_track_details()))
+
+    def _extension_status(self, browser: str, connected: bool) -> None:
+        """The browser extension in `browser` (its program file, '' when Windows didn't say) connected or left."""
+        self._emit("extension", browser=browsers.name_of(browser) if browser else "", connected=connected)
 
     # -- Spotify's track details for older songs ---------------------------------------------
 
@@ -376,14 +381,13 @@ class Recorder:
 
     @staticmethod
     def _is_browser(app: str) -> bool:
-        a = (app or "").lower()
-        return any(b in a for b in ("chrome", "msedge", "firefox", "brave", "opera", "vivaldi"))
+        return browsers.is_browser(app)
 
     def _youtube_ok(self, snap: S.Snapshot) -> tuple[bool, str]:
-        """For a browser source: only record when the extension says a music video/track is playing."""
-        if self.bridge is None or not self.bridge.youtube.fresh:
+        """For a browser source: only record when the extension in that browser says a music video/track is playing."""
+        yt = self.bridge.youtube_for(snap.app) if self.bridge is not None else None
+        if yt is None or not yt.fresh:
             return False, "browser extension not reporting"
-        yt = self.bridge.youtube
         if not yt.is_music:
             return False, "not music"
         if yt.duration_s and snap.end_ms and abs(yt.duration_s * 1000 - snap.end_ms) > 3000:
@@ -395,6 +399,8 @@ class Recorder:
         a = self.active
         if a is None or not self._is_browser(a.app) or st is None:
             return
+        if st.browser and st.browser != browsers.program(a.app):
+            return      # another browser's tab
         if (st.video_id and a.meta.extra.get("youtube", {}).get("video_id")
                 and st.video_id != a.meta.extra["youtube"]["video_id"]):
             return
@@ -571,7 +577,7 @@ class Recorder:
                 self._emit("skipped", artist=snap.artist, title=snap.title,
                            reason="not_music" if why == "not music" else "browser_unverified")
                 return
-            self._enrich_from_youtube(meta, self.bridge.youtube)
+            self._enrich_from_youtube(meta, self.bridge.youtube_for(snap.app))
             meta.quality_tier = "youtube"
         start_pos = snap.expected_position_ms()
         existing = self.store.find_archived(meta.artist, meta.title, meta.expected_ms, meta.source_uri or None,
@@ -660,8 +666,8 @@ class Recorder:
             if v is not None and v < 0.99:
                 flags["app_volume"] = int(round(v * 100))
                 log.info("Spotify's own volume is at %s%%; the take will be rejected", flags["app_volume"])
-        if self.bridge is not None and self._is_browser(app) and self.bridge.youtube.fresh:
-            yt = self.bridge.youtube
+        yt = self.bridge.youtube_for(app) if self.bridge is not None and self._is_browser(app) else None
+        if yt is not None and yt.fresh:
             if yt.muted or (yt.volume is not None and yt.volume < 0.99):
                 flags["app_volume"] = 0 if yt.muted else int(round((yt.volume or 0) * 100))
                 log.info("YouTube player volume is at %s%%; the take will be rejected", flags["app_volume"])

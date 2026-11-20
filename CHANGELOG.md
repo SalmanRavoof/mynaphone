@@ -6,6 +6,12 @@ All notable changes to Mynaphone are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- YouTube and YouTube Music in Brave, Vivaldi, and Opera, through the same browser extension as Chrome
+  and Edge. The YouTube option in Settings now records in all 5 browsers, and a `config.toml` that
+  had it ticked before gets the 3 new ones when Mynaphone reads it. They haven't been tested end to
+  end yet.
+- A **Browser extension** row on the Setup check page names the browsers the extension connected
+  from since the recorder started.
 - A `quit` command asks the running Mynaphone to quit, the way **Quit** in its tray menu does, and
   waits for it to close. Ending the process left a dead icon in the tray until the mouse passed over
   it, so a script that restarts Mynaphone can quit it this way now.
@@ -75,7 +81,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (206 tests).
+- Test suite (218 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -112,6 +118,11 @@ All notable changes to Mynaphone are listed here. The format follows
   Deezer's API.
 
 ### Fixed
+- One browser's extension could vouch for a video in another browser. With YouTube open in Chrome
+  and Edge, a music report from Chrome could let a video in Edge record as a song when the 2 videos
+  were about the same length. The bridge now asks Windows which browser owns each connection and
+  keeps each browser's reports apart, and the log names the browser when its extension connects or
+  leaves.
 - A film whose songs matched 2 of its MusicBrainz releases showed up twice in a player that groups
   by album artist, since each song kept its own release's credit. On November 20, 2026, 9 films did,
   among them Aashiq Banaya Aapne under "Himesh Reshammiya & Sameer" and "Himesh Reshammiya". A

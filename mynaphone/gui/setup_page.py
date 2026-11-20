@@ -185,12 +185,12 @@ class SetupPage(QScrollArea):
         self.spice_log = label("", "small", wrap=True)
         c.addWidget(self.spice_log)
         ext_dir = Path(__file__).resolve().parent.parent.parent / "browser-extension"
-        c.addWidget(label(f"Browser extension: in Chrome open chrome://extensions, switch on Developer mode, "
-                          f"select Load unpacked and choose {ext_dir}. "
-                          f"Then tick the YouTube option in Settings.", "small", wrap=True))
+        c.addWidget(label(f"For YouTube, switch on Developer mode on your browser's extensions page, such as "
+                          f"chrome://extensions in Chrome or brave://extensions in Brave, and load {ext_dir} with "
+                          f"Load unpacked. Then tick the YouTube option in Settings.", "small", wrap=True))
         btn_ext = QPushButton("Open the extension folder")
         btn_ext.clicked.connect(lambda: os.startfile(str(ext_dir)))
-        btn_ext.setToolTip("Open the folder to load in chrome://extensions with Developer mode on.")
+        btn_ext.setToolTip("Open the folder you load on your browser's extensions page, with Developer mode on.")
         c.addWidget(btn_ext, 0, Qt.AlignLeft)
         lay.addWidget(f)
 

@@ -65,7 +65,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from .. import __version__, shortcuts
+from .. import __version__, browsers, shortcuts
 from ..capture import list_devices
 from ..config import Config
 from ..store import Store, local_time
@@ -678,18 +678,16 @@ class SettingsPage(QScrollArea):
         self._row(form, "Capture method", self.cb_mode,
                   "Per app records just Spotify's audio, so notifications and other apps can never end up in a take. "
                   "Whole device is the older method and needs the other-apps rule below.")
-        self.ck_youtube = QCheckBox("Also record YouTube and YouTube Music playing in Chrome or Edge")
-        browsers = {"chrome.exe", "msedge.exe"}
-        self.ck_youtube.setChecked(any(s.lower() in browsers for s in cfg.rules.sources))
+        self.ck_youtube = QCheckBox("Also record YouTube and YouTube Music playing in a browser")
+        self.ck_youtube.setChecked(any(browsers.find(s) for s in cfg.rules.sources))
         box = QWidget()
         bv = QVBoxLayout(box)
         bv.setContentsMargins(0, 0, 0, 0)
         bv.setSpacing(2)
         bv.addWidget(self.ck_youtube)
-        h = label("Needs the Mynaphone browser extension "
-                  "(browser-extension folder, loaded via chrome://extensions with Developer mode). "
-                  "Only music videos and YouTube Music tracks are recorded; other videos are ignored.",
-                  "small", wrap=True)
+        h = label(f"This works in {browsers.names()}, with the Mynaphone browser extension loaded from the "
+                  "browser-extension folder. Mynaphone records music videos and YouTube Music tracks and leaves "
+                  "every other video alone.", "small", wrap=True)
         h.setContentsMargins(24, 0, 0, 0)
         bv.addWidget(h)
         form.addRow("", box)
@@ -978,8 +976,8 @@ class SetupPage(QScrollArea):
                             "volume sliders and free disk space.")
         head.addWidget(self.btn)
         c.addLayout(head)
-        c.addWidget(label("Looks at this PC: the capture device, audio processing, Spotify, "
-                          "the Spicetify bridge and free disk space.", "muted", wrap=True))
+        c.addWidget(label("This looks at the capture device, audio processing, Spotify, the Spicetify bridge, the "
+                          "browser extension, and the free disk space on this PC.", "muted", wrap=True))
         self.rows = RowList()
         self.rows.add("", "", "Press Run checks.")
         c.addWidget(self.rows)
@@ -1003,7 +1001,7 @@ class SetupPage(QScrollArea):
         self.btn.setEnabled(False)
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
-            results = verify.run_all(self.win.cfg, self.win.bridge_connected)
+            results = verify.run_all(self.win.cfg, self.win.bridge_connected, self.win.extension_seen)
         finally:
             QApplication.restoreOverrideCursor()
             self.btn.setEnabled(True)
@@ -1027,6 +1025,7 @@ class MainWindow(QMainWindow):
         self.cfg = Config.load(self.config_path)
         self.worker: RecorderWorker | None = None
         self.bridge_connected: bool | None = None
+        self.extension_seen: list[str] | None = None    # browsers the extension connected from, while recording
         self.recording_since: float | None = None
         self.recording_song: tuple[str, str] | None = None     # (artist, title) of the take on screen
         self.recording_expected_ms = 0
@@ -1234,9 +1233,8 @@ class MainWindow(QMainWindow):
         c.paths.library_dir = Path(s.ed_library.edit.text())
         c.capture.mode = "process" if s.cb_mode.currentIndex() == 0 else "device"
         c.capture.device = s.cb_device.currentData() or "default"
-        browsers = ["chrome.exe", "msedge.exe"]
-        base = [x for x in c.rules.sources if x.lower() not in browsers]
-        c.rules.sources = base + (browsers if s.ck_youtube.isChecked() else [])
+        base = [x for x in c.rules.sources if browsers.find(x) is None]
+        c.rules.sources = base + (list(browsers.PROCESSES) if s.ck_youtube.isChecked() else [])
         c.capture.bit_depth = 24 if s.cb_depth.currentIndex() == 1 else 16
         fmt, kbps = s.cb_format.currentData() or ("aac", 256)
         c.library.format = fmt
@@ -1413,6 +1411,7 @@ class MainWindow(QMainWindow):
             self._show_job(ev)
             return
         if kind == "started":
+            self.extension_seen = []
             name = str(ev.get("device", "")).replace(" [Loopback]", "")
             rate = int(ev.get("rate") or 0)
             st.device.setText(f"{name} · {rate / 1000:g} kHz" if rate else name)
@@ -1421,6 +1420,10 @@ class MainWindow(QMainWindow):
             self.bridge_connected = bool(ev.get("connected"))
             st.bridge.setText("Spotify bridge connected" if self.bridge_connected else "Spotify bridge not connected")
             self._refresh_chain()
+        elif kind == "extension":
+            name = ev.get("browser") or "a browser"
+            if ev.get("connected") and self.extension_seen is not None and name not in self.extension_seen:
+                self.extension_seen.append(name)
         elif kind == "recording":
             self.recording_since = float(ev.get("t_event") or time.monotonic())
             self.recording_expected_ms = int(ev.get("expected_ms") or 0)
@@ -1565,6 +1568,7 @@ class MainWindow(QMainWindow):
         st.bridge.setText("")
         st.chain.setText("")
         self.bridge_connected = None
+        self.extension_seen = None
         self._refresh_state_labels()
         self._load_recent()
         if self._quitting:

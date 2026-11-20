@@ -430,6 +430,40 @@ def test_browser_source_needs_extension(recorder, clock):
     assert any(e["kind"] == "skipped" and e["reason"] == "browser_unverified" for e in rec.events)
 
 
+def _youtube(clock, browser, video_id="abc", **kw):
+    from mynaphone.bridge import YouTubeState
+    return YouTubeState(video_id=video_id, is_music=True, paused=False, duration_s=180.0, received_at=clock(),
+                        browser=browser, **kw)
+
+
+def test_browser_take_needs_the_extension_in_that_browser(recorder, clock):
+    """Brave's extension saying a song plays there vouches for Brave's media session, never for Vivaldi's."""
+    from mynaphone.bridge import Bridge
+    rec, loop = recorder
+    rec.bridge = Bridge(loop, rec.queue, 0)
+    rec.bridge.youtube_by_browser["brave.exe"] = _youtube(clock, "brave.exe")
+    run(loop, rec._handle(snap("A video", artist="Channel", app="vivaldi.exe"), "media", None))
+    assert rec.active is None
+    assert any(e["kind"] == "skipped" and e["reason"] == "browser_unverified" for e in rec.events)
+    run(loop, rec._handle(snap("A song", artist="Singer", app="brave.exe"), "media", None))
+    assert rec.active is not None and rec.active.meta.source_uri == "youtube:video:abc"
+    assert rec.active.meta.quality_tier == "youtube"
+
+
+def test_another_browsers_pause_leaves_the_take_alone(recorder, clock):
+    """The same video paused in Chrome says nothing about the copy Brave is playing."""
+    from mynaphone.bridge import Bridge, YouTubeEvent, YouTubeState
+    rec, loop = recorder
+    rec.bridge = Bridge(loop, rec.queue, 0)
+    rec.bridge.youtube_by_browser["brave.exe"] = _youtube(clock, "brave.exe")
+    run(loop, rec._handle(snap("A song", artist="Singer", app="brave.exe"), "media", None))
+    clock.advance(30)
+    for browser in ("chrome.exe", "brave.exe"):
+        paused = YouTubeState(video_id="abc", paused=True, received_at=clock(), browser=browser, event="pause")
+        run(loop, rec._on_youtube(YouTubeEvent(state=paused)))
+        assert bool(rec.active.flags.get("paused")) == (browser == "brave.exe")
+
+
 def test_long_items_are_skipped(recorder, clock):
     rec, loop = recorder
     run(loop, rec._handle(snap("Episode 12", artist="Some Podcast", end_ms=2_400_000), "media", None))

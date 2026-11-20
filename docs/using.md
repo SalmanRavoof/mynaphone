@@ -30,11 +30,11 @@ that version is skipped like any song in the library.
 
 This needs the browser extension from [step 9 of the install guide](install.md#step-9-optional-load-the-browser-extension-for-youtube).
 
-1. In **Settings**, make sure **Also record YouTube and YouTube Music playing in Chrome or Edge** is
+1. In **Settings**, make sure **Also record YouTube and YouTube Music playing in a browser** is
    ticked, and select **Save settings**.
 2. On the **Status** page, select **Stop** and then **Start**. A change of sources takes effect the
    next time the recorder starts.
-3. In Chrome or Edge, open music.youtube.com and play a track from the beginning.
+3. In a browser with the extension loaded, open music.youtube.com and play a track from the beginning.
 
 Ordinary YouTube videos are ignored; only tracks YouTube itself marks as music are recorded. A change
 of playback speed, a seek or a pause discards the take, the same as for Spotify.

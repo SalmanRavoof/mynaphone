@@ -43,7 +43,7 @@ rejected takes kept for inspection, and divides the rest by the size of an avera
 
 | On the Settings page | In `config.toml` | Default | What it does |
 |---|---|---|---|
-| **Also record YouTube and YouTube Music playing in Chrome or Edge** | `sources` | `["Spotify.exe"]` | Apps to record, by process name. Ticking the YouTube option adds `chrome.exe` and `msedge.exe`. |
+| **Also record YouTube and YouTube Music playing in a browser** | `sources` | `["Spotify.exe"]` | Apps to record, by process name. Ticking the YouTube option adds `chrome.exe`, `msedge.exe`, `brave.exe`, `vivaldi.exe`, and `opera.exe`. A file from an older version that lists `chrome.exe` and `msedge.exe` gets the other 3 browsers when Mynaphone reads it. |
 | None | `duration_tolerance_seconds` | `1.5` | A take is kept only if its length, and the wall-clock time it took, are within this many seconds of the song's reported duration. |
 | **Minimum length** | `min_duration_seconds` | `10` | Shorter items are never recorded, such as a stray clip. The Spotify bridge tells ads apart by what Spotify says they are, so short songs such as film themes and interludes still record. |
 | None | `max_duration_seconds` | `900` | Longer items are never recorded, such as podcasts, audiobooks and DJ mixes. |

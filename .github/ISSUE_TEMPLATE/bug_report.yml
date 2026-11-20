@@ -49,6 +49,9 @@ body:
         - Spotify desktop app
         - YouTube or YouTube Music in Chrome
         - YouTube or YouTube Music in Edge
+        - YouTube or YouTube Music in Brave
+        - YouTube or YouTube Music in Vivaldi
+        - YouTube or YouTube Music in Opera
         - Another app
     validations:
       required: true
