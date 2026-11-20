@@ -105,7 +105,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (286 tests).
+- Test suite (288 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -142,6 +142,10 @@ All notable changes to Mynaphone are listed here. The format follows
   Deezer's API.
 
 ### Fixed
+- Re-tagging an M4A song swapped its cover's type between JPEG and PNG, since Mynaphone read the
+  type the wrong way round. By November 20, 2026, 230 songs had a JPEG cover marked as PNG. A re-tag
+  now reads the type from the picture itself, so each of those covers gets its right type back the
+  next time its song is re-tagged.
 - Re-tagging a song lost its recording time, its recording format (such as
   `48000Hz/16bit loopback`), and its AcoustID fingerprint. A re-tag writes every tag again from the
   index, and the index never kept them. So a re-tag moved the recording time to when the song went

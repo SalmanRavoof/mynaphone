@@ -391,7 +391,7 @@ ADDED_AT = "2026-10-06T01:25:08.871203+00:00"      # the recorder adds the row o
 needs_ffmpeg = pytest.mark.skipif(tools.ffmpeg() is None, reason="ffmpeg not installed")
 
 
-def _filed(cfg, tmp_path, fmt, capture, fingerprint=""):
+def _filed(cfg, tmp_path, fmt, capture, fingerprint="", cover=None):
     """A 2-second song filed in the library as `fmt`, and its row in the index."""
     from mynaphone.store import Store
     rate = 48000
@@ -403,7 +403,7 @@ def _filed(cfg, tmp_path, fmt, capture, fingerprint=""):
                      year=2021, track_number=2, track_total=9, release_type="album", mb_recording_id="rec-1",
                      acoustid_id="acoustid-1", acoustid_fingerprint=fingerprint)
     dst = file_take(src, cfg.paths.library_dir, ident, fmt, 128, "",
-                    dict(capture, source_app="Spotify.exe", quality_tier="high"), cover=None)
+                    dict(capture, source_app="Spotify.exe", quality_tier="high"), cover=cover)
     store = Store(cfg.paths.db_path)
     tid = store.add_track(artist="Singer", title="Song", album="Album", album_artist="Singer", track_number=2,
                           duration_ms=2000, source_app="Spotify.exe", quality_tier="high", file_path=str(dst),
@@ -466,3 +466,26 @@ def test_a_retag_fills_in_what_the_file_never_had(tmp_config, tmp_path, monkeypa
     md.refresh_track(tmp_config, store, store.track(tid), lookup=True, move=False)
     assert not fingerprints                                                  # it was looked up again
     assert read_kept_tags(dst) == {"MYNAPHONE_CAPTURED_AT": ADDED_AT, "ACOUSTID_FINGERPRINT": "AQADfirst"}
+
+
+@needs_ffmpeg
+@pytest.mark.parametrize("mime", ["image/jpeg", "image/png"])
+def test_a_retag_keeps_the_covers_picture_type(tmp_config, tmp_path, mime):
+    """A re-tag read an M4A cover's type flag the wrong way round, so each one swapped JPEG and PNG. The picture's
+    own bytes decide now, and that also puts back a flag an earlier re-tag swapped."""
+    from mutagen.mp4 import MP4, MP4Cover
+
+    from mynaphone.metadata import refresh_track
+    data = (b"\xff\xd8\xff" if mime == "image/jpeg" else b"\x89PNG") + b"\x00" * 64
+    right, wrong = ((MP4Cover.FORMAT_JPEG, MP4Cover.FORMAT_PNG) if mime == "image/jpeg"
+                    else (MP4Cover.FORMAT_PNG, MP4Cover.FORMAT_JPEG))
+    store, tid, dst = _filed(tmp_config, tmp_path, "aac", {}, cover=(data, mime))
+    for _ in range(2):
+        refresh_track(tmp_config, store, store.track(tid), lookup=False, move=False)
+        assert MP4(str(dst))["covr"][0].imageformat == right
+    f = MP4(str(dst))
+    f["covr"] = [MP4Cover(data, wrong)]                  # the flag an odd number of the old re-tags left
+    f.save()
+    refresh_track(tmp_config, store, store.track(tid), lookup=False, move=False)
+    cover = MP4(str(dst))["covr"][0]
+    assert cover.imageformat == right and bytes(cover) == data

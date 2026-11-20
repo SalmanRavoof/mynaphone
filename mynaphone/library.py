@@ -454,7 +454,11 @@ def read_extras(path: Path) -> tuple[tuple[bytes, str] | None, str]:
         cover = None
         if f.get("covr"):
             c = f["covr"][0]
-            cover = (bytes(c), "image/png" if c.imageformat == 13 else "image/jpeg")
+            data = bytes(c)
+            # the picture's own bytes decide the type. Until November 20 this read the flag the wrong way round,
+            # so every re-tag swapped it, and 230 JPEG covers ended up flagged as PNG
+            png = data[:4] == b"\x89PNG" or (data[:3] != b"\xff\xd8\xff" and c.imageformat == MP4Cover.FORMAT_PNG)
+            cover = (data, "image/png" if png else "image/jpeg")
         return cover, (f["\xa9lyr"][0] if f.get("\xa9lyr") else "")
     if ext == ".mp3":
         f = ID3(str(path))
