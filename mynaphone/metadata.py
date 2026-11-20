@@ -15,7 +15,7 @@ from pathlib import Path
 from . import films, genres, identify, lyrics as lyr, tools
 from .config import Config
 from .identify import Identity
-from .library import classify, place, resolve_cover, tag, write_lyrics_sidecar
+from .library import classify, place, read_kept_tags, resolve_cover, tag, write_lyrics_sidecar
 from .store import Store
 
 log = logging.getLogger("mynaphone.metadata")
@@ -215,8 +215,13 @@ def refresh_track(cfg: Config, store: Store, row, lookup: bool = True, manual: d
         rows = films.soundtrack_rows(store) if rows is None else rows
         films.take_album_artist(ident, films.album_artist_for(cfg.paths.library_dir, rows, folder,
                                                               films.credit_from(ident), int(row["id"])))
+    # when and how the take was recorded, and its fingerprint, aren't in the index, so the file keeps its own
+    kept = read_kept_tags(path)
+    ident.acoustid_fingerprint = kept.get("ACOUSTID_FINGERPRINT") or ident.acoustid_fingerprint
     capture = {"source_app": row["source_app"] or "", "source_uri": row["source_uri"] or "",
-               "quality_tier": row["quality_tier"] or "", "captured_at": row["created_at"] or "", "kind": kind}
+               "quality_tier": row["quality_tier"] or "",
+               "captured_at": kept.get("MYNAPHONE_CAPTURED_AT") or row["created_at"] or "",
+               "capture_format": kept.get("MYNAPHONE_CAPTURE_FORMAT", ""), "kind": kind}
     tag(path, ident, cover, lyrics_text, capture)
     write_lyrics_sidecar(path, lyrics_text)
     if lyr_state != "synced":

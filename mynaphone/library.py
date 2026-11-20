@@ -474,6 +474,36 @@ def read_extras(path: Path) -> tuple[tuple[bytes, str] | None, str]:
     return cover, (f["LYRICS"][0] if f.get("LYRICS") else "")
 
 
+# Tags a re-tag can't write again from the index, so it keeps the file's own. Filing takes the capture time and
+# format from the take's sidecar, and the index leaves the fingerprint out (Identity.to_json).
+KEPT_TAGS = ("MYNAPHONE_CAPTURED_AT", "MYNAPHONE_CAPTURE_FORMAT", "ACOUSTID_FINGERPRINT")
+
+
+def read_kept_tags(path: Path) -> dict[str, str]:
+    """The KEPT_TAGS a library file of any supported format has, by name."""
+    ext = path.suffix.lower()
+    found = {}
+    if ext == ".m4a":
+        f = MP4(str(path))
+        for k in KEPT_TAGS:
+            v = f.get(f"----:com.apple.iTunes:{k}")
+            found[k] = bytes(v[0]).decode("utf-8", "replace") if v else ""
+    elif ext == ".mp3":
+        try:
+            f = ID3(str(path))
+        except ID3NoHeaderError:
+            return {}
+        for k in KEPT_TAGS:
+            v = f.get(f"TXXX:{k}")
+            found[k] = str(v.text[0]) if v and v.text else ""
+    else:
+        f = OggOpus(str(path)) if ext == ".opus" else FLAC(str(path))
+        for k in KEPT_TAGS:
+            v = f.get(k)
+            found[k] = v[0] if v else ""
+    return {k: v for k, v in found.items() if v}
+
+
 def file_take(src_flac: Path, library_dir: Path, ident: Identity, fmt: str, bitrate: int,
               lyrics_text: str, capture: dict, cover: tuple[bytes, str] | None,
               keep_flac_for_lossless: bool = True, into: Path | None = None) -> Path:

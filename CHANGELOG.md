@@ -105,7 +105,7 @@ All notable changes to Mynaphone are listed here. The format follows
 - Items longer than 15 minutes (podcasts, mixes) are skipped; the limit is a setting.
 - Tooltips on every control, with a switch in Settings to turn them off.
 - Security page and security policy; system requirements and a "what it works with" table in the README.
-- Test suite (281 tests).
+- Test suite (286 tests).
 - GitHub Actions runs the tests on Windows with Python 3.11 and 3.13 and checks the code with Ruff.
 - Issue and pull request templates.
 - A code of conduct based on the Contributor Covenant 2.1.
@@ -142,6 +142,15 @@ All notable changes to Mynaphone are listed here. The format follows
   Deezer's API.
 
 ### Fixed
+- Re-tagging a song lost its recording time, its recording format (such as
+  `48000Hz/16bit loopback`), and its AcoustID fingerprint. A re-tag writes every tag again from the
+  index, and the index never kept them. So a re-tag moved the recording time to when the song went
+  into the index, just after its recording ended. It also dropped the format and fingerprint tags.
+  Mynaphone re-tags a song when you select **Save** or **Look up again** on the Library page or run
+  the `refresh` command, and when a background job updates it. By November 20, 2026, 622 of the 960
+  songs in the library had the later time and no recording format, and 557 of those songs had lost
+  their fingerprint too. A re-tag now keeps what the file has. Songs that never had these tags get
+  the time they went into the index, and a fingerprint once a lookup matches them.
 - One browser's extension could vouch for a video in another browser. With YouTube open in Chrome
   and Edge, a music report from Chrome could let a video in Edge record as a song when the 2 videos
   were about the same length. The bridge now asks Windows which browser owns each connection and

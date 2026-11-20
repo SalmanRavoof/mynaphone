@@ -383,3 +383,86 @@ def test_instrumental_choice_in_the_library_editor(tmp_config):
     assert json.loads(store.track(tid)["manual_json"])["instrumental"] is False
     refresh_track(tmp_config, store, store.track(tid), lookup=False, manual={"instrumental": ""}, move=False)
     assert "instrumental" not in json.loads(store.track(tid)["manual_json"])
+
+
+KEPT = {"MYNAPHONE_CAPTURED_AT": "2026-10-06T01:18:59.204381+00:00",
+        "MYNAPHONE_CAPTURE_FORMAT": "48000Hz/16bit loopback", "ACOUSTID_FINGERPRINT": "AQADtEmUaEkSRZEGAA"}
+ADDED_AT = "2026-10-06T01:25:08.871203+00:00"      # the recorder adds the row once the take is written
+needs_ffmpeg = pytest.mark.skipif(tools.ffmpeg() is None, reason="ffmpeg not installed")
+
+
+def _filed(cfg, tmp_path, fmt, capture, fingerprint=""):
+    """A 2-second song filed in the library as `fmt`, and its row in the index."""
+    from mynaphone.store import Store
+    rate = 48000
+    t = np.arange(rate * 2) / rate
+    x = (0.2 * np.sin(2 * np.pi * 440 * t)).astype(np.float32)
+    src = tmp_path / "in.flac"
+    sf.write(str(src), np.stack([x, x], axis=1), rate, subtype="PCM_16")
+    ident = Identity(source="acoustid", score=0.9, title="Song", artist="Singer", album="Album", album_artist="Singer",
+                     year=2021, track_number=2, track_total=9, release_type="album", mb_recording_id="rec-1",
+                     acoustid_id="acoustid-1", acoustid_fingerprint=fingerprint)
+    dst = file_take(src, cfg.paths.library_dir, ident, fmt, 128, "",
+                    dict(capture, source_app="Spotify.exe", quality_tier="high"), cover=None)
+    store = Store(cfg.paths.db_path)
+    tid = store.add_track(artist="Singer", title="Song", album="Album", album_artist="Singer", track_number=2,
+                          duration_ms=2000, source_app="Spotify.exe", quality_tier="high", file_path=str(dst),
+                          state="library", meta_json={}, lyrics_state="none",
+                          identity_json=json.dumps(ident.to_json()), created_at=ADDED_AT)
+    return store, tid, dst
+
+
+@pytest.mark.parametrize("fmt", [pytest.param("aac", marks=needs_ffmpeg), "flac",
+                                 pytest.param("mp3", marks=needs_ffmpeg), pytest.param("opus", marks=needs_ffmpeg)])
+def test_a_retag_keeps_when_and_how_the_song_was_recorded(tmp_config, tmp_path, fmt):
+    """A re-tag writes every tag again. The index doesn't have the capture time, the capture format, or the
+    fingerprint, so they come from the file."""
+    from mutagen import File
+    from mutagen.id3 import ID3
+    from mutagen.mp4 import MP4
+
+    from mynaphone.library import read_kept_tags
+    from mynaphone.metadata import refresh_track
+    store, tid, dst = _filed(tmp_config, tmp_path, fmt,
+                             {"captured_at": KEPT["MYNAPHONE_CAPTURED_AT"],
+                              "capture_format": KEPT["MYNAPHONE_CAPTURE_FORMAT"]},
+                             fingerprint=KEPT["ACOUSTID_FINGERPRINT"])
+    refresh_track(tmp_config, store, store.track(tid), lookup=False, manual={"album_artist": "Composer"}, move=False)
+    assert File(str(dst), easy=True)["albumartist"] == ["Composer"]         # the file was tagged again
+    assert read_kept_tags(dst) == KEPT
+    # each format keeps them its own way, as iTunes freeform atoms, ID3 TXXX frames, or Vorbis comments
+    if fmt == "aac":
+        raw = {k: bytes(MP4(str(dst))[f"----:com.apple.iTunes:{k}"][0]).decode() for k in KEPT}
+    elif fmt == "mp3":
+        raw = {k: ID3(str(dst))[f"TXXX:{k}"].text[0] for k in KEPT}
+    else:
+        raw = {k: File(str(dst))[k][0] for k in KEPT}
+    assert raw == KEPT
+
+
+def test_a_retag_fills_in_what_the_file_never_had(tmp_config, tmp_path, monkeypatch):
+    """A song filed without them gets the time its row was added, and a fingerprint only from a lookup that
+    matches it. A fingerprint the file has stays."""
+    import mynaphone.metadata as md
+    from mynaphone.library import read_kept_tags
+    store, tid, dst = _filed(tmp_config, tmp_path, "flac", {})
+    assert read_kept_tags(dst) == {}
+    md.refresh_track(tmp_config, store, store.track(tid), lookup=False, move=False)
+    assert read_kept_tags(dst) == {"MYNAPHONE_CAPTURED_AT": ADDED_AT}
+
+    # the weekly retry finds the song by its fingerprint. The first match gives the file one, and the next leaves it
+    fingerprints = ["AQADfirst", "AQADsecond"]
+    monkeypatch.setattr(md.identify, "lookup_with_retry", lambda key, path, hints: (
+        Identity(source="acoustid", score=0.9, title="Song", artist="Singer", album="Album", album_artist="Singer",
+                 acoustid_id="acoustid-1", acoustid_fingerprint=fingerprints.pop(0)), ""))
+    monkeypatch.setattr(md.tools, "fpcalc", lambda: "fpcalc.exe")
+    monkeypatch.setattr(md.genres, "resolve", lambda *a, **k: None)
+    monkeypatch.setattr(md.lyr, "fetch", lambda *a, **k: None)
+    monkeypatch.setattr(md, "resolve_cover", lambda *a, **k: None)
+    tmp_config.identify.acoustid_key = "key"
+    store.conn.execute("UPDATE tracks SET identity_json='{}' WHERE id=?", (tid,))    # no MusicBrainz id yet
+    md.refresh_track(tmp_config, store, store.track(tid), lookup=True, move=False)
+    assert read_kept_tags(dst) == {"MYNAPHONE_CAPTURED_AT": ADDED_AT, "ACOUSTID_FINGERPRINT": "AQADfirst"}
+    md.refresh_track(tmp_config, store, store.track(tid), lookup=True, move=False)
+    assert not fingerprints                                                  # it was looked up again
+    assert read_kept_tags(dst) == {"MYNAPHONE_CAPTURED_AT": ADDED_AT, "ACOUSTID_FINGERPRINT": "AQADfirst"}

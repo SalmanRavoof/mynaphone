@@ -110,6 +110,7 @@ def test_saving_in_the_library_editor_keeps_a_gathered_song_in_place(tmp_path, m
     tmp_config.paths.library_dir = root
     monkeypatch.setattr(md, "tag", lambda *a, **k: None)
     monkeypatch.setattr(md, "read_file_extras", lambda path: (None, ""))
+    monkeypatch.setattr(md, "read_kept_tags", lambda path: {})
     row = store.track(ids["01 Ratata.m4a"])
     ident = json.loads(row["identity_json"])
     ident.update(secondary_types=["Soundtrack"], year=2023, track_number=1, artist="Anirudh")
