@@ -2,3 +2,6 @@
 
 # The site's own address. lychee checks its pages as files, before GitHub Pages serves them.
 ^https://salmanravoof\.github\.io/mynaphone/
+
+# India Code times out or refuses automated requests, so the link check can't open it. Check it by hand.
+^https://www\.indiacode\.nic\.in/

@@ -361,7 +361,7 @@ MB coverage of Indian music https://community.metabrainz.org/t/is-there-any-kind
 Plex sidecar-only lyrics https://support.plex.tv/articles/215916117-adding-local-lyrics/
 
 Existing tools: SpytoRec https://github.com/Danidukiyu/SpytoRec ; Offstream https://github.com/revtex/offstream ; Spytify https://github.com/jwallet/spy-spotify ;
-Spytify+ https://github.com/PetraJThomas/spytify-plus ; Audials https://audials.com/en/one ; Replay Music https://applian.com/replay-music/ ;
+Spytify+ https://github.com/PetraJThomas/spytify-plus ; Audials https://audials.com/en/one/overview ; Replay Music https://applian.com/replay-music/ ;
 AudioCapture (per-process) https://github.com/masonasons/AudioCapture ; MusicAutoTagger https://github.com/lux032/MusicAutoTagger ; lrcget https://github.com/tranxuanthang/lrcget
 
 Alternatives: Zotify fork https://github.com/Googolplexed0/zotify ; ban report https://github.com/zotify-dev/zotify/issues/316 ;
