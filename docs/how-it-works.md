@@ -6,7 +6,7 @@ use the app.
 ## From a playing song to a filed one
 
 ```mermaid
-flowchart LR
+flowchart TD
     src["Spotify or browser"] -- "audio" --> helper["Per-app capture helper"]
     helper -- "raw audio" --> ring["3-second ring buffer"]
     ring --> take["Take"]
@@ -29,7 +29,7 @@ loopback, arrived with Windows 10 version 2004. Microsoft documents it as the
 [process loopback activation type](https://learn.microsoft.com/en-us/windows/win32/api/audioclientactivationparams/ne-audioclientactivationparams-audioclient_activation_type)
 and shows it in its [application loopback sample](https://learn.microsoft.com/en-us/samples/microsoft/windows-classic-samples/applicationloopbackaudio-sample/).
 
-Mynaphone's helper, a 300-line C# program in [`helper/ProcessLoopback.cs`](../helper/ProcessLoopback.cs), asks Windows for Spotify's stream, or a browser's, and
+Mynaphone's helper, a 300-line C# program in [`helper/ProcessLoopback.cs`](https://github.com/SalmanRavoof/mynaphone/blob/main/helper/ProcessLoopback.cs), asks Windows for Spotify's stream, or a browser's, and
 passes it to the app as raw audio. Because only that process's audio is in the stream, a
 notification chime, a video in another window or a game cannot get into a recording.
 
@@ -52,7 +52,7 @@ pauses and seeks. Mynaphone reads it through Windows'
 [media session manager API](https://learn.microsoft.com/en-us/uwp/api/windows.media.control.globalsystemmediatransportcontrolssessionmanager).
 
 The Spotify bridge adds what Windows doesn't know. It is optional and needs [Spicetify](https://spicetify.app)
-installed. A Spicetify extension inside Spotify, [`spicetify/mynaphone.js`](../spicetify/mynaphone.js), reports the
+installed. A Spicetify extension inside Spotify, [`spicetify/mynaphone.js`](https://github.com/SalmanRavoof/mynaphone/blob/main/spicetify/mynaphone.js), reports the
 exact track id and album id, the track and disc numbers, and the quality tier the song played at.
 It also passes on buffering, Spotify's own synced lyrics, album facts such as the release date
 and label, whether the item playing is an ad, and which device Spotify Connect plays it on, all over a
@@ -60,7 +60,7 @@ local WebSocket. The app can ask the
 extension for your playlists and their songs, and, when you record a playlist, have it play the
 playlist from a given song and pause it at the end.
 
-YouTube gets the same treatment from the browser extension in [`browser-extension/`](../browser-extension/),
+YouTube gets the same treatment from the browser extension in [`browser-extension/`](https://github.com/SalmanRavoof/mynaphone/tree/main/browser-extension),
 which you load by hand into Chrome, Edge, Brave, Vivaldi, or Opera. On a YouTube page it reports the video id,
 whether YouTube marks the video as music, and every play, pause, seek and speed change. On YouTube
 Music it also reads the artist, album and year from the player bar.

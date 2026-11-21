@@ -214,10 +214,10 @@ the recorder's state.
 
 | Icon | State |
 |---|---|
-| <img src="../mynaphone/gui/assets/mark/png/stopped/mynaphone-stopped-tile-32.png" width="24" alt="Myna icon, stopped"> | Stopped |
-| <img src="../mynaphone/gui/assets/mark/png/listening/mynaphone-listening-tile-32.png" width="24" alt="Myna icon with a dark eye, listening"> | Listening for a song |
-| <img src="../mynaphone/gui/assets/mark/png/recording/mynaphone-recording-tile-32.png" width="24" alt="Myna icon with a red eye, recording"> | Recording a song |
-| <img src="../mynaphone/gui/assets/mark/png/paused/mynaphone-paused-tile-32.png" width="24" alt="Myna icon, paused"> | Paused |
+| <img src="https://raw.githubusercontent.com/SalmanRavoof/mynaphone/main/mynaphone/gui/assets/mark/png/stopped/mynaphone-stopped-tile-32.png" width="24" alt="Myna icon, stopped"> | Stopped |
+| <img src="https://raw.githubusercontent.com/SalmanRavoof/mynaphone/main/mynaphone/gui/assets/mark/png/listening/mynaphone-listening-tile-32.png" width="24" alt="Myna icon with a dark eye, listening"> | Listening for a song |
+| <img src="https://raw.githubusercontent.com/SalmanRavoof/mynaphone/main/mynaphone/gui/assets/mark/png/recording/mynaphone-recording-tile-32.png" width="24" alt="Myna icon with a red eye, recording"> | Recording a song |
+| <img src="https://raw.githubusercontent.com/SalmanRavoof/mynaphone/main/mynaphone/gui/assets/mark/png/paused/mynaphone-paused-tile-32.png" width="24" alt="Myna icon, paused"> | Paused |
 
 Click the icon to show or hide the window. Right-click it for the menu.
 

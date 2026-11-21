@@ -284,7 +284,7 @@ same family of license.
 
 ### Can I contribute, and what won't be merged?
 
-Yes, through issues and pull requests; the [contributing guide](../CONTRIBUTING.md) explains the
+Yes, through issues and pull requests; the [contributing guide](https://github.com/SalmanRavoof/mynaphone/blob/main/CONTRIBUTING.md) explains the
 setup. Changes that download audio, bypass copy protection, automate a service's account, or send
 data off the user's PC won't be merged.
 

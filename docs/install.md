@@ -42,12 +42,12 @@ moving it later means running step 3 again.
    <kbd>Enter</kbd>.
 2. Run these commands one at a time:
 
-   ```powershell
-   python -m venv .venv
-   .\.venv\Scripts\pip install -e .
-   .\.venv\Scripts\python -m mynaphone setup-tools
-   Copy-Item config.example.toml config.toml
-   ```
+    ```powershell
+    python -m venv .venv
+    .\.venv\Scripts\pip install -e .
+    .\.venv\Scripts\python -m mynaphone setup-tools
+    Copy-Item config.example.toml config.toml
+    ```
 
 | Command | What it does |
 |---|---|
@@ -155,13 +155,13 @@ be missing.
 1. Install Spicetify by following its [getting-started guide](https://spicetify.app/docs/getting-started).
 2. In the Mynaphone folder, run:
 
-   ```powershell
-   .\.venv\Scripts\python -m mynaphone install-spicetify --apply
-   ```
+    ```powershell
+    .\.venv\Scripts\python -m mynaphone install-spicetify --apply
+    ```
 
-   The command copies `spicetify/mynaphone.js` into Spicetify's `Extensions` folder, enables it and
-   runs `spicetify apply`. Spotify restarts once. You can also select **Reinstall** on card 4 of the
-   **Set up** page.
+    The command copies `spicetify/mynaphone.js` into Spicetify's `Extensions` folder, enables it and
+    runs `spicetify apply`. Spotify restarts once. You can also select **Reinstall** on card 4 of the
+    **Set up** page.
 3. Select **Start** on the **Status** page. Next to the buttons it should read "Spotify bridge connected".
 
 > [!IMPORTANT]
@@ -179,13 +179,13 @@ play YouTube Music in.
    then select **Save settings**.
 2. Type your browser's extensions page into its address bar.
 
-   | Browser | Extensions page |
-   |---|---|
-   | Chrome | `chrome://extensions` |
-   | Edge | `edge://extensions` |
-   | Brave | `brave://extensions` |
-   | Vivaldi | `vivaldi://extensions` |
-   | Opera | `opera://extensions` |
+    | Browser | Extensions page |
+    |---|---|
+    | Chrome | `chrome://extensions` |
+    | Edge | `edge://extensions` |
+    | Brave | `brave://extensions` |
+    | Vivaldi | `vivaldi://extensions` |
+    | Opera | `opera://extensions` |
 
 3. Switch on **Developer mode**.
 4. Select **Load unpacked** and choose the `browser-extension` folder inside the Mynaphone folder.
@@ -224,7 +224,7 @@ You're ready. [Record your first song](first-song.md) shows what happens next.
 1. Stop Mynaphone through the tray icon's **Quit**.
 2. Replace the folder's contents with the new version, or run `git pull`.
 3. Run `.\.venv\Scripts\pip install -e .` again in case dependencies changed.
-4. If the [changelog](../CHANGELOG.md) mentions the capture helper or the tools, run
+4. If the [changelog](https://github.com/SalmanRavoof/mynaphone/blob/main/CHANGELOG.md) mentions the capture helper or the tools, run
    `.\.venv\Scripts\python -m mynaphone setup-tools --force`.
 5. If it mentions the browser extension, select the reload button on the Mynaphone card on each
    browser's extensions page, such as `chrome://extensions`. If it mentions the Spotify bridge, run

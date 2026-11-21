@@ -49,7 +49,7 @@ password, and the bridges use the sessions already signed in to Spotify and your
 
 - Everything is open source under the GPL, including the per-app capture helper, which is 300 lines
   of C# in `helper/ProcessLoopback.cs` and is compiled on your own PC by `setup-tools`.
-- Every dependency is listed with its license in the [third-party notices](../THIRD_PARTY_NOTICES.md).
+- Every dependency is listed with its license in the [third-party notices](https://github.com/SalmanRavoof/mynaphone/blob/main/THIRD_PARTY_NOTICES.md).
   `setup-tools` downloads ffmpeg from the [gyan.dev builds](https://www.gyan.dev/ffmpeg/builds/) and
   Chromaprint from the [Chromaprint releases on GitHub](https://github.com/acoustid/chromaprint/releases),
   both over HTTPS.

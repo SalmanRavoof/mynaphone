@@ -100,7 +100,7 @@ logo, so nobody mistakes it for this project.
 
 Mynaphone is free software under the GNU General Public License, version 3 or later, and comes
 "as is", without warranty of any kind, express or implied, as sections 15 and 16 of the
-[license text](../LICENSE) state. The maintainers accept no responsibility for how you use it.
+[license text](https://github.com/SalmanRavoof/mynaphone/blob/main/LICENSE) state. The maintainers accept no responsibility for how you use it.
 
 ## Reporting concerns
 
