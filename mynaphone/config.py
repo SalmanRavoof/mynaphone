@@ -1,5 +1,10 @@
 # Copyright (C) 2026 Salman Ravoof
 # SPDX-License-Identifier: GPL-3.0-or-later
+"""The settings in config.toml, one dataclass for each section of the file.
+
+`Config.load` reads the file, and `Config.save` writes the settings back to it. docs/settings.md explains what each
+setting does.
+"""
 from __future__ import annotations
 
 import tomllib
@@ -11,6 +16,8 @@ from . import browsers
 
 @dataclass
 class Paths:
+    """The `[paths]` section lists the folders and files Mynaphone works with. A relative path counts from the folder
+    config.toml is in."""
     inbox_dir: Path
     discard_dir: Path
     library_dir: Path
@@ -20,6 +27,8 @@ class Paths:
 
 @dataclass
 class Capture:
+    """The `[capture]` section sets how Mynaphone records audio. Its `mode` is "process" by default, so Mynaphone
+    records the source app's audio alone. With "device", it records the whole output device."""
     mode: str = "process"        # process (per-app, nothing else can bleed in) | device (whole output device)
     device: str = "default"
     sample_rate: int = 0
@@ -30,6 +39,8 @@ class Capture:
 
 @dataclass
 class Rules:
+    """The `[rules]` section decides what Mynaphone records and which takes it keeps. It also has the settings for
+    harvest mode and the silence warning."""
     sources: list[str] = field(default_factory=lambda: ["Spotify.exe"])
     duration_tolerance_seconds: float = 1.5
     min_duration_seconds: float = 10.0               # ads are told apart by the Spotify bridge, not by length
@@ -44,37 +55,50 @@ class Rules:
     silence_warning_seconds: float = 15.0        # warn when a song plays this long with no sound reaching us; 0 = off
 
     def is_source(self, app_id: str) -> bool:
+        """True when `app_id` is one of `sources`, or ends with one, ignoring case."""
         a = (app_id or "").lower()
         return any(a == s.lower() or a.endswith(s.lower()) for s in self.sources)
 
     def is_ignored_title(self, title: str) -> bool:
+        """True when `title` is empty or matches one of `ignore_titles`. Case and the spaces around `title` don't
+        count."""
         t = (title or "").strip().lower()
         return not t or t in {s.lower() for s in self.ignore_titles}
 
 
 @dataclass
 class Bridge:
+    """The `[bridge]` section sets up the local WebSocket server the 2 bridges connect to. `enabled` turns it on and
+    off, and both bridges look for it on port 8765, the default `port`."""
     enabled: bool = True
     port: int = 8765
 
 
 @dataclass
 class Quality:
+    """The `[quality]` setting, `upgrade_on_higher_tier`, is on by default and makes Mynaphone record a song again
+    when it plays at a higher tier than your copy."""
     upgrade_on_higher_tier: bool = True
 
 
 @dataclass
 class Library:
+    """The `[library]` section sets the format and bitrate of the songs filed in your library. A take from a lossless
+    tier stays FLAC whatever `format` says."""
     format: str = "aac"          # aac | mp3 | opus | flac  (lossless-tier captures always stay flac)
     aac_bitrate: int = 256       # kbps for the lossy formats (name kept for compatibility)
 
     @property
     def bitrate(self) -> int:
+        """`aac_bitrate` as a whole number, in kbps, for every lossy format. The setting keeps its old name so
+        existing config files still load."""
         return int(self.aac_bitrate)
 
 
 @dataclass
 class Identify:
+    """The `[identify]` section gives the song lookups their keys and options. AcoustID needs a key and Last.fm's is
+    optional."""
     acoustid_key: str = ""          # application API key from acoustid.org/my-applications
     musicbrainz_contact: str = ""   # email or URL MusicBrainz asks clients to send in User-Agent
     lastfm_api_key: str = ""        # optional, from last.fm/api/account/create; used for genres
@@ -84,11 +108,15 @@ class Identify:
 
 @dataclass
 class Albums:
+    """The `[albums]` setting, `wanted_min_songs`, puts an album you don't have whole on the Wanted list once you
+    have that many of its songs and haven't taken it off. With 0, only the albums you add yourself go on it."""
     wanted_min_songs: int = 3       # an album you don't have whole is wanted once you have this many of its songs
 
 
 @dataclass
 class App:
+    """The `[app]` section sets how the window opens and closes and whether recording starts when the app opens. It
+    also has the tooltip switch."""
     start_minimized: bool = True        # when Windows starts the app; opened by hand, the window always shows
     close_to_tray: bool = True
     autostart_recording: bool = True
@@ -97,6 +125,7 @@ class App:
 
 @dataclass
 class Config:
+    """Everything in config.toml, one field for each section, plus `source_file`, the file it came from."""
     paths: Paths
     capture: Capture
     rules: Rules
@@ -110,6 +139,10 @@ class Config:
 
     @classmethod
     def load(cls, path: str | Path) -> "Config":
+        """Read the config.toml at `path`. A section or setting the file leaves out takes its default, and a relative
+        path counts from the file's folder. It also makes any working folder that's missing, though never the library
+        folder. And it adds newer browsers to a `sources` list that the YouTube option wrote before Mynaphone
+        supported them."""
         path = Path(path).resolve()
         with open(path, "rb") as f:
             raw = tomllib.load(f)
@@ -146,6 +179,8 @@ class Config:
         return cfg
 
     def save(self, path: str | Path | None = None) -> Path:
+        """Write the settings to `path`, or to the file they came from when there's no `path`. It rebuilds the file
+        from a template with a comment above most settings, so it drops anything you added by hand."""
         path = Path(path) if path else self.source_file
         path.write_text(TEMPLATE.format(
             inbox_dir=_s(self.paths.inbox_dir), discard_dir=_s(self.paths.discard_dir),

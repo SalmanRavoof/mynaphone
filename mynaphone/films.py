@@ -121,7 +121,7 @@ class Move:
 
 
 def film_folder(library_dir: Path, file_path) -> Path | None:
-    """The Soundtracks/<folder> a file is in, under the library, or None for a file anywhere else."""
+    """The `Soundtracks/<folder>` a file is in, under the library, or None for a file anywhere else."""
     try:
         rel = Path(file_path or "").parent.relative_to(library_dir)
     except ValueError:
@@ -435,7 +435,7 @@ def album_artist_plan(library_dir: Path, rows) -> list[Retag]:
 
 def album_artist_for(library_dir: Path, rows, folder: Path, own: Credit,
                      exclude: int | None = None) -> AlbumArtist | None:
-    """The album artist a song gets in `folder` (Soundtracks/<folder>), worked out with its own credit among those of
+    """The album artist a song gets in `folder` (`Soundtracks/<folder>`), worked out with its own credit among those of
     the folder's songs: a Leo single credited to "Anirudh Ravichander & Nikhita Gandhi" gets "Anirudh Ravichander".
     `exclude` is the song's own row. None when no other song is in the folder."""
     peers = [credit_of(r) for r in rows
