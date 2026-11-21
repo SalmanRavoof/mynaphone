@@ -572,7 +572,7 @@ def film_tags(songs: list[Song]) -> dict[int, FilmTags]:
 
 
 def film_tags_for(library_dir: Path, rows, folder: Path, own: Song) -> FilmTags | None:
-    """What a song carries in its tags in `folder` (Soundtracks/<folder>), worked out with the folder's other songs.
+    """What a song carries in its tags in `folder` (`Soundtracks/<folder>`), worked out with the folder's other songs.
     `own.id` is the song's own row, or -1 for a song being filed. None when no other song is in the folder."""
     peers = [song_of(r) for r in rows if film_folder(library_dir, r["file_path"]) == folder and int(r["id"]) != own.id]
     return film_tags(peers + [own]).get(own.id) if peers else None
