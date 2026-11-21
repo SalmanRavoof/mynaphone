@@ -1,0 +1,4 @@
+# Addresses the docs workflow's link check skips, one regular expression a line.
+
+# The site's own address. lychee checks its pages as files, before GitHub Pages serves them.
+^https://salmanravoof\.github\.io/mynaphone/

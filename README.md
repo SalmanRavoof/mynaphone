@@ -132,7 +132,9 @@ looks like along the way.
 
 ## Documentation
 
-The [documentation index](docs/README.md) groups every page by what you want to do.
+The [documentation index](docs/README.md) groups every page by what you want to do. You can also read
+them on the [docs site](https://salmanravoof.github.io/mynaphone/), with search and a reference made
+from the code.
 
 | Page | What you'll find |
 |---|---|

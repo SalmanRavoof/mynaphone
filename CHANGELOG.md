@@ -6,6 +6,9 @@ All notable changes to Mynaphone are listed here. The format follows
 ## [Unreleased]
 
 ### Added
+- A [docs site](https://salmanravoof.github.io/mynaphone/) built from `docs/` with Zensical.
+  GitHub Actions checks its links on every push and pull request and publishes it from main. Its
+  **Code reference** section comes from the code's docstrings.
 - Keyboard shortcuts in the window. Ctrl+1 to Ctrl+6 open the pages in the sidebar's order, Ctrl+R
   starts or stops the recorder, Ctrl+P pauses or resumes it, and Ctrl+H turns harvest mode on or off.
   Ctrl+F finds a song in the Library, Ctrl+S saves the Library editor or Settings, and F5 runs the

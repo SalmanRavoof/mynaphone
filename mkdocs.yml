@@ -1,0 +1,79 @@
+site_name: Mynaphone
+site_url: https://salmanravoof.github.io/mynaphone/
+site_description: Keeps a private, tagged copy of the songs you play on your Windows PC, for listening offline.
+repo_url: https://github.com/SalmanRavoof/mynaphone
+repo_name: SalmanRavoof/mynaphone
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  features:
+    - content.action.edit
+    - content.code.copy
+    - navigation.footer
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.magiclink
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+plugins:
+  - search
+  - privacy
+  - gh-admonitions
+  - api-autonav:
+      modules: [mynaphone]
+      nav_section_title: Code reference
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [.]
+          options:
+            docstring_style: google
+            members_order: source
+            show_source: false
+
+nav:
+  - README.md
+  - Getting started:
+      - Install guide: install.md
+      - Record your first song: first-song.md
+  - Everyday tasks:
+      - Using Mynaphone: using.md
+      - Troubleshooting guide: troubleshooting.md
+      - Questions and answers: faq.md
+  - Reference:
+      - The window and the tray: window.md
+      - Settings reference: settings.md
+      - Command line: command-line.md
+      - Security and privacy: security.md
+      - Legal notice: legal.md
+  - Background:
+      - How it works: how-it-works.md
+      - Design research: research.md
+      - Where the name comes from: name.md
+      - Logo brief: logo-brief.md

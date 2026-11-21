@@ -59,7 +59,7 @@ Layout:
 - `spicetify/` and `browser-extension/` the 2 bridges.
 - `tests/` pytest suite.
 - `docs/` user documentation, indexed in `docs/README.md`.
-- `.github/` the test workflow, the issue forms and the pull request template.
+- `.github/` the test and docs workflows, the issue forms and the pull request template.
 
 ## Code style
 
@@ -74,9 +74,13 @@ Layout:
 
 ## Writing documentation
 
-The docs are Markdown files that GitHub renders, with no separate site. `docs/README.md` sorts them
-into getting started, everyday tasks, reference and background, and a new page needs a row there and
-in the README's documentation table.
+The docs are Markdown files that GitHub renders, and the docs workflow also builds them into a
+[docs site](https://salmanravoof.github.io/mynaphone/) with [Zensical](https://zensical.org/).
+`docs/README.md` sorts them into getting started, everyday tasks, reference and background, and a
+new page needs a row there and in the README's documentation table. It also needs a line in the
+`nav` list in `mkdocs.yml`, or the site's menu won't show it. To preview the site, run
+`.\.venv\Scripts\pip install --group docs` once. Then `.\.venv\Scripts\zensical serve` shows it at
+http://localhost:8000/mynaphone/.
 
 - Write in plain US English, in short paragraphs. Use numbered steps for a procedure, one action per
   step, and name window controls in bold exactly as they appear, such as **Save settings**.

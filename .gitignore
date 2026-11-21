@@ -5,6 +5,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 *.log
+site/
 
 # private: holds the AcoustID key (see config.example.toml)
 config.toml
