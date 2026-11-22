@@ -4,6 +4,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # A weekly run, on Mondays, finds links to other sites that stopped working.
+  schedule:
+    - cron: "0 6 * * 1"
   workflow_dispatch:
 
 permissions:
@@ -26,13 +29,28 @@ jobs:
         run: python -m pip install --group docs
       - name: Build the site
         run: zensical build --strict
-      # Zensical checks the links between pages as it builds, and lychee then checks every link in
-      # the built site. It skips the addresses in .lycheeignore.
-      - name: Check the links
+      # Zensical checks the links between pages as it builds, and lychee then checks every link
+      # inside the built site.
+      - name: Check the links inside the site
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: >-
+            --offline
+            --no-progress
+            --exclude-path 'site/404\.html'
+            'site/**/*.html'
+          fail: true
+      # Pull requests and the weekly run also check the links to other sites, except the addresses
+      # in .lycheeignore. A push to main leaves them out, so another site's outage can't hold the
+      # site back.
+      - name: Check the links to other sites
+        if: github.event_name != 'push'
         uses: lycheeverse/lychee-action@v2
         with:
           args: >-
             --no-progress
+            --scheme https
+            --scheme http
             --max-retries 3
             --retry-wait-time 5
             --timeout 30
@@ -42,15 +60,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Upload the site
-        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
         uses: actions/upload-pages-artifact@v5
         with:
           path: site
 
-  # A pull request stops after the checks, and a push to main publishes the site.
+  # Pull requests and the weekly run stop after the checks. A push to main, or a run started by
+  # hand on main, publishes the site.
   deploy:
     name: Publish to GitHub Pages
-    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: build
     runs-on: ubuntu-latest
     permissions:
