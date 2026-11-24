@@ -112,6 +112,12 @@ def test_safe_filenames():
     assert len(safe("x" * 200)) == 90
 
 
+def test_safe_names_steer_clear_of_device_names():
+    assert [safe(s) for s in ("CON", "aux", "Com1", "LPT9", "Nul.Remix")] == ["CON_", "aux_", "Com1_", "LPT9_",
+                                                                             "Nul_.Remix"]
+    assert [safe(s) for s in ("Con Air", "Console", "Aux Out", "COM10")] == ["Con Air", "Console", "Aux Out", "COM10"]
+
+
 def test_find_looks_again_for_a_program_it_missed(tmp_path, monkeypatch):
     monkeypatch.setattr(tools, "TOOLS", tmp_path)
     assert tools.find("mynaphone-test-tool") is None

@@ -50,14 +50,20 @@ log = logging.getLogger("mynaphone.library")
 EXT = {"aac": ".m4a", "mp3": ".mp3", "opus": ".opus", "flac": ".flac"}
 
 _bad = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
+# names Windows keeps for devices, with or without an extension after them
+_RESERVED = {"CON", "PRN", "AUX", "NUL"} | {f"{d}{n}" for d in ("COM", "LPT") for n in "0123456789¹²³"}
 
 
 def safe(s: str, limit: int = 90) -> str:
-    """`s` without the characters Windows forbids in a file or folder name, at most `limit` characters long. It gives
-    "Unknown" when nothing remains."""
+    """`s` without the characters Windows forbids in a name, at most `limit` characters long. A reserved device name
+    such as CON gets a `_` after it, and a name with nothing left is "Unknown"."""
     s = _bad.sub("", s or "").strip(" .")
     s = re.sub(r"\s+", " ", s)
-    return (s or "Unknown")[:limit].rstrip(" .")
+    s = (s or "Unknown")[:limit].rstrip(" .")
+    stem, dot, rest = s.partition(".")
+    if stem.rstrip().upper() in _RESERVED:
+        s = f"{stem.rstrip()}_{dot}{rest}"[:limit]
+    return s
 
 
 @dataclass
