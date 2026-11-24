@@ -57,6 +57,9 @@ def _retry_after(value: str | None) -> float | None:
 
 @dataclass
 class Lyrics:
+    """A song's lyrics from LRCLIB. `synced` is LRC text with a time on each line, and `plain` is the words alone.
+    Either can be empty. `instrumental` is True when LRCLIB says the song has no words, and the lyrics backfill sets
+    it too when the song's own data says so, such as an Instrumental in its title."""
     synced: str = ""
     plain: str = ""
     instrumental: bool = False
@@ -64,6 +67,7 @@ class Lyrics:
 
     @property
     def best(self) -> str:
+        """The synced lyrics when there are any, else the plain ones."""
         return self.synced or self.plain
 
 

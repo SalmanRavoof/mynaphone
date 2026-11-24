@@ -41,15 +41,20 @@ def _label(text: str, name: str | None = None, wrap: bool = True) -> QLabel:
 
 
 def length(ms: int) -> str:
+    """A song's length of `ms` milliseconds in minutes and seconds, such as `3:05`, for the Length column on an
+    album's page. It's empty when `ms` rounds to 0 seconds."""
     s = round((ms or 0) / 1000)
     return f"{s // 60}:{s % 60:02d}" if s else ""
 
 
 def songs(n: int) -> str:
+    """The count `n` with "song" after it, or "songs" when `n` isn't 1."""
     return f"{n} {'song' if n == 1 else 'songs'}"
 
 
 def count_text(album: A.Album) -> str:
+    """What an album's page says about how many of its songs you have, with any you have from another edition and any
+    missing ones Spotify can't play where you are."""
     if album.whole:
         text = f"You have all {album.total} of its songs." if album.total > 1 else "You have its one song."
     else:
@@ -63,6 +68,8 @@ def count_text(album: A.Album) -> str:
 
 
 def wanted_text(album: A.Album, min_songs: int) -> str:
+    """What an album's page says about its place on the Wanted list. `min_songs` works as in `albums.on_wanted_list`,
+    and the text is empty for an album you have whole."""
     if album.whole:
         return ""
     if album.wanted == 0:
@@ -75,6 +82,8 @@ def wanted_text(album: A.Album, min_songs: int) -> str:
 
 
 def stale(tracks_at: str | None) -> bool:
+    """True when `tracks_at`, the time the recorder last saved an album's songs from Spotify, is more than 7 days ago
+    or isn't a readable time."""
     try:
         then = dt.datetime.fromisoformat(tracks_at)
     except (TypeError, ValueError):
@@ -103,12 +112,16 @@ class AlbumTable(QTableWidget):
         self.setWordWrap(True)
 
     def resizeEvent(self, event):
+        """Fit the columns and rows each time the album list changes size, and again after this event, once the
+        viewport has settled."""
         super().resizeEvent(event)
         self.fit()
         # the viewport settles after this event; measure the rows again once it has
         QTimer.singleShot(0, self.fit)
 
     def fit(self) -> None:
+        """Give the Songs column room for its header and its widest count, and the Album column the rest, at least 80
+        pixels. Then fit each row's height to its text."""
         w = self.viewport().width()
         if w > 0:
             count = max(self.horizontalHeader().sectionSizeHint(1), self.sizeHintForColumn(1))
@@ -145,11 +158,16 @@ class AlbumTable(QTableWidget):
         QTimer.singleShot(0, self.fit)
 
     def selected_uri(self) -> str | None:
+        """The Spotify album id, `uri`, of the album in the selected row, or None when there's no selection."""
         rows = self.selectionModel().selectedRows()
         return self.item(rows[0].row(), 0).data(Qt.UserRole) if rows else None
 
 
 class AlbumPanel(QFrame):
+    """An album's page, with your songs from it, and the missing ones once Mynaphone reads it from Spotify. The
+    Library page's Albums view and the Wanted albums dialog each have one. It sends `changed` when its songs come
+    from Spotify or its place on the Wanted list changes, and `recording` once it asks the window to record the
+    missing songs."""
     changed = Signal()          # the album's count or its place on the Wanted list changed
     recording = Signal()        # its missing songs have started recording
 
@@ -226,6 +244,8 @@ class AlbumPanel(QFrame):
     # -- showing an album ----------------------------------------------------------------
 
     def show_album(self, album: A.Album | None, read: bool = True) -> None:
+        """Show `album`, or "Select an album" for None. With `read`, ask the recorder to read its songs from Spotify
+        when the index has none or they're over 7 days old."""
         self.album = album
         self._set_buttons()
         if album is None:
@@ -310,6 +330,8 @@ class AlbumPanel(QFrame):
     # -- reading its songs from Spotify ------------------------------------------------------
 
     def read_from_spotify(self) -> None:
+        """Ask the recorder to read the album's songs from Spotify. When it isn't running and the album has no songs
+        from Spotify yet, the note asks you to start it."""
         album = self.album
         if album is None:
             return
@@ -342,6 +364,8 @@ class AlbumPanel(QFrame):
     # -- the buttons ------------------------------------------------------------------------
 
     def record(self) -> None:
+        """When you press Record the missing songs, pass the album to the window's `start_playlist`, with `keep_file`
+        False, then send `recording`. It does nothing while Mynaphone is recording a playlist."""
         album = self.album
         if album is None or self.win.job is not None:
             return
@@ -351,6 +375,8 @@ class AlbumPanel(QFrame):
         self.recording.emit()
 
     def toggle_wanted(self) -> None:
+        """Put the album on the Wanted list when you press Want this album, or take it off when you press Take it off
+        the Wanted list. Then send `changed`."""
         album = self.album
         if album is None:
             return
@@ -359,5 +385,6 @@ class AlbumPanel(QFrame):
         self.changed.emit()
 
     def open_in_spotify(self) -> None:
+        """When you press Open in Spotify, open the album there by passing its Spotify id to `os.startfile`."""
         if self.album is not None:
             os.startfile(self.album.uri)

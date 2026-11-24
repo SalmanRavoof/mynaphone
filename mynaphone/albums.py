@@ -152,6 +152,9 @@ def counted(group: list[Listing]) -> Listing:
 
 @dataclass
 class Album:
+    """An album the library has songs from, with every listing of it you have songs from. Its `uri`, name, artists,
+    kind and date come from the listing `counted` picks, the one with the fewest songs. `count` works out how many of
+    its songs you have, and `tracks` lists its songs as Spotify does, once the recorder has read them."""
     uri: str                            # the listing it's counted against
     name: str
     artists: list[str]
@@ -170,14 +173,18 @@ class Album:
 
     @property
     def artist(self) -> str:
+        """The album's artists, separated by commas."""
         return ", ".join(self.artists)
 
     @property
     def year(self) -> int:
+        """The year in the album's release date, or 0 when it has none."""
         return _int((self.date or "")[:4])
 
     @property
     def missing(self) -> int:
+        """How many of the album's songs you don't have. `to_record` leaves out the ones Spotify can't play where you
+        are."""
         return max(0, self.total - self.have)
 
     @property
@@ -187,6 +194,7 @@ class Album:
 
     @property
     def whole(self) -> bool:
+        """True when you have all of the album's songs."""
         return self.have >= self.total
 
 
@@ -266,6 +274,8 @@ def wanted_list(albums: list[Album], min_songs: int) -> list[Album]:
 
 
 def average_song_ms(store: Store) -> int:
+    """The average length of a library song in ms, or 225,000 ms when no song has one. The Wanted list's time
+    estimates use it for missing songs of unknown length."""
     v = store.conn.execute("SELECT AVG(duration_ms) FROM tracks WHERE state='library' AND duration_ms > 0").fetchone()
     return int(v[0] or 225_000)
 

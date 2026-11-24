@@ -42,6 +42,8 @@ from .album_panel import AlbumPanel, AlbumTable
 
 
 def label(text: str, name: str | None = None, wrap: bool = False) -> QLabel:
+    """A `QLabel` showing `text`. A `name` becomes its object name for the theme's stylesheet, and `wrap` lets its
+    text run onto more lines."""
     lbl = QLabel(text)
     if name:
         lbl.setObjectName(name)
@@ -111,6 +113,9 @@ class _WrapTable(QTableWidget):
 
 
 class LibraryPage(QWidget):
+    """The Library page of the main window `win`. The Songs and Albums buttons switch between the song list beside
+    the editor and the album list beside an `AlbumPanel`. Save and Look up again write to the song's file on a worker
+    thread."""
     def __init__(self, win):
         super().__init__()
         self.win = win
@@ -324,10 +329,13 @@ class LibraryPage(QWidget):
         self.reload()
 
     def showing_albums(self) -> bool:
+        """True when the Albums view is on."""
         return self.views.checkedId() == 1
 
     @Slot()
     def reload(self) -> None:
+        """Refill the song list from the index, or the album list in the Albums view. It runs when the Needs
+        attention box changes and when the post-processor files or updates a song."""
         if self.showing_albums():
             self.reload_albums(read=False)
             return
@@ -481,6 +489,8 @@ class LibraryPage(QWidget):
 
     @Slot()
     def pick_cover(self) -> None:
+        """When you press Cover image, show the picture you choose in the editor, and keep it so the next Save or
+        Look up again writes it into the song's file."""
         f, _ = QFileDialog.getOpenFileName(self, "Choose cover image", "", "Images (*.jpg *.jpeg *.png)")
         if not f:
             return
@@ -516,6 +526,8 @@ class LibraryPage(QWidget):
         return out
 
     def apply(self, lookup: bool) -> None:
+        """Write the editor's changes into the song's file with `metadata.refresh_track` on a worker thread. Save
+        runs it, and Look up again runs it with `lookup` True to look the song up first."""
         if self.current_id is None or (self.worker and self.worker.isRunning()):
             return
         r = self.rows[self.current_id]
@@ -552,11 +564,14 @@ class LibraryPage(QWidget):
 
     @Slot()
     def export_usb(self) -> None:
+        """When you press Export to USB, open the dialog of that name for the library folder, the `[paths]` setting
+        `library_dir`."""
         from .export_dialog import ExportDialog
         ExportDialog(self.win.cfg.paths.library_dir, self).exec()
 
     @Slot()
     def show_in_folder(self) -> None:
+        """When you press Folder, open the folder of the song you're editing, if its file is still there."""
         r = self.rows.get(self.current_id or -1)
         if r and r.get("file_path") and Path(r["file_path"]).exists():
             os.startfile(str(Path(r["file_path"]).parent))

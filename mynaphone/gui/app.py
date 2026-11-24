@@ -339,6 +339,8 @@ class _NoWheel(QObject):
 
 
 def no_wheel(widget: QWidget) -> QWidget:
+    """Let the mouse wheel change `widget` only once it has focus, then return `widget`. Until then, the wheel
+    scrolls the page past it."""
     widget.setFocusPolicy(Qt.StrongFocus)
     f = _NoWheel(widget)
     widget.installEventFilter(f)
@@ -346,6 +348,8 @@ def no_wheel(widget: QWidget) -> QWidget:
 
 
 def card(parent=None) -> tuple[QFrame, QVBoxLayout]:
+    """A new card frame and the vertical layout inside it. The theme's stylesheet gives a frame named `card` a border
+    and rounded corners."""
     f = QFrame(parent)
     f.setObjectName("card")
     lay = QVBoxLayout(f)
@@ -355,6 +359,8 @@ def card(parent=None) -> tuple[QFrame, QVBoxLayout]:
 
 
 def label(text: str, name: str | None = None, wrap: bool = False) -> QLabel:
+    """A `QLabel` showing `text`, with `name` as its object name for the theme's stylesheet. With `wrap`, its text
+    wraps."""
     lbl = QLabel(text)
     if name:
         lbl.setObjectName(name)
@@ -382,6 +388,8 @@ class _OneLine(QLabel):
 
 
 def verdict_colour(verdict: str) -> QColor | None:
+    """The color of `verdict` in the Result columns, or `None` for a verdict with no color. Keep is green, discard
+    red, filed the theme's accent color, and skip or duplicate muted gray."""
     return {"keep": QColor(theme.GREEN), "discard": QColor(theme.RED), "skip": QColor(theme.MUTED),
             "filed": QColor(theme.ACCENT), "duplicate": QColor(theme.MUTED)}.get(verdict)
 
@@ -393,6 +401,10 @@ VERDICT_LABELS = {"keep": "Kept", "discard": "Discarded", "skip": "Skipped", "fi
 # ----------------------------------------------------------------------------- pages
 
 class StatusPage(QWidget):
+    """The Status page. Its now-playing card shows the recorder's state and the song it's recording, above Start,
+    Pause, the harvest mode switch, Record a playlist and Wanted albums. Below it are 4 count tiles and the 6 latest
+    takes. A warning card shows once a song plays for `silence_warning_seconds` with no sound reaching the recorder,
+    unless that setting is 0."""
     def __init__(self, win: "MainWindow"):
         super().__init__()
         self.win = win
@@ -559,6 +571,8 @@ class StatusPage(QWidget):
         self.set_cover(None)
 
     def showEvent(self, event) -> None:
+        """When Qt shows the Status page, size the now-playing row for its busiest state, so the card keeps its
+        height when a song starts."""
         super().showEvent(event)
         self._size_now_playing()
 
@@ -589,13 +603,18 @@ class StatusPage(QWidget):
         self.cover.setPixmap(app_icon(state).pixmap(COVER_MARK, COVER_MARK))
 
     def set_wanted(self, count: int) -> None:
+        """Put `count` on the Status page's Wanted albums button, as "3 wanted albums", or plain "Wanted albums" when
+        it's 0."""
         self.btn_wanted.setText(f"{count} wanted album{'' if count == 1 else 's'}" if count else "Wanted albums")
 
     def set_play_again(self, count: int) -> None:
+        """Put `count` on the Recent card's button for songs to play again, as "2 songs to play again", and hide the
+        button when it's 0."""
         self.btn_again.setText(f"{count} song{'' if count == 1 else 's'} to play again")
         self.btn_again.setVisible(count > 0)
 
     def set_recent(self, rows: list[tuple[str, str, str]]) -> None:
+        """Replace the Recent table's rows with the first 6 of `rows`, and color each Result by its verdict."""
         self.recent.setRowCount(0)
         for when, song, verdict in rows[:6]:
             r = self.recent.rowCount()
@@ -611,6 +630,8 @@ class StatusPage(QWidget):
 
 
 class ActivityPage(QWidget):
+    """The Activity page. Its Takes table lists up to 300 takes and filings, newest first, with each one's result and
+    detail. Below it, the Log card shows what the app logs while the recorder runs, up to the last 800 lines."""
     def __init__(self, win: "MainWindow"):
         super().__init__()
         lay = QVBoxLayout(self)
@@ -677,6 +698,10 @@ class ActivityPage(QWidget):
 
 
 class SettingsPage(QScrollArea):
+    """The Settings page, a scrolling column with the Folders, Capture, What counts as a complete song, Albums and
+    Application cards. Its fields start from the loaded settings, and Save settings runs `MainWindow.save_settings`
+    to write them to `config.toml`. Start with Windows and the 2 shortcut boxes show what's on the PC when the app
+    starts."""
     def __init__(self, win: "MainWindow"):
         super().__init__()
         self.win = win
@@ -871,6 +896,8 @@ class SettingsPage(QScrollArea):
         self.setWidget(body)
 
     def update_space(self) -> None:
+        """Show under Folders how many songs fit on the Library folder's drive, in the Library format and Bit depth.
+        Changing any of those 3 settings runs it again."""
         from .. import storage
         try:
             fmt, kbps = self.cb_format.currentData() or ("aac", 256)
@@ -979,6 +1006,7 @@ class RowList(QWidget):
         self._n = 0
 
     def clear(self) -> None:
+        """Remove every row and the lines between them, so `add` starts again at the top."""
         while self.grid.count():
             item = self.grid.takeAt(0)
             if item.widget():
@@ -986,6 +1014,8 @@ class RowList(QWidget):
         self._n = 0
 
     def add(self, name: str, status: str, detail: str, colour: str | None = None) -> None:
+        """Add a row at the bottom, under a hairline when it isn't the first. With `colour`, it shows `status` in
+        that color at font weight 600."""
         r = self._n * 2
         if self._n:
             line = QFrame()
@@ -1007,10 +1037,14 @@ class RowList(QWidget):
         self._n += 1
 
     def finish(self) -> None:
+        """Give the spare height to an empty grid row under the last row, so the rows stay at the top."""
         self.grid.setRowStretch(self._n * 2, 1)
 
 
 class SetupPage(QScrollArea):
+    """The Setup check page. Its Automatic checks card shows the result of each check once you press Run checks, and
+    its Confirm once in Spotify card lists the Spotify settings to check by eye. The Set up page's first-run steps
+    are in the `setup_page` module."""
     def __init__(self, win: "MainWindow"):
         super().__init__()
         self.win = win
@@ -1054,6 +1088,8 @@ class SetupPage(QScrollArea):
 
     @Slot()
     def run(self) -> None:
+        """Run the automatic checks when you press Run checks or F5, then list each result as OK, Check, Problem or
+        Info."""
         self.btn.setEnabled(False)
         QApplication.setOverrideCursor(Qt.WaitCursor)
         try:
@@ -1072,6 +1108,9 @@ class SetupPage(QScrollArea):
 # ----------------------------------------------------------------------------- window
 
 class MainWindow(QMainWindow):
+    """The app's window, with a sidebar for its 6 pages and a tray icon. It runs the recorder on a `RecorderWorker`
+    thread and shows its events. It opens on the Set up page until it finds the tools and an AcoustID key. When the
+    window comes up as a blank white frame, it minimizes and restores itself once."""
     worker_answer = Signal(int, object, str)     # the recorder's answers to the window's questions
 
     def __init__(self, config_path: Path, start_minimized: bool = False):
@@ -1248,6 +1287,8 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def find_in_library(self) -> None:
+        """Open the Library page in its Songs view and select the text in its Find a song box, ready to type over.
+        Ctrl+F runs it from any page."""
         self.nav.setCurrentRow(2)
         self.library.btn_songs.setChecked(True)     # the search box finds songs, so it's in the Songs view
         self.library.search.setFocus(Qt.ShortcutFocusReason)
@@ -1312,6 +1353,8 @@ class MainWindow(QMainWindow):
         self.refresh_wanted()
 
     def refresh_wanted(self) -> None:
+        """Count the Wanted list's albums again and show the number on the Status page's Wanted albums button. When
+        counting fails, it logs the error and leaves the button as it was."""
         try:
             found = albums.build(Store(self.cfg.paths.db_path))
         except Exception:
@@ -1321,6 +1364,8 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def show_wanted(self) -> None:
+        """Open the Wanted albums dialog from the Status page. When it closes, count the Wanted list again, and the
+        Library's albums too while its Albums view is showing."""
         from .wanted import WantedDialog
         dlg = WantedDialog(self)
         dlg.exec()
@@ -1331,6 +1376,8 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def show_play_again(self) -> None:
+        """Open the Songs to play again dialog from the Status page. When it closes, read the takes and counts for
+        the Status and Activity pages again."""
         from .play_again import PlayAgainDialog
         PlayAgainDialog(self.cfg.paths.db_path, _detail, self).exec()
         self._load_recent()
@@ -1339,6 +1386,8 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def save_settings(self) -> None:
+        """Write the Settings page's fields to `config.toml` when you press Save settings, and set Start with Windows
+        and the 2 shortcuts to match. It also makes any missing Inbox or Library folder."""
         s = self.settings
         c = self.cfg
         c.paths.inbox_dir = Path(s.ed_inbox.edit.text())
@@ -1384,6 +1433,8 @@ class MainWindow(QMainWindow):
         return shortcuts.login_command(self.config_path, minimized=self.cfg.app.start_minimized)
 
     def login_item_present(self) -> bool:
+        """True when the registry has the Start with Windows entry, a `Mynaphone` value in the current user's `Run`
+        key."""
         try:
             with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
                 winreg.QueryValueEx(k, RUN_NAME)
@@ -1419,12 +1470,16 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def toggle_running(self) -> None:
+        """Start the recorder, or stop it when it's running. The Start button on the Status page runs it, and so does
+        Start recording in the tray menu."""
         if self.worker is not None and self.worker.isRunning():
             self.stop_recorder()
         else:
             self.start_recorder()
 
     def start_recorder(self) -> None:
+        """Read `config.toml` again and start the recorder on a new `RecorderWorker` thread, unless one is running.
+        It copies Pause and harvest mode from the Status page."""
         if self.worker is not None and self.worker.isRunning():
             return
         self.cfg = Config.load(self.config_path)
@@ -1449,6 +1504,8 @@ class MainWindow(QMainWindow):
         self._set_icon("idle")
 
     def stop_recorder(self) -> None:
+        """Ask the recorder to stop, and gray out the Stop button until `on_finished` turns it back into Start. It
+        sets the Status page's state to Stopping."""
         if self.worker is not None:
             self.worker.stop()
             self.status.btn_start.setEnabled(False)
@@ -1457,6 +1514,8 @@ class MainWindow(QMainWindow):
 
     @Slot(bool)
     def set_harvest(self, on: bool) -> None:
+        """When the Status page's harvest mode switch changes, save `harvest_mode` to `config.toml` and pass it to a
+        running recorder. It sets the tray menu and the Settings page to match."""
         if self.worker is not None:
             self.worker.set_harvest(on)
         if self.act_harvest.isChecked() != on:
@@ -1471,6 +1530,8 @@ class MainWindow(QMainWindow):
 
     @Slot(bool)
     def set_paused(self, paused: bool) -> None:
+        """When Pause on the Status page toggles, tell a running recorder to start no new takes or to start them
+        again, and label the button Resume while it's down."""
         self.status.btn_pause.setText("Resume" if paused else "Pause")
         if self.worker is not None:
             self.worker.set_paused(paused)
@@ -1486,6 +1547,8 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def playlist_button(self) -> None:
+        """Open the Record a playlist dialog from that button on the Status page, or ask the recorder to stop the
+        playlist it's recording when the button reads Stop the playlist."""
         if self.job is not None:
             self.ask_recorder(lambda rec: rec.stop_job(), 0)
             return
@@ -1493,6 +1556,8 @@ class MainWindow(QMainWindow):
         PlaylistDialog(self).exec()
 
     def start_playlist(self, uri: str, name: str, keep_file: bool = True) -> None:
+        """Ask the recorder to play the Spotify playlist or album at `uri` and record the songs the library lacks.
+        With `keep_file`, it also writes the playlist's M3U8 file at the end."""
         self.status.job_line.setText(f"Starting {name} in Spotify...")
         if not self.ask_recorder(lambda rec: rec.start_job(uri, name, keep_file), -1):
             self.status.job_line.setText("Start the recorder first.")
@@ -1521,6 +1586,8 @@ class MainWindow(QMainWindow):
 
     @Slot(dict)
     def on_event(self, ev: dict) -> None:
+        """Update the window and the tray icon from the events the recorder sends, by each one's `kind`. Verdicts and
+        filings add rows on the Activity page and change the Status page's counts."""
         kind = ev.get("kind")
         st = self.status
         if kind == "job":
@@ -1700,11 +1767,14 @@ class MainWindow(QMainWindow):
 
     @Slot(str)
     def on_failed(self, msg: str) -> None:
+        """When the recorder stops on an error, show `msg` in a Recorder stopped message box."""
         QMessageBox.critical(self, "Recorder stopped",
                              f"The recorder hit an error:\n\n{msg}\n\nSee the log on the Activity page.")
 
     @Slot()
     def on_finished(self) -> None:
+        """When the recorder's thread ends, set the Status page back to Stopped and read the takes and counts from
+        the index again. After `quit_app`, it also quits the app."""
         st = self.status
         st.btn_start.setText("Start")
         st.btn_start.setObjectName("primary")
@@ -1789,6 +1859,8 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def show_from_tray(self) -> None:
+        """Restore the window in front of the others, and check it for a blank frame soon after. The tray runs it,
+        and so does a second launch of the app."""
         self._blank_heals = 0
         self._show_and_check()
 
@@ -1815,6 +1887,8 @@ class MainWindow(QMainWindow):
             self.check_painted_soon(0, quiet=True)
 
     def changeEvent(self, event) -> None:
+        """Check for a blank frame soon after the window comes back from the taskbar, and quietly when you switch to
+        it. A quiet check logs nothing when it can't see the window."""
         super().changeEvent(event)
         if (event.type() == QEvent.WindowStateChange and not self.isMinimized()
                 and event.oldState() & Qt.WindowMinimized):
@@ -1823,6 +1897,7 @@ class MainWindow(QMainWindow):
             self.check_painted_soon(quiet=True)
 
     def showEvent(self, event) -> None:
+        """The first time the window shows, arrange a check for a blank frame soon after each move to another screen."""
         super().showEvent(event)
         handle = self.windowHandle()
         if handle is not None and not getattr(self, "_watching_screen", False):
@@ -1830,6 +1905,8 @@ class MainWindow(QMainWindow):
             handle.screenChanged.connect(lambda screen: self.check_painted_soon(800))
 
     def nativeEvent(self, event_type, message):
+        """When Windows says the PC woke from sleep or its screens changed, log it and check for a blank frame soon
+        after. It lets Qt process every message as usual."""
         try:
             msg = wintypes.MSG.from_address(int(message))
             if msg.message == WM_POWERBROADCAST and msg.wParam in (PBT_APMRESUMESUSPEND, PBT_APMRESUMEAUTOMATIC):
@@ -1906,6 +1983,8 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def hide_to_tray(self) -> None:
+        """Hide the window and leave the app running in the tray. The first time, a notification says Mynaphone is
+        still running and where its icon may be."""
         self.hide()
         if not self._tray_hint_shown:
             self._tray_hint_shown = True
@@ -1916,6 +1995,8 @@ class MainWindow(QMainWindow):
                                   "to keep it in view.", QSystemTrayIcon.Information, 5000)
 
     def closeEvent(self, event) -> None:
+        """When you close the window, hide it to the tray if the recorder runs and `close_to_tray` is on, or quit the
+        app. During a quit, it lets the window close."""
         if self._quitting:
             event.accept()
             return
@@ -1927,6 +2008,8 @@ class MainWindow(QMainWindow):
             self.quit_app("the window was closed")
 
     def quit_app(self, reason: str) -> None:
+        """Log `reason` and quit the app. With the recorder running, it asks the recorder to stop and quits once it
+        has, or after 20 seconds."""
         log.info("quitting: %s", reason)
         self._quitting = True
         self.tray.hide()
@@ -1994,6 +2077,8 @@ class StallWatch:
         self.beat = time.monotonic()
 
     def stop(self) -> None:
+        """Stop the timer that sets `beat` and end the watch thread. `run_gui` connects it to the app's `aboutToQuit`
+        signal."""
         self._stop.set()
         self._timer.stop()
 
@@ -2002,6 +2087,8 @@ class StallWatch:
             self.check(time.monotonic())
 
     def check(self, now: float) -> None:
+        """Log once when the window's last beat is `stall_seconds` behind `now`, and again when it answers. When this
+        check comes over `stall_seconds` late, the PC slept, so it resets the beat."""
         # when this thread was held up as long as the window, the PC was asleep
         asleep = now - self._last > self.poll_seconds + self.stall_seconds
         self._last = now
@@ -2141,6 +2228,8 @@ def _running_copy_pid(sock) -> int:
 
 
 def run_gui(config_path: Path, minimized: bool = False) -> int:
+    """Run the app for `mynaphone gui` and return its exit code. When another copy is running and not quitting, it
+    asks that copy to show its window and returns 0."""
     try:
         shortcuts.set_app_id()
     except OSError as e:

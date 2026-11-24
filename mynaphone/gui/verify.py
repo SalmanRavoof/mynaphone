@@ -19,6 +19,8 @@ OK, WARN, FAIL, INFO = "ok", "warn", "fail", "info"
 
 @dataclass
 class Result:
+    """A check's result, for a row on the Setup check page. `name` is the row's name and `detail` says what the check
+    found. `status` is `OK`, `WARN`, `FAIL` or `INFO`, and the page labels them OK, Check, Problem and Info."""
     name: str
     status: str
     detail: str
@@ -33,6 +35,8 @@ def _run(cmd: list[str]) -> str:
 
 
 def check_capture_device(cfg: Config) -> Result:
+    """In "process" `mode`, check for the capture helper and name the running source apps. Otherwise fail unless it
+    finds `device` among the loopback and input devices, or the default output's loopback for "default"."""
     if cfg.capture.mode == "process":
         from ..capture import HELPER, root_pid
         if not HELPER.exists():
@@ -104,6 +108,8 @@ def check_default_format() -> Result:
 
 
 def check_enhancements() -> Result:
+    """Fail when Nahimic's service or either of its 2 programs is running, since Nahimic processes audio before the
+    capture point."""
     out = _run(["sc", "query", "NahimicService"])
     procs = (_run(["tasklist", "/FI", "IMAGENAME eq NahimicSvc64.exe"])
              + _run(["tasklist", "/FI", "IMAGENAME eq NahimicService.exe"]))
@@ -114,6 +120,8 @@ def check_enhancements() -> Result:
 
 
 def check_spotify() -> Result:
+    """Pass when `Spotify.exe` is running and Windows lists a Spotify media session, with the session's song in the
+    detail. Warn when either is missing, or when reading the session fails."""
     procs = _run(["tasklist", "/FI", "IMAGENAME eq Spotify.exe"])
     if "Spotify.exe" not in procs:
         return Result("Spotify", WARN, "not running")
@@ -135,6 +143,8 @@ def check_spotify() -> Result:
 
 
 def check_spicetify(cfg: Config, bridge_connected: bool | None) -> Result:
+    """Warn when the bridge's `mynaphone.js` isn't in Spicetify's Extensions folder or `config-xpui.ini` doesn't name
+    it. Otherwise pass when `bridge_connected` is True and warn when it's False, with Info for None."""
     appdata = Path(os.environ.get("APPDATA", ""))
     ext = appdata / "spicetify" / "Extensions" / "mynaphone.js"
     ini = appdata / "spicetify" / "config-xpui.ini"
@@ -172,6 +182,8 @@ def check_browser_extension(cfg: Config, seen: list[str] | None) -> Result:
 
 
 def check_disk(cfg: Config) -> Result:
+    """Fail when the library drive fits 50 songs or fewer and pass above 500 songs, with a warning between. Also give
+    the inbox drive's free space when that's another drive."""
     from .. import storage
     try:
         est = storage.estimate(cfg.paths.library_dir, cfg.library.format, cfg.library.bitrate,
@@ -189,6 +201,8 @@ def check_disk(cfg: Config) -> Result:
 
 
 def check_ffmpeg() -> Result:
+    """Pass when Mynaphone finds `ffmpeg` and Chromaprint's `fpcalc` in its tools folder or on `PATH`. Otherwise
+    warn, and tell you to run step 1 on the Set up page."""
     from .. import tools
     ff, fp = tools.ffmpeg(), tools.fpcalc()
     if ff and fp:
@@ -199,6 +213,8 @@ def check_ffmpeg() -> Result:
 
 
 def run_all(cfg: Config, bridge_connected: bool | None, extension_seen: list[str] | None = None) -> list[Result]:
+    """Run the 9 automatic checks for the Setup check page, in the order it lists them. `bridge_connected` goes to
+    `check_spicetify` and `extension_seen` to `check_browser_extension`."""
     return [
         check_capture_device(cfg),
         check_default_format(),
@@ -213,6 +229,8 @@ def run_all(cfg: Config, bridge_connected: bool | None, extension_seen: list[str
 
 
 def check_app_volumes(cfg: Config) -> Result:
+    """Warn when the Windows Volume Mixer has an app in `sources` muted or below 99%, and give each one's level. An
+    app whose slider it can't read doesn't count."""
     from ..sessions import app_session_volume
     low = []
     for src in cfg.rules.sources:

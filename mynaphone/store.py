@@ -17,6 +17,8 @@ TIERS = ["unknown", "low", "youtube", "normal", "high", "very_high", "hifi", "hi
 
 
 def tier_rank(tier: str | None) -> int:
+    """The place of `tier` in `TIERS`, so a better tier ranks higher. Case doesn't count, and a missing or unlisted
+    tier ranks as `unknown`, the lowest."""
     t = (tier or "unknown").lower()
     return TIERS.index(t) if t in TIERS else 0
 
@@ -25,6 +27,8 @@ _norm_re = re.compile(r"[^a-z0-9]+")
 
 
 def norm(s: str) -> str:
+    """`s` in lowercase, minus anything in parentheses or brackets and anything from `feat` or `ft` on. Only runs of
+    ASCII letters and digits stay, so `A.R. Rahman` becomes `a r rahman`."""
     s = (s or "").lower()
     s = re.sub(r"\(.*?\)|\[.*?\]", " ", s)          # drop bracketed qualifiers like (feat. X) / [Remastered]
     s = re.sub(r"\b(feat|ft)\.?\b.*$", " ", s)
@@ -80,6 +84,9 @@ CREATE TABLE IF NOT EXISTS albums (
 
 
 class Store:
+    """The SQLite index at `path`, the `[paths]` setting `db_path`, with the songs Mynaphone kept in `tracks` and
+    every take in `takes`. Opening it updates the schema and merges library rows of the same recording that share a
+    file. A write through it waits up to 30 seconds for another connection's write to finish."""
     def __init__(self, path: Path):
         self.path = Path(path)
         # the recorder's writer, the post-processor and the window each have a connection; one waits for another's
@@ -154,6 +161,8 @@ class Store:
             (isrc, isrc)).fetchone()
 
     def add_track(self, **fields) -> int:
+        """Add a song to `tracks` from `fields` and return its id. It sets `artist_norm` and `title_norm` with
+        `norm`, and stores a dict or list in `meta_json` as JSON."""
         fields.setdefault("created_at", dt.datetime.now(dt.timezone.utc).isoformat())
         fields["artist_norm"] = norm(fields.get("artist", ""))
         fields["title_norm"] = norm(fields.get("title", ""))
@@ -166,6 +175,8 @@ class Store:
         return int(cur.lastrowid)
 
     def replace_track(self, old_id: int, **fields) -> int:
+        """Swap the song in row `old_id` for a new one from `fields` and return its id. The new row gets the old
+        one's aliases, plus the old `source_uri` when it differs."""
         old = self.conn.execute("SELECT source_uri FROM tracks WHERE id=?", (old_id,)).fetchone()
         self.conn.execute("DELETE FROM tracks WHERE id=?", (old_id,))
         new_id = self.add_track(**fields)
@@ -189,6 +200,8 @@ class Store:
         return None
 
     def add_alias(self, uri: str, track_id: int) -> None:
+        """Record `uri` as another player id for the song in row `track_id`, so `find_archived` finds that song by it
+        too. An empty `uri` does nothing."""
         if uri:
             self.conn.execute("INSERT OR REPLACE INTO aliases (uri, track_id) VALUES (?, ?)", (uri, track_id))
             self.conn.commit()
@@ -226,6 +239,8 @@ class Store:
     # -- take log --------------------------------------------------------------------------
 
     def log_take(self, **fields) -> int:
+        """Add a take to `takes` from `fields` and return its id. It stores a list or tuple in `reasons` as a JSON
+        list."""
         if isinstance(fields.get("reasons"), (list, tuple)):
             fields["reasons"] = json.dumps(list(fields["reasons"]))
         cols = ", ".join(fields)
@@ -237,6 +252,8 @@ class Store:
     # -- status ----------------------------------------------------------------------------
 
     def summary(self) -> dict:
+        """Song and take counts for the `status` command and the window. The keys are `tracks_inbox`,
+        `tracks_library`, `takes_kept`, `takes_discarded` and `takes_skipped`."""
         c = self.conn
         return {
             "tracks_inbox": c.execute("SELECT COUNT(*) FROM tracks WHERE state='inbox'").fetchone()[0],
@@ -247,12 +264,15 @@ class Store:
         }
 
     def recent_takes(self, n: int = 15) -> list[sqlite3.Row]:
+        """The last `n` rows of `takes`, newest first."""
         return self.conn.execute("SELECT * FROM takes ORDER BY id DESC LIMIT ?", (n,)).fetchall()
 
     # -- songs to play again ---------------------------------------------------------------
 
     @staticmethod
     def retry_key(source_uri: str | None, artist: str, title: str) -> str:
+        """The key a song goes by on the list to play again. It's the song's `source_uri` when it has one, or else
+        its artist and title through `norm` with `|` between them."""
         return source_uri or f"{norm(artist)}|{norm(title)}"
 
     def songs_to_play_again(self) -> list[dict]:
@@ -306,6 +326,8 @@ class Store:
     # -- albums ---------------------------------------------------------------------------
 
     def album_rows(self) -> dict[str, sqlite3.Row]:
+        """Every row of the `albums` table, keyed by Spotify album uri. A row's `wanted` is your Wanted list choice,
+        and its `tracks_json` has the album's songs as Spotify listed them."""
         return {r["uri"]: r for r in self.conn.execute("SELECT * FROM albums")}
 
     def set_wanted(self, uri: str, wanted: bool | None) -> None:
@@ -326,12 +348,15 @@ class Store:
         self.conn.commit()
 
     def library_rows(self, only_incomplete: bool = False) -> list[sqlite3.Row]:
+        """The library's songs, in order of album artist, album, track number and title. With `only_incomplete`, only
+        the ones still missing some metadata."""
         q = "SELECT * FROM tracks WHERE state='library'"
         if only_incomplete:
             q += " AND missing_json IS NOT NULL AND missing_json != '[]'"
         return self.conn.execute(q + " ORDER BY album_artist, album, track_number, title").fetchall()
 
     def track(self, track_id: int) -> sqlite3.Row | None:
+        """The `tracks` row with the id `track_id`, or None when there's no such row."""
         return self.conn.execute("SELECT * FROM tracks WHERE id=?", (track_id,)).fetchone()
 
     def played_title(self, row) -> str:
@@ -358,6 +383,8 @@ class Store:
         return ""
 
     def incomplete_for_retry(self, min_age_days: float = 7.0, limit: int = 10) -> list[sqlite3.Row]:
+        """Library songs still missing some metadata, with fewer than 30 lookups and none in the last `min_age_days`
+        days. At most `limit` of them, oldest lookup first."""
         cutoff = (dt.datetime.now(dt.timezone.utc) - dt.timedelta(days=min_age_days)).isoformat()
         return self.conn.execute(
             "SELECT * FROM tracks WHERE state='library' AND missing_json IS NOT NULL AND missing_json != '[]' "

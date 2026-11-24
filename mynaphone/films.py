@@ -52,6 +52,9 @@ _LANGUAGE = re.compile(r"[\(\[]\s*(" + "|".join(LANGUAGES) + r")(\s+version)?\s*
 
 @dataclass(frozen=True)
 class Film:
+    """A soundtrack song's film, as `film_of` reads it. Its `key` is the film's normalized name with any language and
+    score mark in the album's name, so a dubbed album such as "Vettaiyan (telugu)" or a score stays apart. `name` is
+    the film's name as written. For a "(From X)" single, `single` is True and `key` has the name alone."""
     key: tuple[str, str, bool]      # (normalized name, language from the album's name, background score)
     name: str                       # the film's name as written, for a folder made from singles alone
     single: bool                    # a "(From X)" single rather than the film's own album
@@ -77,6 +80,9 @@ def film_of(album: str, title: str = "") -> Film | None:
 
 @dataclass
 class Folder:
+    """A folder under Soundtracks, as `plan` and `folder_for` find it. `rel` is its path under the library and `year`
+    the year its name ends with, or 0. `film` is the film of the first song they count in it, and `songs` is how many
+    they count. `singles_only` stays True while every song they count is a "(From X)" single."""
     rel: Path                       # under the library, Soundtracks/<folder>
     film: Film
     year: int
@@ -85,6 +91,8 @@ class Folder:
 
 
 def folder_year(rel: Path) -> int:
+    """The 4-digit year in parentheses at the end of the folder `rel`'s name, as in "Leo (2023)", or 0 when there's
+    none."""
     m = re.search(r"\((\d{4})\)\s*$", rel.name)
     return int(m.group(1)) if m else 0
 
@@ -115,6 +123,8 @@ def groups(folders: list[Folder]) -> list[list[Folder]]:
 
 @dataclass
 class Move:
+    """A move `plan` lists to gather a film's songs in one folder. `track_id` is the song's row in the index. `apply`
+    moves the file from `src` to `dst` with its lyrics file and writes the new path into that row."""
     track_id: int
     src: Path
     dst: Path
@@ -404,6 +414,9 @@ def film_album_artist(credits: list[Credit]) -> AlbumArtist | None:
 
 @dataclass
 class Retag:
+    """The album artist change `album_artist_plan` lists for one song in a film's folder. `old` is the `AlbumArtist`
+    its tags have now and `new` the one the folder's songs share. `track_id` is the song's row in the index and
+    `path` its file."""
     track_id: int
     path: Path
     old: AlbumArtist
@@ -471,10 +484,14 @@ class Song:
 
     @property
     def film(self) -> Film | None:
+        """The song's film, as `film_of` reads it from `release` and `title`, or from `album` and `title` when
+        `release` is empty. None when it finds no film."""
         return film_of(self.release or self.album, self.title)
 
     @property
     def single(self) -> bool:
+        """True when the song's `film` comes from a "(From X)" in `release` or `title`, or in `album` when `release`
+        is empty."""
         film = self.film
         return bool(film and film.single)
 
@@ -607,6 +624,9 @@ def tagged_album(row) -> tuple:
 
 @dataclass
 class Retitle:
+    """The album name or track number change `album_plan` lists for one song in a film's folder. `old` is the album,
+    track, tracks, disc and discs its tags have now, and `new` the ones its folder gives it. `track_id` is the song's
+    row in the index and `path` its file."""
     track_id: int
     path: Path
     old: tuple                  # the album, track, tracks, disc and discs its tags carry

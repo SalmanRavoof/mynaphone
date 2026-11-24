@@ -26,6 +26,9 @@ LEAD_GAP_MS = 200                # a stretch this long below HOLE in the lead wi
 
 @dataclass
 class TakeMeta:
+    """What the recorder knows about the song a take records. It begins with the media session's reading and gets
+    what the Spotify bridge or the browser extension adds. `sidecar` writes it, all but `cover`, into the `.json`
+    file next to the take for the post-processor to read."""
     app: str
     artist: str = ""
     title: str = ""
@@ -48,6 +51,9 @@ class TakeMeta:
 
 @dataclass
 class Verdict:
+    """The verdict `judge` gives a take, with the `reasons` the recorder discards it for, such as "paused" or "seek".
+    `keep` is True when there are none. `captured_ms` is the length of the trimmed recording and `wall_ms` how long
+    the take ran by the clock. `trimmed_lead_ms` is how many milliseconds `trim` cut from its start."""
     keep: bool
     reasons: list[str]
     captured_ms: int
@@ -129,6 +135,8 @@ def is_silent(audio: np.ndarray) -> bool:
 
 
 def judge(meta: TakeMeta, captured_s: float, wall_s: float, flags: dict, cfg) -> Verdict:
+    """Decide whether to keep a take, from its `flags` and how `captured_s` and `wall_s` compare with the song's
+    length. The `[rules]` settings set the limits, and each `discard_on_` setting decides whether its flag counts."""
     reasons: list[str] = []
     tol = cfg.rules.duration_tolerance_seconds
     # The no-sound warning stood through the take (silence.py), so that's the cause, named first. Its last cause,
@@ -186,6 +194,8 @@ _bad = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
 def safe_name(s: str, limit: int = 80) -> str:
+    """`s` as part of a take's file name, with "_" for each character Windows forbids. It's at most `limit`
+    characters long, or "untitled" when nothing remains."""
     s = _bad.sub("_", s).strip(" .")
     return (s or "untitled")[:limit]
 
@@ -211,6 +221,8 @@ def write_flac(path: Path, audio: np.ndarray, rate: int, bit_depth: int) -> None
 
 
 def tag_flac(path: Path, meta: TakeMeta, verdict: Verdict, rate: int, bit_depth: int) -> None:
+    """Write provisional tags from `meta` into the take's FLAC file `path`, and the cover if `meta` has one. Its
+    `MYNAPHONE_` tags say how and when Mynaphone recorded the take."""
     f = FLAC(str(path))
     f.delete()
     f["TITLE"] = meta.title
@@ -243,6 +255,8 @@ def tag_flac(path: Path, meta: TakeMeta, verdict: Verdict, rate: int, bit_depth:
 
 
 def sidecar(path: Path, meta: TakeMeta, verdict: Verdict, flags: dict, rate: int, bit_depth: int) -> None:
+    """Save the take's `meta` without its cover, with `verdict`, `flags`, `rate` and `bit_depth`, in a `.json` file
+    named after `path`. The post-processor files a take only once this file is there."""
     doc = {
         "meta": {k: v for k, v in meta.__dict__.items() if k != "cover"},
         "verdict": verdict.__dict__,
@@ -254,6 +268,8 @@ def sidecar(path: Path, meta: TakeMeta, verdict: Verdict, flags: dict, rate: int
 
 
 def output_path(root: Path, meta: TakeMeta) -> Path:
+    """The path for a take's FLAC file in `root`, the inbox or the discard folder. Its name is `Artist - Title
+    [id].flac`, with 8 random hex digits as the id."""
     stem = (f"{safe_name(meta.artist or 'Unknown Artist')} - {safe_name(meta.title or 'Unknown Title')} "
             f"[{uuid.uuid4().hex[:8]}]")
     return root / f"{stem}.flac"

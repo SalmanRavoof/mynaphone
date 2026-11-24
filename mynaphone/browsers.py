@@ -19,6 +19,9 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class Browser:
+    """A browser the extension runs in, with the name people know it by. `process` is its program file, and Windows
+    names its media session after it. `extensions_page` is where you turn on Developer mode and load the extension
+    folder."""
     name: str               # the browser as people know it
     process: str            # its program file, which names its media session and which per-app capture follows
     extensions_page: str    # where you switch on Developer mode and load the extension folder
@@ -56,6 +59,8 @@ def name_of(app: str) -> str:
 
 
 def is_browser(app: str) -> bool:
+    """True when `app` has chrome, msedge, firefox, brave, opera or vivaldi in it, whatever its case. Firefox counts
+    too, so the recorder checks the extension's report before it records Firefox."""
     a = (app or "").lower()
     return any(w in a for w in _BROWSER_WORDS)
 

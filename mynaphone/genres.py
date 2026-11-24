@@ -39,11 +39,15 @@ PRETTY = {"r&b": "R&B", "edm": "EDM", "idm": "IDM", "uk garage": "UK Garage", "l
 
 @cache
 def known_genres() -> frozenset[str]:
+    """The genre names a Last.fm tag must match to count as a genre, from `genres.txt`. It skips blank lines and
+    lines that start with `#`, and caches the set."""
     text = Path(__file__).with_name("genres.txt").read_text(encoding="utf-8")
     return frozenset(line.strip() for line in text.splitlines() if line.strip() and not line.startswith("#"))
 
 
 def pretty(name: str) -> str:
+    """A genre name in lowercase with each word's first letter capitalized, or the spelling `PRETTY` gives it, such
+    as EDM or K-Pop."""
     name = name.strip().lower()
     return PRETTY.get(name) or " ".join(w[:1].upper() + w[1:] for w in name.split())
 

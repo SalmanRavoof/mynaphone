@@ -28,6 +28,9 @@ USER_AGENT = "mynaphone/0.1"
 
 @dataclass
 class Identity:
+    """What Mynaphone knows about a song. `place` decides the song's folder from it, and `tag` writes the song's tags
+    from it. The index keeps it in `identity_json`, all but the fingerprint. `source` names what identified the song,
+    such as "acoustid", "spotify", "youtube" or "tags"."""
     source: str = "none"               # acoustid | spotify | tags
     score: float = 0.0
     title: str = ""
@@ -87,13 +90,19 @@ class Identity:
 
     @property
     def is_soundtrack(self) -> bool:
+        """True when one of `secondary_types` is "Soundtrack", whatever its case."""
         return any(t.lower() == "soundtrack" for t in self.secondary_types)
 
     def to_json(self) -> dict:
+        """The identity's fields as a dict, all but `acoustid_fingerprint`, for the index to store as
+        `identity_json`. `tag` writes the fingerprint into the song's file."""
         return {k: v for k, v in self.__dict__.items() if k != "acoustid_fingerprint"}
 
 
 class ToolMissing(RuntimeError):
+    """The error for a missing `fpcalc`, or for a missing `ffmpeg` when a fingerprint starts further into the
+    recording. When `fpcalc` is missing and the `acoustid_key` setting has a key, `PostProcessor` leaves the take in
+    the inbox and tries it again later. Each wait is twice the last, up to an hour."""
     pass
 
 
@@ -192,6 +201,8 @@ def _lookup(key: str, duration: int, fp: str, hints: dict) -> Identity | None:
 
 
 def acoustid_lookup(key: str, duration: int, fp: str, timeout: float = 20.0) -> dict:
+    """Ask AcoustID for the matches to the fingerprint `fp` of a song `duration` seconds long, with their recordings
+    and releases, and return the JSON reply. `key` is the `acoustid_key` setting."""
     data = urllib.parse.urlencode({
         "client": key, "duration": duration, "fingerprint": fp,
         "meta": "recordings releasegroups releases tracks compress",
@@ -243,6 +254,8 @@ def _score_release(rel: dict, rg: dict, hint_album: str, hint_track: int, hint_a
 
 def choose(result: dict, hint_album: str = "", hint_track: int = 0, hint_artist: str = "", hint_title: str = "",
            min_score: float = 0.5) -> Identity | None:
+    """The highest-ranked release in AcoustID's reply `result` as an `Identity`, or None. It skips matches below
+    `min_score`, and a release that agrees with the album, track, artist or title hints ranks higher."""
     best: Identity | None = None
     best_rank = -1e9
     for res in result.get("results", []):
@@ -296,6 +309,8 @@ SOUNDTRACK_RE = re.compile(
 
 
 def looks_like_soundtrack(album: str, title: str = "") -> bool:
+    """True when `album` has words that mark a soundtrack, such as OST, Soundtrack, Score or "Music from the", or
+    when `album` or `title` has "(From" followed by a quote mark."""
     return bool(SOUNDTRACK_RE.search(album or "")) or bool(re.search(r"\(from [\"“']", title or "", re.I))
 
 

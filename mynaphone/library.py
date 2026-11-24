@@ -53,6 +53,8 @@ _bad = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
 
 
 def safe(s: str, limit: int = 90) -> str:
+    """`s` without the characters Windows forbids in a file or folder name, at most `limit` characters long. It gives
+    "Unknown" when nothing remains."""
     s = _bad.sub("", s or "").strip(" .")
     s = re.sub(r"\s+", " ", s)
     return (s or "Unknown")[:limit].rstrip(" .")
@@ -60,12 +62,17 @@ def safe(s: str, limit: int = 90) -> str:
 
 @dataclass
 class Placement:
+    """Where a song goes in the library. `rel_dir` is its folder under the library and `filename` its file name
+    without the extension. `kind` is "soundtrack", "album", "single", "compilation" or "unsorted", from `classify` or
+    from Filed as in the Library editor."""
     kind: str           # soundtrack | album | single | compilation | unsorted
     rel_dir: Path
     filename: str       # without extension
 
 
 def classify(ident: Identity) -> str:
+    """The song's kind in the library, one of "soundtrack", "album", "single", "compilation" or "unsorted". It's
+    "unsorted" when the song's artist and album artist are both blank."""
     if not ident.artist.strip() and not ident.album_artist.strip():
         return "unsorted"       # nothing to file it under yet; a person or a later lookup decides
     if ident.is_soundtrack:
@@ -82,6 +89,8 @@ def classify(ident: Identity) -> str:
 
 
 def place(ident: Identity) -> Placement:
+    """Where the song goes in the library, in the layout for its kind from `classify`, such as `Soundtracks/Album
+    (Year)/NN Title` for a soundtrack or `Artists/Album artist/Singles/Title` for a single."""
     kind = classify(ident)
     num = ""
     if ident.track_number:
@@ -104,6 +113,8 @@ def place(ident: Identity) -> Placement:
 
 
 def encode(src_flac: Path, dst: Path, fmt: str, bitrate: int) -> None:
+    """Copy the take `src_flac` to `dst` when `fmt` is "flac", or encode it as `fmt` at `bitrate` kbps. FFmpeg does
+    the encoding and leaves out the take's tags and pictures."""
     dst.parent.mkdir(parents=True, exist_ok=True)
     if fmt == "flac":
         shutil.copy2(src_flac, dst)
@@ -127,6 +138,8 @@ def encode(src_flac: Path, dst: Path, fmt: str, bitrate: int) -> None:
 # ----------------------------------------------------------------------------- cover art
 
 def cover_from_flac(src: Path) -> tuple[bytes, str] | None:
+    """The first picture in the FLAC file `src`, as its bytes and MIME type. None when the file has no picture, or
+    when reading it fails."""
     try:
         f = FLAC(str(src))
         if f.pictures:
@@ -229,6 +242,8 @@ def _lrc_to_sylt(text: str) -> list[tuple[str, int]] | None:
 
 
 def tag(dst: Path, ident: Identity, cover: tuple[bytes, str] | None, lyrics_text: str, capture: dict) -> None:
+    """Rewrite the tags of the library file `dst` from `ident`, with `cover` and `lyrics_text`, in its extension's
+    tag format. `capture` adds the take's details, such as its source app and quality tier."""
     kind = capture.get("kind", "")
     genre = ident.genres[0].title() if ident.genres else ("Soundtrack" if kind == "soundtrack" else "")
     comment = f"Captured with Mynaphone from {capture.get('source_app', 'Spotify')}; identified by {ident.source}."
@@ -416,6 +431,8 @@ def tag(dst: Path, ident: Identity, cover: tuple[bytes, str] | None, lyrics_text
 
 
 def write_lyrics_sidecar(dst: Path, lyrics_text: str) -> None:
+    """Write `lyrics_text` to a `.lrc` file of the same name next to `dst`, when the lyrics are synced. Lyrics count
+    as synced when a `[` is in their first 12 characters."""
     if lyrics_text and "[" in lyrics_text[:12]:
         dst.with_suffix(".lrc").write_text(lyrics_text, encoding="utf-8")
 

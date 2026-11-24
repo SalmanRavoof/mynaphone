@@ -32,6 +32,10 @@ def spotify_link(song: dict) -> str:
 
 
 class PlayAgainDialog(QDialog):
+    """The Songs to play again dialog that the Status page's songs to play again button opens. It lists the songs
+    whose takes the recorder discarded and that the library still lacks. `detail` gives the window's wording for each
+    song's discard reasons. Open in Spotify opens the selected song there, and Hide from the list takes it off for
+    good."""
     def __init__(self, db_path: Path, detail, parent=None):
         super().__init__(parent)
         self.db_path = db_path
@@ -86,6 +90,8 @@ class PlayAgainDialog(QDialog):
         self.reload()
 
     def reload(self) -> None:
+        """Fill the table from `Store.songs_to_play_again` and select the first song. The Open in Spotify and Hide
+        from the list buttons stay off while the list is empty."""
         self.songs = Store(self.db_path).songs_to_play_again()
         self.table.setRowCount(0)
         for song in self.songs:
@@ -115,11 +121,15 @@ class PlayAgainDialog(QDialog):
         self.btn_hide.setEnabled(on)
 
     def open_selected(self) -> None:
+        """Open the selected song in Spotify through `spotify_link`. The Open in Spotify button and a double-click on
+        a row run it."""
         song = self._selected()
         if song is not None:
             os.startfile(spotify_link(song))
 
     def hide_selected(self) -> None:
+        """When you press Hide from the list, take the selected song off the list for good with `Store.hide_retry`,
+        and fill the table again."""
         song = self._selected()
         if song is not None:
             Store(self.db_path).hide_retry(song["key"])

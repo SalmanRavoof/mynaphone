@@ -16,6 +16,9 @@ AUDIO = {".m4a", ".flac", ".mp3", ".opus"}
 
 @dataclass
 class ExportPlan:
+    """What an export to a drive or folder will do, from `plan`. `copy` pairs each file to copy with its path in
+    `dest`, and `bytes_to_copy` is their total size. `skip` counts the files already up to date, and with `mirror`,
+    `remove` lists the audio and `.lrc` files in `dest` that aren't part of the export."""
     copy: list[tuple[Path, Path]] = field(default_factory=list)
     skip: int = 0
     remove: list[Path] = field(default_factory=list)
@@ -49,6 +52,8 @@ def _same(src: Path, dst: Path) -> bool:
 
 
 def plan(library: Path, dest: Path, include_lyrics: bool = False, mirror: bool = False) -> ExportPlan:
+    """The `ExportPlan` for copying the library's audio files to `dest`, and its `.lrc` files with `include_lyrics`.
+    With `mirror`, it lists the other audio and `.lrc` files in `dest` to remove."""
     p = ExportPlan()
     wanted: set[Path] = set()
     for src in sorted(library.rglob("*")):

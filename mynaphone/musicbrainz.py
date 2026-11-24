@@ -19,6 +19,8 @@ _contact = "https://github.com/salmanravoof/mynaphone"
 
 
 def set_contact(contact: str) -> None:
+    """Put `contact`, the `[identify]` setting `musicbrainz_contact`, in the User-Agent of later MusicBrainz
+    requests. A blank one changes nothing, and the default is the project's GitHub page."""
     global _contact
     if contact and contact.strip():
         _contact = contact.strip()
@@ -48,6 +50,7 @@ def _get(path: str, inc: str = "", timeout: float = 20.0) -> dict | None:
 
 
 def credit_string(credits: list[dict]) -> str:
+    """A MusicBrainz artist credit written out, each name as the credit shows it, followed by its join phrase."""
     out = ""
     for c in credits or []:
         out += (c.get("name") or c.get("artist", {}).get("name", "")) + (c.get("joinphrase") or "")
@@ -55,10 +58,13 @@ def credit_string(credits: list[dict]) -> str:
 
 
 def credit_names(credits: list[dict]) -> list[str]:
+    """The names in a MusicBrainz artist credit, each as the credit shows it, without the join phrases."""
     return [c.get("name") or c.get("artist", {}).get("name", "") for c in credits or [] if c]
 
 
 def credit_sort(credits: list[dict]) -> str:
+    """A MusicBrainz artist credit written out with each artist's sort name, followed by its join phrase. An artist
+    with no sort name goes by the name the credit shows."""
     out = ""
     for c in credits or []:
         out += c.get("artist", {}).get("sort-name", c.get("name", "")) + (c.get("joinphrase") or "")

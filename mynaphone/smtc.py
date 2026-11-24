@@ -27,6 +27,9 @@ STATUS_NAMES = {0: "closed", 1: "opened", 2: "changing", 3: "stopped", 4: "playi
 
 @dataclass
 class Snapshot:
+    """One reading of an app's Windows media session, from `snapshot`. `position_ms` is the song's position as of
+    `last_updated`, and `end_ms` its length. `status` is a playback state such as `PLAYING` or `PAUSED`. `thumbnail`
+    stays None unless `snapshot` reads the cover too."""
     app: str
     title: str = ""
     artist: str = ""
@@ -43,10 +46,13 @@ class Snapshot:
 
     @property
     def key(self) -> tuple[str, str, str]:
+        """The track's names as `(artist, title, album)`, in lowercase and without the spaces around them. The
+        recorder compares keys to tell one track from another."""
         return (self.artist.strip().lower(), self.title.strip().lower(), self.album.strip().lower())
 
     @property
     def status_name(self) -> str:
+        """The name of `status`, such as "playing" or "paused", or its number as text when it has no name."""
         return STATUS_NAMES.get(self.status, str(self.status))
 
     def expected_position_ms(self, now: dt.datetime | None = None) -> int:
@@ -60,11 +66,17 @@ class Snapshot:
         return int(self.position_ms + max(elapsed, 0))
 
     def describe(self) -> str:
+        """The reading on one line, such as `Artist - Title [Album] (215.0s) playing`, for the Spotify row on the
+        Setup check page."""
         return f"{self.artist} - {self.title} [{self.album}] ({self.end_ms/1000:.1f}s) {self.status_name}"
 
 
 @dataclass
 class SmtcEvent:
+    """An event `SmtcListener` puts on the recorder's queue when Windows reports a change. `kind` is "media",
+    "playback", "timeline" or "sessions". For the first 3 kinds, `session` is the media session that changed and
+    `app` its app id. A "sessions" event means the list of media sessions changed, and it leaves `app` empty and
+    `session` None."""
     kind: str          # "media" | "playback" | "timeline" | "sessions"
     app: str
     session: Any = None
@@ -99,6 +111,8 @@ def _td_ms(td) -> int:
 
 
 async def snapshot(session, with_thumbnail: bool = False) -> Snapshot:
+    """Read what the media session `session` reports now into a `Snapshot`, with the cover image too when
+    `with_thumbnail` is True. Any part Windows fails to give stays at its defaults."""
     app = session.source_app_user_model_id or ""
     snap = Snapshot(app=app)
     try:
@@ -144,6 +158,8 @@ class SmtcListener:
         self._stopped = False
 
     async def start(self) -> None:
+        """Get Windows' media session manager and add handlers to it and to every session open now, so each change
+        goes on `queue` as an `SmtcEvent`."""
         self.manager = await Manager.request_async()
         self._sessions_token = self.manager.add_sessions_changed(self._on_sessions_changed)
         self._rehook()
@@ -164,6 +180,8 @@ class SmtcListener:
         self.manager = None
 
     def sessions(self) -> list[Any]:
+        """The media sessions Windows lists now, or an empty list while the listener isn't running or when the call
+        fails."""
         try:
             return list(self.manager.get_sessions()) if self.manager else []
         except Exception as e:

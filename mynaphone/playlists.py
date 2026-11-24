@@ -26,6 +26,7 @@ FOLDER = "Playlists"
 
 
 def artist_text(track: dict) -> str:
+    """A Spotify song's artists, separated by commas."""
     return ", ".join(a for a in track.get("artists") or [] if a)
 
 

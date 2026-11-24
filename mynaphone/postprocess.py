@@ -31,6 +31,8 @@ WORDLESS_SHARE = 0.75       # and this share of them show no sign of words
 
 @dataclass
 class Pending:
+    """An inbox take the post-processor hasn't filed yet. `attempts` counts its failed tries and `last_error` says
+    why the last one failed. The post-processor tries it again once `next_try`, a monotonic time, has passed."""
     path: Path
     attempts: int = 0
     next_try: float = 0.0
@@ -38,6 +40,9 @@ class Pending:
 
 
 class PostProcessor(threading.Thread):
+    """The thread that files the inbox's takes in the library, identified and tagged. It runs again 60 seconds after
+    each pass, or sooner on `kick`, and a take it can't file yet stays in the inbox for a later try. About every 30
+    minutes it runs slower jobs, such as the lyrics backfill and new lookups for songs missing metadata."""
     def __init__(self, cfg: Config, store: Store, on_event=None):
         super().__init__(name="postprocessor", daemon=True)
         self.cfg = cfg
@@ -53,10 +58,13 @@ class PostProcessor(threading.Thread):
         self._film_tags_stale = False   # a song joined its film's folder, which may change its album artist or name
 
     def stop(self) -> None:
+        """Ask the thread to stop, and wake it so it doesn't wait out the rest of its 60 seconds."""
         self._stop.set()
         self._kick.set()
 
     def kick(self) -> None:
+        """Wake the thread to file new inbox takes without waiting out its 60 seconds. The lyrics backfill and the
+        other jobs that check for new songs stop early for them."""
         self._kick.set()
 
     def _new_song_waiting(self) -> bool:
@@ -76,6 +84,8 @@ class PostProcessor(threading.Thread):
     # -- main loop -------------------------------------------------------------------------
 
     def run(self) -> None:
+        """File the inbox's takes and run the slow jobs when they're due, then wait 60 seconds or until `kick`, over
+        and over until `stop`."""
         while not self._stop.is_set():
             try:
                 if not self.paused:
@@ -184,6 +194,8 @@ class PostProcessor(threading.Thread):
         return ident, note
 
     def process(self, path: Path) -> Path:
+        """File the inbox take at `path` and return the library copy's path. It sets aside a take of a recording the
+        library has, unless `upgrade_on_higher_tier` lets a higher tier replace it."""
         side = json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
         meta = side.get("meta", {})
         duration_s = (meta.get("expected_ms") or 0) / 1000.0

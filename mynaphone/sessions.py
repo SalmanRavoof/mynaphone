@@ -43,6 +43,8 @@ def _serve_mixer() -> None:
 
 @dataclass
 class ForeignSound:
+    """Another app's sound in one poll of `ForeignAudioMonitor`, with its peak level in dBFS as `peak_db`. `app`
+    names the app, and `t` is the monotonic time of the poll."""
     t: float            # monotonic time
     app: str
     peak_db: float
@@ -50,10 +52,14 @@ class ForeignSound:
 
 @dataclass
 class ForeignReport:
+    """The sounds other apps made since a given moment, as `ForeignAudioMonitor.events_since` gives them in `events`.
+    The recorder asks for one when a take ends, and if it has events, puts its `apps` and `max_db` in the take's
+    `foreign_audio` flag."""
     events: list[ForeignSound] = field(default_factory=list)
 
     @property
     def apps(self) -> list[str]:
+        """The apps in `events`, each once, in the order they first appear."""
         seen: list[str] = []
         for e in self.events:
             if e.app not in seen:
@@ -62,6 +68,7 @@ class ForeignReport:
 
     @property
     def max_db(self) -> float:
+        """The loudest `peak_db` in `events`, or -120 dBFS when `events` is empty."""
         return max((e.peak_db for e in self.events), default=-120.0)
 
 
@@ -110,6 +117,10 @@ def _app_session_volume(process_name: str) -> tuple[float, bool] | None:
 
 
 class ForeignAudioMonitor(threading.Thread):
+    """A background thread that watches Windows' per-app audio sessions and notes each sound from an app outside
+    `source_names`. It polls every `interval` seconds and skips Mynaphone and its capture helper,
+    `mynaphone-capture.exe`. A sound counts when its peak reaches `threshold_db`, and any sound counts when that's
+    -100 dBFS or lower. The recorder gives it the `[rules]` settings `sources` and `foreign_audio_threshold_db`."""
     def __init__(self, source_names: list[str], threshold_db: float = -120.0, interval: float = 0.2):
         super().__init__(name="foreign-audio-monitor", daemon=True)
         self.sources = {s.lower() for s in source_names}
@@ -143,13 +154,17 @@ class ForeignAudioMonitor(threading.Thread):
             log.debug("other app making sound: %s (%.0f dBFS)", name, db)
 
     def stop(self) -> None:
+        """Tell the thread to stop before its next poll. It doesn't wait for the thread to end."""
         self._stop.set()
 
     def events_since(self, t0: float) -> ForeignReport:
+        """The sounds other apps made since `t0`, a monotonic time, as a `ForeignReport`."""
         with self._lock:
             return ForeignReport([e for e in self._events if e.t >= t0])
 
     def forget_before(self, t0: float) -> None:
+        """Drop every sound from before `t0`, a monotonic time. The recorder calls it with a take's `t_begin` after
+        it reads that take's sounds."""
         with self._lock:
             self._events = [e for e in self._events if e.t >= t0]
 
@@ -160,6 +175,8 @@ class ForeignAudioMonitor(threading.Thread):
         return n in self.OWN or any(n == s or n.endswith(s) for s in self.sources)
 
     def run(self) -> None:
+        """Poll Windows' audio sessions every `interval` seconds until `stop`, and note each sound that counts. If
+        pycaw or comtypes won't import, it logs a warning and ends with `available` still False."""
         try:
             import comtypes
             from pycaw.pycaw import AudioUtilities, IAudioMeterInformation

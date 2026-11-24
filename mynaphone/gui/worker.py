@@ -27,6 +27,9 @@ class _QtLogHandler(logging.Handler):
 
 
 class RecorderWorker(QThread):
+    """A Qt thread that runs the recorder on an asyncio loop of its own. Its signals pass the recorder's events and
+    answers to the window, with the app's log lines from `INFO` up and the error if the recorder crashes.
+    `set_paused` and `set_harvest` can come before the recorder exists, and `run` applies them when it makes one."""
     event = Signal(dict)
     log = Signal(str)
     failed = Signal(str)
@@ -56,6 +59,8 @@ class RecorderWorker(QThread):
         self._harvest: bool | None = None
 
     def run(self) -> None:
+        """Load `config_path` and run the recorder on a new event loop until it stops, or emit `failed` if it
+        crashes. Qt calls it on the new thread after `start`."""
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         handler = _QtLogHandler(self.log)
@@ -85,15 +90,20 @@ class RecorderWorker(QThread):
             gc.collect()
 
     def stop(self) -> None:
+        """Ask the recorder to shut down, if there is one. The window calls it for the Stop button and when the app
+        quits."""
         if self.recorder is not None:
             self.recorder.request_stop()
 
     def set_paused(self, paused: bool) -> None:
+        """Pause or resume the recorder, now or once `run` makes it. While paused it starts no new takes."""
         self._paused = paused
         if self.recorder is not None:
             self.recorder.set_paused(paused)
 
     def set_harvest(self, on: bool) -> None:
+        """Set harvest mode, now or once `run` makes the recorder. In harvest mode the recorder tells the player to
+        skip an archived song, unless `upgrade_on_higher_tier` lets a higher tier replace it."""
         self._harvest = on
         if self.recorder is not None:
             self.recorder.set_harvest(on)

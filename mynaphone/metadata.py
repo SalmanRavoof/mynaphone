@@ -37,6 +37,8 @@ LIST_FIELDS = {"composers", "lyricists", "genres", "artists"}
 
 
 def missing_fields(ident: Identity, has_cover: bool, lyrics_state: str) -> list[str]:
+    """The keys in `FIELDS` a song still lacks, most important first. When `lyrics_state` is `instrumental`, the song
+    counts as having its lyrics and lyricist."""
     miss = []
     for key, _ in FIELDS:
         if key == "cover":
@@ -58,6 +60,8 @@ def missing_fields(ident: Identity, has_cover: bool, lyrics_state: str) -> list[
 
 
 def apply_manual(ident: Identity, manual: dict) -> None:
+    """Put the fields you typed in the Library editor, `manual`, onto `ident`, over what the lookups found. It splits
+    a list field's text at its semicolons."""
     for k, v in (manual or {}).items():
         if k == "instrumental":
             continue                      # not a tag; refresh_track reads it
@@ -85,6 +89,8 @@ def apply_manual(ident: Identity, manual: dict) -> None:
 
 
 def identity_from_row(row) -> Identity:
+    """The `Identity` from a `tracks` row's `identity_json`. The row's own title and artist names fill in empty ones,
+    and its album or track number only when the JSON has no such key."""
     ident = Identity()
     try:
         d = json.loads(row["identity_json"] or "{}")
@@ -127,6 +133,8 @@ def read_file_extras(path: Path) -> tuple[tuple[bytes, str] | None, str]:
 
 
 def lyrics_state_of(text: str) -> str:
+    """`synced` when `text` has a `[` in its first 12 characters as LRC text does, or `plain` for other text. With no
+    text at all, it's `none`."""
     if not text:
         return "none"
     return "synced" if "[" in text[:12] else "plain"

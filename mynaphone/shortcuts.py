@@ -75,6 +75,8 @@ def interpreter() -> Path:
 
 
 def gui_arguments(config_path: Path, minimized: bool = False) -> str:
+    """The arguments that make Python open the app's window with the settings in `config_path`. With `minimized` it
+    adds `--minimized`, the flag that starts the app hidden in the tray."""
     args = f'-m mynaphone --config "{config_path}" gui'
     return f"{args} --minimized" if minimized else args
 
@@ -102,6 +104,8 @@ def shortcut_path(place: str) -> Path:
 
 
 def has_shortcut(place: str) -> bool:
+    """True when the app's `Mynaphone.lnk` is in the folder for `place`, `start_menu` or `desktop`. It's False on an
+    `OSError` too."""
     try:
         return shortcut_path(place).exists()
     except OSError:
@@ -116,6 +120,8 @@ def add_shortcut(place: str, config_path: Path) -> Path:
 
 
 def remove_shortcut(place: str) -> bool:
+    """Delete the app's `Mynaphone.lnk` from the folder for `place`. True when it deleted one, and False when there
+    was none."""
     try:
         shortcut_path(place).unlink()
         return True

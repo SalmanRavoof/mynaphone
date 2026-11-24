@@ -32,6 +32,9 @@ SHUFFLE = {0: "off", 1: "on", 2: "smart shuffle"}
 
 
 class PlaylistJob:
+    """Records a playlist's or album's missing songs by playing it in Spotify through the bridge, from its first
+    missing song on. `Recorder.start_job` makes it, and the recorder tells it when a Spotify song starts and when a
+    take gets its verdict, so it knows when to jump to the next missing song or finish."""
     def __init__(self, recorder, uri: str, name: str, tracks: list[dict], keep_file: bool = True):
         self.rec = recorder
         self.uri = uri
@@ -64,6 +67,8 @@ class PlaylistJob:
     # -- what the window shows ------------------------------------------------------------
 
     def progress(self, **extra) -> dict:
+        """The job's progress for the Status page, with counts such as songs saved and songs left, and the title of
+        the song it's on. Keys in `extra` go in too."""
         title = self.tracks[self.current]["name"] if self.current is not None else ""
         return {"name": self.name, "uri": self.uri, "total": len(self.tracks), "have": self.have,
                 "saved": len(self.saved), "left": len(self.todo), "failed": len(self.failed),
@@ -72,6 +77,7 @@ class PlaylistJob:
     # -- driving Spotify ------------------------------------------------------------------
 
     async def start(self) -> None:
+        """Play the playlist in Spotify at its first song to record, or finish at once when there's none."""
         log.info("playlist %s: %d songs, %d in the library, %d to record, %d Spotify can't play",
                  self.name, len(self.tracks), self.have, len(self.todo), self.unplayable)
         if not self.todo:
@@ -243,6 +249,8 @@ class PlaylistJob:
 
     async def on_result(self, uri: str, kept: bool, reasons: list[str], title: str = "",
                         duration_ms: int = 0) -> None:
+        """Note a take's verdict, and drop its song after 2 failed takes. With nothing else playing, jump to the next
+        song to record or finish once no verdict is due."""
         index = self._find(uri, title, duration_ms, prefer=self.recording)
         if self.done or index is None:
             return
@@ -267,6 +275,8 @@ class PlaylistJob:
     # -- the end ----------------------------------------------------------------------------
 
     async def finish(self, why: str, stopped: bool = False) -> None:
+        """End the job for the reason `why`, and pause Spotify unless `stopped`. It puts the playlist's shuffle back,
+        and it writes its M3U8 when `keep_file` is True."""
         if self.done:
             return
         self.done = True

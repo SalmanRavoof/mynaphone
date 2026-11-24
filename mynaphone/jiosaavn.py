@@ -57,6 +57,8 @@ class Unavailable(Exception):
 
 @dataclass
 class Credits:
+    """The lyricists and composers JioSaavn's copies of one recording agree on, from `credits_for`. `song_id` is the
+    id of the copy that matched the song best, and `copies` counts the copies that share its `vcode`."""
     lyricists: list[str] = field(default_factory=list)
     composers: list[str] = field(default_factory=list)
     song_id: str = ""
@@ -97,6 +99,8 @@ def _get(params: dict) -> dict:
 
 
 def search(query: str, n: int = 30) -> list[dict]:
+    """JioSaavn's search results for `query`, up to `n` of them. It raises `Unavailable` for a reply without a
+    results list too, since that can mean a firewall is refusing this address."""
     data = _get({"__call": "search.getResults", "q": query, "n": str(n), "p": "1"})
     if "results" not in data:
         # an empty reply can mean a firewall quietly refusing this address, so it isn't taken as "no such song"
@@ -128,6 +132,8 @@ def title_core(title: str) -> str:
 
 
 def language_hint(title: str, album: str, language: str = "") -> str:
+    """The Indian language that `title` or `album` names, such as `telugu` for Master (Telugu), else the one the code
+    `language` stands for, such as `tamil` for `ta`. Empty when neither gives one."""
     m = re.search(r"\b(" + "|".join(sorted(set(LANGUAGES.values()))) + r")\b", f"{title} {album}", re.I)
     if m:
         return m.group(1).lower()

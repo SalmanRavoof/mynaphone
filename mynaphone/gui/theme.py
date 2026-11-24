@@ -69,6 +69,8 @@ def _assets() -> dict[str, str]:
 
 
 def build_qss(a: dict[str, str]) -> str:
+    """The app's Qt stylesheet in the theme's colors, with rules for object names such as `card` and `primary`. `a`
+    gives the paths of the `check` and `chevron` pictures from `_assets`."""
     return f"""
 * {{ font-family: "Segoe UI"; font-size: 10pt; color: {TEXT}; }}
 QMainWindow, QWidget#canvas {{ background: {CANVAS}; }}
@@ -181,6 +183,8 @@ def set_tone(widget: QWidget, tone: str) -> None:
 
 
 def apply_theme(app: QApplication) -> None:
+    """Give `app` the Fusion style, the theme's palette, Segoe UI at 10 points and the `build_qss` stylesheet. Its
+    check mark and chevron are PNG files that `_assets` draws in the temp folder."""
     app.setStyle("Fusion")
     pal = QPalette()
     pal.setColor(QPalette.Window, QColor(CANVAS))

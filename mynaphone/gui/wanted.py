@@ -13,6 +13,8 @@ from .album_panel import AlbumPanel, AlbumTable
 
 
 def intro_text(min_songs: int) -> str:
+    """The Wanted albums dialog's intro. It says the list has the albums you added, and when `min_songs` is above 0,
+    the ones you have that many or more songs from."""
     who = (f"Albums you have {min_songs} or more songs from, and the ones you added" if min_songs > 0
            else "The albums you added")
     return (f"{who}, with the nearest to whole at the top. Pick one to see what's missing, and Mynaphone can play "
@@ -20,6 +22,8 @@ def intro_text(min_songs: int) -> str:
 
 
 def summary_text(wanted: list[A.Album], average_ms: int) -> str:
+    """The Wanted albums dialog's count of albums on the list and songs left to record, with about how long they
+    take. `average_ms` stands in for a song of unknown length."""
     if not wanted:
         return "Nothing on the list. Add an album from the Library's Albums view with Want this album."
     left = sum(a.to_record for a in wanted)
@@ -30,6 +34,9 @@ def summary_text(wanted: list[A.Album], average_ms: int) -> str:
 
 
 class WantedDialog(QDialog):
+    """The Wanted albums dialog that the Status page's Wanted albums button opens. It lists the albums on the Wanted
+    list beside an `AlbumPanel` for the one you pick, and it closes once the panel has asked the window to record
+    that album's missing songs."""
     def __init__(self, win, parent=None):
         super().__init__(parent or win)
         self.win = win
@@ -77,6 +84,8 @@ class WantedDialog(QDialog):
         self.reload()
 
     def reload(self, read: bool = True) -> None:
+        """Recount the list's albums, and move to the first one when the album on show has left the list. That move,
+        or `read`, lets the panel read the album from Spotify again."""
         st = Store(self.win.cfg.paths.db_path)
         found = A.build(st)
         average = A.average_song_ms(st)

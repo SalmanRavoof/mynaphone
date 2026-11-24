@@ -27,6 +27,9 @@ log = logging.getLogger("mynaphone")
 
 @dataclass
 class ActiveTake:
+    """The take the recorder is making now, with the song's metadata and the capture that records it. `flags` says
+    what happened during it, such as a seek or a pause, for the verdict. With `upgrade_on_higher_tier` on and the
+    song in the library at a lower tier, `replace_id` is that copy's id, and a kept take replaces it."""
     app: str
     key: tuple[str, str, str]
     meta: TakeMeta
@@ -53,6 +56,10 @@ READING_GAP_MS = 5000   # Spotify's media session sends a timeline reading about
 
 
 class Recorder:
+    """Records a take of each song the source apps play, from Windows' media-session events and the bridge's reports.
+    It skips a song Mynaphone has archived, unless `upgrade_on_higher_tier` lets a higher tier replace it. A writer
+    thread judges ended takes and writes the kept ones to the inbox. `run` is its main loop, and the window gets its
+    events through `on_event`."""
     def __init__(self, cfg: Config, loop: asyncio.AbstractEventLoop | None = None):
         self.cfg = cfg
         self.loop = loop or asyncio.get_event_loop()
@@ -156,6 +163,8 @@ class Recorder:
     # -- recording a playlist ----------------------------------------------------------------
 
     async def list_playlists(self) -> dict:
+        """Ask the bridge for your Spotify playlists and wait up to 30 seconds. It raises `BridgeError` when the
+        `[bridge]` setting `enabled` is off, or when the bridge doesn't answer."""
         if self.bridge is None:
             raise BridgeError("the Spotify bridge is turned off in Settings")
         return await self.bridge.request("playlists", timeout=30.0)
@@ -209,6 +218,8 @@ class Recorder:
         return job.progress()
 
     async def stop_job(self, why: str = "you stopped it") -> None:
+        """Stop the playlist job, if there is one, without pausing Spotify. `why` is the reason it gives in the log
+        and on the Status page."""
         if self.job is not None:
             await self.job.finish(why, stopped=True)
 
@@ -292,6 +303,8 @@ class Recorder:
     # -- lifecycle -------------------------------------------------------------------------
 
     def capture_for(self, app: str):
+        """The per-app capture whose source `app` equals or ends with, whatever its case. With no such capture it's
+        the whole-device capture, or None when there's no whole-device capture either."""
         a = (app or "").lower()
         for name, cap in self.captures.items():
             if name != "*" and (a == name or a.endswith(name)):
@@ -299,6 +312,8 @@ class Recorder:
         return self.captures.get("*")
 
     async def run(self) -> None:
+        """Start the captures and the post-processor, then turn media-session and bridge events into takes until
+        `request_stop`. It ends the take in progress and waits for every verdict before it stops the captures."""
         for cap in self.captures.values():
             cap.start()
         self.foreign.start()

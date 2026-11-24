@@ -48,6 +48,9 @@ class _Worker(QThread):
 
 
 class ExportDialog(QDialog):
+    """The Export to USB dialog that the Library page's Export to USB button opens. Its Check what would be copied
+    button compares `library_dir` with a drive or folder, and its Export button copies the new or changed songs on a
+    worker thread. Changing the drive or either box clears the check."""
     def __init__(self, library_dir: Path, parent=None):
         super().__init__(parent)
         self.library_dir = library_dir
@@ -118,6 +121,8 @@ class ExportDialog(QDialog):
              else w.toggled.connect(self._invalidate))
 
     def refresh_drives(self) -> None:
+        """Fill the Drive list with the drives `export.removable_drives` finds, or with a line asking for a USB stick
+        or a folder when it finds none."""
         self.drives.clear()
         for d in export.removable_drives():
             label = f"{d['path']}  {d['fstype']}  {_gb(d['free'])} free of {_gb(d['total'])}"
@@ -133,6 +138,7 @@ class ExportDialog(QDialog):
 
     @Slot()
     def browse(self) -> None:
+        """When you press Folder..., put the folder you choose at the top of the Drive list as the destination."""
         d = QFileDialog.getExistingDirectory(self, "Choose destination folder")
         if d:
             self.drives.insertItem(0, d, d)
@@ -145,6 +151,8 @@ class ExportDialog(QDialog):
 
     @Slot()
     def check(self) -> None:
+        """Plan the export with `export.plan` and show what it would copy or remove. The Check what would be copied
+        button runs it, and Export turns on when there's something to do."""
         dest = self._dest()
         if not dest:
             self.summary.setText("Choose a drive or folder first.")
@@ -159,6 +167,8 @@ class ExportDialog(QDialog):
 
     @Slot()
     def go(self) -> None:
+        """Copy and remove the files the last check planned, with `export.run` on a worker thread. The Export button
+        runs it, and Close reads Cancel until the export ends."""
         if self.plan is None:
             self.check()
             if self.plan is None:
@@ -201,6 +211,8 @@ class ExportDialog(QDialog):
         self.btn_go.setEnabled(False)
 
     def reject(self) -> None:
+        """Close the dialog, or during an export, stop the export after the current file and keep the dialog open.
+        Esc and the Close button run it."""
         if self.worker is not None and self.worker.isRunning():
             self.worker.stop()
             self.summary.setText("Cancelling after the current file...")

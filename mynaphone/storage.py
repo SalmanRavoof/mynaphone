@@ -16,6 +16,9 @@ DISCARDS_PER_DAY = 10               # rejected takes kept for inspection
 
 @dataclass
 class Estimate:
+    """A drive's free space, from `estimate`, and how many songs fit in it. `songs` counts the songs of `per_song_mb`
+    each that fit after a 2 GB reserve and `working_mb` of working space for the recorder. `format_label` names the
+    library format, such as FLAC or AAC 256 kbps."""
     drive: str
     free_bytes: int
     total_bytes: int
@@ -26,10 +29,13 @@ class Estimate:
 
     @property
     def free_gb(self) -> float:
+        """The drive's free space in decimal gigabytes."""
         return self.free_bytes / 1e9
 
 
 def per_song_mb(fmt: str, bitrate_kbps: int, bit_depth: int = 16) -> float:
+    """The megabytes a 4.5-minute song takes in `fmt`. FLAC counts as 31 MB, or 46.5 MB at a 24-bit `bit_depth`, and
+    other formats go by `bitrate_kbps`."""
     if fmt == "flac":
         return FLAC_MB_PER_SONG * (1.5 if bit_depth == 24 else 1.0)
     return bitrate_kbps * AVERAGE_SONG_SECONDS / 8 / 1000.0
@@ -55,6 +61,8 @@ def estimate(folder: Path, fmt: str, bitrate_kbps: int, keep_discards_days: int 
 
 
 def describe(est: Estimate | None) -> str:
+    """How many songs fit on the drive in `est` and about how many hours that is, as a sentence, or that none fit.
+    Without `est`, it says it couldn't read the drive."""
     if est is None:
         return "Could not read the drive."
     if est.songs <= 0:

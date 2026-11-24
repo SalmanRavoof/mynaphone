@@ -128,6 +128,7 @@ def headline(app: str) -> str:
 
 
 def tray_tip(app: str) -> str:
+    """The tray icon's tooltip while a no-sound warning about `app` stands. It's the same as `headline`."""
     return headline(app)
 
 
@@ -164,4 +165,6 @@ REASONS = {          # the Activity page's words for a take that got no sound, b
 
 
 def reason_words(cause: str) -> str:
+    """The Activity page's words for a take that got no sound because of `cause`, or "no sound reached Mynaphone" for
+    a cause not in `REASONS`."""
     return REASONS.get(cause) or "no sound reached Mynaphone"

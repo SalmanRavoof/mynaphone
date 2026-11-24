@@ -30,6 +30,8 @@ from . import theme
 
 
 def label(text: str, name: str | None = None, wrap: bool = False) -> QLabel:
+    """A `QLabel` of `text`. `name` is its object name for the theme's stylesheet, such as "h2" or "muted", and
+    `wrap` turns word wrap on."""
     lbl = QLabel(text)
     if name:
         lbl.setObjectName(name)
@@ -38,6 +40,7 @@ def label(text: str, name: str | None = None, wrap: bool = False) -> QLabel:
 
 
 def card() -> tuple[QFrame, QVBoxLayout]:
+    """A new `QFrame` in the theme's card look, and the vertical layout inside it, for a step of the Set up page."""
     f = QFrame()
     f.setObjectName("card")
     lay = QVBoxLayout(f)
@@ -208,6 +211,8 @@ class SetupPage(QScrollArea):
     # -- state ------------------------------------------------------------------------------
 
     def refresh(self) -> None:
+        """Look for the tools, the AcoustID key, the Last.fm key and the Spotify bridge, and show on the page what it
+        finds. Then update the free space estimate."""
         have_ffmpeg, have_fpcalc, have_helper = tools.ffmpeg() is not None, tools.fpcalc() is not None, HELPER.exists()
         if have_ffmpeg and have_fpcalc and have_helper:
             self.tools_status.setText("Done")
@@ -242,10 +247,14 @@ class SetupPage(QScrollArea):
 
     @property
     def complete(self) -> bool:
+        """True when Mynaphone finds `ffmpeg` and Chromaprint's `fpcalc`, and `acoustid_key` isn't blank. Until then,
+        the window opens on the Set up page and doesn't start recording on its own."""
         return (tools.ffmpeg() is not None and tools.fpcalc() is not None
                 and bool(self.win.cfg.identify.acoustid_key.strip()))
 
     def update_space(self) -> None:
+        """Show on step 3 how many songs fit on the drive of the folder in the box, at the `[library]` format and
+        bitrate. It runs whenever the folder box changes."""
         c = self.win.cfg
         est = storage.estimate(Path(self.folder.text() or "."), c.library.format, c.library.bitrate,
                                c.rules.keep_discards_days, c.capture.bit_depth)
@@ -268,32 +277,44 @@ class SetupPage(QScrollArea):
 
     @Slot()
     def run_tools(self) -> None:
+        """Run `setup-tools` in the background and show its latest output line on step 1. Download and build runs it,
+        and so does Rebuild, the same button once the tools are there."""
         self._run(["setup-tools"], self.tools_log, self.btn_tools)
 
     @Slot()
     def run_spicetify(self) -> None:
+        """Run `install-spicetify --apply` in the background and show its latest output line on step 4. Install
+        Spotify bridge runs it, and so does Reinstall, the same button once the bridge is there."""
         self._run(["install-spicetify", "--apply"], self.spice_log, self.btn_spice)
 
     @Slot()
     def save_key(self) -> None:
+        """Write the AcoustID key in its box to `acoustid_key` in `config.toml` when you press its Save key button,
+        then refresh the page."""
         self.win.cfg.identify.acoustid_key = self.key.text().strip()
         self.win.cfg.save()
         self.refresh()
 
     @Slot()
     def save_lastfm_key(self) -> None:
+        """Write the Last.fm API key in its box to `lastfm_api_key` in `config.toml` when you press its Save key
+        button, then refresh the page."""
         self.win.cfg.identify.lastfm_api_key = self.lastfm_key.text().strip()
         self.win.cfg.save()
         self.refresh()
 
     @Slot()
     def pick_folder(self) -> None:
+        """When you press Browse, open a folder dialog at the folder in the box and put the one you choose in the
+        box. The Use this folder button saves it."""
         d = QFileDialog.getExistingDirectory(self, "Choose the library folder", self.folder.text())
         if d:
             self.folder.setText(d.replace("/", "\\"))
 
     @Slot()
     def save_folder(self) -> None:
+        """When you press Use this folder, create the folder in the box if it's missing and write it to `library_dir`
+        in `config.toml`. The Settings page's Library box shows it too."""
         p = Path(self.folder.text().strip())
         if not str(p):
             return

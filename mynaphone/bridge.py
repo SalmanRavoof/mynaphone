@@ -29,6 +29,8 @@ log = logging.getLogger("mynaphone.bridge")
 
 @dataclass
 class SpotifyState:
+    """What the Spicetify extension reports about Spotify's player. The bridge builds one from each `state` message
+    and keeps the latest as `Bridge.state`, with `received_at` as the monotonic time it read the message."""
     uri: str = ""
     name: str = ""
     artists: list[dict] = field(default_factory=list)
@@ -55,6 +57,7 @@ class SpotifyState:
 
     @property
     def artist_names(self) -> str:
+        """The names in `artists` with commas between them. An artist without a name doesn't count."""
         return ", ".join(a.get("name", "") for a in self.artists if a.get("name"))
 
     @property
@@ -71,6 +74,8 @@ class SpotifyState:
 
     @property
     def tier(self) -> str:
+        """The tier name for the `bitrateLevel` in `quality`, such as `very_high` for level 4. With a
+        `losslessStatus` above 0 and no `bitrateLevel` it's `hifi`, and with no level it's `unknown`."""
         q = self.quality or {}
         if int(q.get("losslessStatus") or 0) > 0 and q.get("bitrateLevel") is None:
             return "hifi"
@@ -85,11 +90,16 @@ class SpotifyState:
 
     @property
     def fresh(self) -> bool:
+        """True when this report came in less than 5 seconds ago, by `received_at`. The empty state the bridge starts
+        with is never fresh."""
         return self.received_at and (time.monotonic() - self.received_at) < 5.0
 
 
 @dataclass
 class BridgeEvent:
+    """A change in Spotify's player, with the new `state` and the `previous` one. The bridge queues one when the
+    song, its playback id, `is_paused` or `is_buffering` changes, and when album or track details first arrive. It
+    also queues one with `kind` set to `lyrics` after it stores a song's lyrics."""
     kind: str = "bridge"
     app: str = "Spotify.exe"
     state: SpotifyState | None = None
@@ -123,6 +133,8 @@ class YouTubeState:
 
     @property
     def fresh(self) -> bool:
+        """True when this report came in less than 5 seconds ago, by `received_at`. The empty state that
+        `Bridge.youtube_for` returns when it has no report is never fresh."""
         return self.received_at and (time.monotonic() - self.received_at) < 5.0
 
 
@@ -140,6 +152,9 @@ def _clean_music(m):
 
 @dataclass
 class YouTubeEvent:
+    """A change in what the browser extension reports from one browser, with the new `state` and that browser's
+    `previous` one. The bridge queues one when the video changes, pauses, plays or ends, and on a seek or speed
+    change event."""
     kind: str = "youtube"
     state: YouTubeState | None = None
     previous: YouTubeState | None = None
@@ -150,6 +165,10 @@ class BridgeError(RuntimeError):
 
 
 class Bridge:
+    """The WebSocket server that the Spicetify extension and the browser extension connect to, at 127.0.0.1 on the
+    `port` from the `[bridge]` settings. A connection to `/youtube` is the browser extension, and any other is the
+    Spicetify extension. It keeps Spotify's latest `state` and each browser's latest report in `youtube_by_browser`,
+    and puts changes on `queue` as a `BridgeEvent` or `YouTubeEvent`."""
     def __init__(self, loop: asyncio.AbstractEventLoop, queue: asyncio.Queue, port: int, on_status=None,
                  on_extension=None):
         self.loop = loop
@@ -222,6 +241,7 @@ class Bridge:
 
     @property
     def youtube_connected(self) -> bool:
+        """True while the bridge has a socket open to the browser extension in any browser."""
         return bool(self.youtube_sockets)
 
     def youtube_for(self, app: str) -> YouTubeState:
@@ -249,10 +269,12 @@ class Bridge:
                 log.exception("browser extension status listener failed")
 
     async def start(self) -> None:
+        """Start the WebSocket server on 127.0.0.1 at `port`, so the extensions can connect."""
         self._server = await websockets.serve(self._handler, "127.0.0.1", self.port)
         log.info("bridge listening on ws://127.0.0.1:%d", self.port)
 
     async def stop(self) -> None:
+        """Close the WebSocket server and wait until it has closed. Before `start` it does nothing."""
         if self._server is not None:
             self._server.close()
             await self._server.wait_closed()

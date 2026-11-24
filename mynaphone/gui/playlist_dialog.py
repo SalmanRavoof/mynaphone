@@ -31,6 +31,8 @@ def spotify_uri(text: str) -> str:
 
 
 def summary_text(checked: dict) -> str:
+    """The Record a playlist dialog's summary of `checked`, the result of `Recorder.check_playlist`. It counts the
+    songs the library has and the ones left to record, and notes any Spotify can't play here."""
     total, have, todo, cant = (checked["total"], len(checked["have"]), len(checked["todo"]),
                                len(checked["unplayable"]))
     if not total:
@@ -46,6 +48,9 @@ def summary_text(checked: dict) -> str:
 
 
 class PlaylistDialog(QDialog):
+    """The Record a playlist dialog that the Status page's Record a playlist button opens. For one of your Spotify
+    playlists, or a playlist or album link you paste, it shows how much of it the library has. It asks the running
+    recorder through the window, and the answers come back on `worker_answer`."""
     def __init__(self, win, parent=None):
         super().__init__(parent or win)
         self.win = win
@@ -201,10 +206,14 @@ class PlaylistDialog(QDialog):
     # -- the buttons -----------------------------------------------------------------------------
 
     def save(self) -> None:
+        """When you press Save the playlist file, ask the recorder to write the playlist or album you picked or
+        pasted as an M3U8 file in the library's Playlists folder."""
         uri, name = self._uri(), self._name()
         self._ask(lambda rec: rec.save_playlist(uri, name), "save")
 
     def record(self) -> None:
+        """Pass the playlist or album you picked or pasted to the window's `start_playlist` to record its missing
+        songs, then close the dialog. The Record the missing songs button runs it."""
         uri, name = self._uri(), self._name()
         self.win.start_playlist(uri, name)
         self.accept()
