@@ -148,6 +148,9 @@ All notable changes to Mynaphone are listed here. The format follows
 - The USB export never copied the playlist files, and the docs said it did. It now copies the M3U8
   files in the library's `Playlists` folder too. With **Remove songs from the drive that are no longer
   in the library** ticked, it also removes the playlists the library no longer has.
+- After **Download and build** on the Set up page, the page went on saying ffmpeg and fpcalc were
+  missing until you restarted Mynaphone. Mynaphone kept its first answer for each tool, so a tool it
+  missed once stayed missing. It now looks again until it finds the tool.
 - With the Spotify bridge off, asking for your playlists or an album's songs said it was turned off
   in Settings. The Settings page has no switch for it, so the message now names `config.toml`.
 - Recording a playlist played its last missing song again, for one more try, while Mynaphone was

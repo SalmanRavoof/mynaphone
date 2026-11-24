@@ -112,6 +112,15 @@ def test_safe_filenames():
     assert len(safe("x" * 200)) == 90
 
 
+def test_find_looks_again_for_a_program_it_missed(tmp_path, monkeypatch):
+    monkeypatch.setattr(tools, "TOOLS", tmp_path)
+    assert tools.find("mynaphone-test-tool") is None
+    exe = tmp_path / "bin" / "mynaphone-test-tool.exe"
+    exe.parent.mkdir()
+    exe.write_bytes(b"")
+    assert tools.find("mynaphone-test-tool") == str(exe)
+
+
 def test_missing_fields_and_manual_overrides():
     i = Identity(title="T", artist="A", album="B", album_artist="A", year=2001, track_number=1, track_total=10,
                  disc_number=1, composers=["C"], lyricists=["L"], genres=["pop"], isrc="x", label="lab",

@@ -4,21 +4,24 @@
 from __future__ import annotations
 
 import shutil
-from functools import lru_cache
 from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parent.parent / "tools"
 
+_found: dict[str, str] = {}
 
-@lru_cache(maxsize=None)
+
 def find(name: str) -> str | None:
-    """The path of the program `name` anywhere under the project's `tools` folder, or on `PATH` when the folder lacks
-    it. It's None when neither has it, and it caches every answer."""
+    """The path of the program `name` anywhere under the project's `tools` folder, or else on `PATH`. It remembers
+    only the paths it finds, so it's None until one of them has it."""
+    if name in _found:
+        return _found[name]
     exe = f"{name}.exe"
-    if TOOLS.exists():
-        for p in sorted(TOOLS.rglob(exe)):
-            return str(p)
-    return shutil.which(name)
+    path = next((str(p) for p in sorted(TOOLS.rglob(exe))), None) if TOOLS.exists() else None
+    path = path or shutil.which(name)
+    if path:
+        _found[name] = path
+    return path
 
 
 def ffmpeg() -> str | None:
