@@ -148,6 +148,8 @@ All notable changes to Mynaphone are listed here. The format follows
 - The USB export never copied the playlist files, and the docs said it did. It now copies the M3U8
   files in the library's `Playlists` folder too. With **Remove songs from the drive that are no longer
   in the library** ticked, it also removes the playlists the library no longer has.
+- With the Spotify bridge off, asking for your playlists or an album's songs said it was turned off
+  in Settings. The Settings page has no switch for it, so the message now names `config.toml`.
 - Recording a playlist played its last missing song again, for one more try, while Mynaphone was
   still saving its first take, and then paused Spotify a few seconds in. On November 20, 2026 that
   happened to Sicko at the end of Monsoon Season, and the first take was fine. A song now gets one

@@ -166,14 +166,14 @@ class Recorder:
         """Ask the bridge for your Spotify playlists and wait up to 30 seconds. It raises `BridgeError` when the
         `[bridge]` setting `enabled` is off, or when the bridge doesn't answer."""
         if self.bridge is None:
-            raise BridgeError("the Spotify bridge is turned off in Settings")
+            raise BridgeError("the Spotify bridge is turned off in config.toml")
         return await self.bridge.request("playlists", timeout=30.0)
 
     async def check_playlist(self, uri: str) -> dict:
         """A playlist's or album's name and songs, and how many of them the library holds. An album's songs stay in
         the index, so the Library can count it while Spotify is closed."""
         if self.bridge is None:
-            raise BridgeError("the Spotify bridge is turned off in Settings")
+            raise BridgeError("the Spotify bridge is turned off in config.toml")
         got = await self.bridge.request("tracks", timeout=120.0, uri=uri)
         tracks = got.get("tracks") or []
         if tracks and uri.startswith("spotify:album:"):
