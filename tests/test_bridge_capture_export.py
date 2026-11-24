@@ -146,6 +146,19 @@ def test_export_plan_and_mirror(tmp_path):
     assert [d.name for _, d in p4.copy] == ["S.lrc"]
 
 
+def test_export_copies_the_playlist_files(tmp_path):
+    lib = tmp_path / "lib"
+    (lib / "Playlists").mkdir(parents=True)
+    (lib / "Playlists" / "Road trip.m3u8").write_text("#EXTM3U\n../Artists/X/Singles/S.m4a\n", encoding="utf-8")
+    dest = tmp_path / "usb"
+    p = export.plan(lib, dest)
+    assert [d.relative_to(dest).as_posix() for _, d in p.copy] == ["Playlists/Road trip.m3u8"]
+    export.run(p)
+    old = dest / "Playlists" / "Old name.m3u8"
+    old.write_text("#EXTM3U\n", encoding="utf-8")
+    assert export.plan(lib, dest, mirror=True).remove == [old]
+
+
 def test_ended_take_collects_its_tail_alongside_the_next(monkeypatch):
     """Spotify's sound trails its clock, so the last song is still playing when the next is named."""
     import mynaphone.capture as capture

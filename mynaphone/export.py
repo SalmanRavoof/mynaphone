@@ -1,6 +1,7 @@
 # Copyright (C) 2026 Salman Ravoof
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Copy the library to a USB stick (or any folder), car-friendly: audio only unless asked, skip unchanged files."""
+"""Copy the library to a USB stick (or any folder), car-friendly: audio and playlists only unless asked, skip unchanged
+files."""
 from __future__ import annotations
 
 import logging
@@ -12,13 +13,14 @@ from pathlib import Path
 log = logging.getLogger("mynaphone.export")
 
 AUDIO = {".m4a", ".flac", ".mp3", ".opus"}
+PLAYLIST = ".m3u8"
 
 
 @dataclass
 class ExportPlan:
     """What an export to a drive or folder will do, from `plan`. `copy` pairs each file to copy with its path in
-    `dest`, and `bytes_to_copy` is their total size. `skip` counts the files already up to date, and with `mirror`,
-    `remove` lists the audio and `.lrc` files in `dest` that aren't part of the export."""
+    `dest`, and `bytes_to_copy` is their total size. `skip` counts the files already up to date. With `mirror`,
+    `remove` lists the files in `dest` with an extension it can copy that aren't part of the export."""
     copy: list[tuple[Path, Path]] = field(default_factory=list)
     skip: int = 0
     remove: list[Path] = field(default_factory=list)
@@ -52,15 +54,15 @@ def _same(src: Path, dst: Path) -> bool:
 
 
 def plan(library: Path, dest: Path, include_lyrics: bool = False, mirror: bool = False) -> ExportPlan:
-    """The `ExportPlan` for copying the library's audio files to `dest`, and its `.lrc` files with `include_lyrics`.
-    With `mirror`, it lists the other audio and `.lrc` files in `dest` to remove."""
+    """The `ExportPlan` for copying the library's audio and playlist files to `dest`, and its `.lrc` files with
+    `include_lyrics`. With `mirror`, it lists the other files of those kinds in `dest` to remove."""
     p = ExportPlan()
     wanted: set[Path] = set()
     for src in sorted(library.rglob("*")):
         if not src.is_file():
             continue
         ext = src.suffix.lower()
-        if ext not in AUDIO and not (include_lyrics and ext == ".lrc"):
+        if ext not in AUDIO and ext != PLAYLIST and not (include_lyrics and ext == ".lrc"):
             continue
         rel = src.relative_to(library)
         dst = dest / rel
@@ -72,7 +74,7 @@ def plan(library: Path, dest: Path, include_lyrics: bool = False, mirror: bool =
             p.bytes_to_copy += src.stat().st_size
     if mirror and dest.exists():
         for f in dest.rglob("*"):
-            if f.is_file() and f.suffix.lower() in AUDIO | {".lrc"} and f not in wanted:
+            if f.is_file() and f.suffix.lower() in AUDIO | {".lrc", PLAYLIST} and f not in wanted:
                 p.remove.append(f)
     return p
 

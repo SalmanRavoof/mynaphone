@@ -49,7 +49,7 @@ class _Worker(QThread):
 
 class ExportDialog(QDialog):
     """The Export to USB dialog that the Library page's Export to USB button opens. Its Check what would be copied
-    button compares `library_dir` with a drive or folder, and its Export button copies the new or changed songs on a
+    button compares `library_dir` with a drive or folder, and its Export button copies the new or changed files on a
     worker thread. Changing the drive or either box clears the check."""
     def __init__(self, library_dir: Path, parent=None):
         super().__init__(parent)
