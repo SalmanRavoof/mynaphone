@@ -127,6 +127,7 @@ class LibraryPage(QWidget):
         self.current_album: str | None = None   # the album shown, by the Spotify id it's counted against
         self.worker: _RefreshWorker | None = None
         self._new_cover: tuple[bytes, str] | None = None
+        self._loaded: dict = {}                 # the open song's row as the editor read it
         self._loaded_lyrics = ""                # the open song's lyrics as the editor read them
 
         lay = QVBoxLayout(self)
@@ -451,6 +452,7 @@ class LibraryPage(QWidget):
         if not r:
             return
         self.current_id = tid
+        self._loaded = r
         self._new_cover = None
         ident = json.loads(r.get("identity_json") or "{}")
         manual = json.loads(r.get("manual_json") or "{}")
@@ -505,16 +507,16 @@ class LibraryPage(QWidget):
 
     def _has_unsaved_changes(self) -> bool:
         """True while the editor has changes you haven't saved, a picked cover included."""
-        r = self.rows.get(self.current_id if self.current_id is not None else -1)
-        if not r:
+        if not self._loaded:
             return False
-        manual = json.loads(r.get("manual_json") or "{}")
+        manual = json.loads(self._loaded.get("manual_json") or "{}")
         saved = {k: v for k, v in manual.items() if k in self.fields}
         return (self._new_cover is not None or self._manual_from_form() != saved
-                or self.lyrics.toPlainText().strip() != (self._loaded_lyrics or "").strip())
+                or self.lyrics.toPlainText().strip() != self._loaded_lyrics.strip())
 
     def _manual_from_form(self) -> dict:
-        r = self.rows.get(self.current_id or -1, {})
+        # against the song as the editor read it, so a field the post-processor filled in since then isn't an edit
+        r = self._loaded
         ident = json.loads(r.get("identity_json") or "{}")
         manual = json.loads(r.get("manual_json") or "{}")
         out = {}
@@ -543,11 +545,10 @@ class LibraryPage(QWidget):
         runs it, and Look up again runs it with `lookup` True to look the song up first."""
         if self.current_id is None or (self.worker and self.worker.isRunning()):
             return
-        r = self.rows[self.current_id]
         manual = self._manual_from_form()
-        _, current_lyrics = metadata.read_file_extras(Path(r["file_path"]))
         new_lyrics = self.lyrics.toPlainText()
-        lyrics_arg = new_lyrics if new_lyrics.strip() != (current_lyrics or "").strip() else None
+        # lyrics the post-processor found since the editor read the song stay, unless you changed the box
+        lyrics_arg = new_lyrics if new_lyrics.strip() != self._loaded_lyrics.strip() else None
         self.status.setText("Looking the song up again..." if lookup else "Saving...")
         self._set_editor_enabled(False)
         QApplication.setOverrideCursor(Qt.WaitCursor)
@@ -560,6 +561,10 @@ class LibraryPage(QWidget):
     @Slot(int, dict)
     def _done(self, tid: int, res: dict) -> None:
         QApplication.restoreOverrideCursor()
+        if tid != self.current_id:
+            self.reload()                       # you opened another song while this one saved, so that one stays
+            self._set_editor_enabled(True)
+            return
         miss = res.get("missing", [])
         note = res.get("note", "")
         self._new_cover = None

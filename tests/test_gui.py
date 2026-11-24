@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import time
+import types
 from pathlib import Path
 
 import pytest
@@ -281,6 +282,68 @@ def test_the_library_editor_keeps_its_saved_line(window, qapp):
     qapp.processEvents()
     lib._done(lib.current_id, {"missing": []})
     assert lib.status.text() == "Saved. All metadata present."
+
+
+class _HeldSave:
+    """Stands in for the Library editor's worker thread and keeps what a save would write."""
+    last = None
+
+    def __init__(self, cfg, db_path, track_id, lookup, manual, cover, lyrics, parent=None):
+        self.track_id, self.manual, self.cover, self.lyrics = track_id, manual, cover, lyrics
+        self.done = self.failed = types.SimpleNamespace(connect=lambda slot: None)
+        _HeldSave.last = self
+
+    def start(self) -> None:
+        pass
+
+    def isRunning(self) -> bool:
+        return False
+
+
+def test_a_save_writes_only_your_changes_to_a_song_updated_meanwhile(window, qapp, monkeypatch):
+    """The post-processor can fill in the song you're editing, such as its album or its lyrics. Save then writes the
+    field you changed, and keeps what the post-processor found."""
+    import json
+
+    from mynaphone import metadata
+    from mynaphone.gui import library_page
+    lib = window.library
+    st = Store(window.cfg.paths.db_path)
+    lib.reload()
+    lib.table.selectRow(0)
+    qapp.processEvents()
+    tid = lib.current_id
+    st.conn.execute("UPDATE tracks SET identity_json=? WHERE id=?", (json.dumps({"album": "Old album"}), tid))
+    st.conn.commit()
+    lib.reload()
+    assert lib.fields["album"].text() == "Old album"
+    lib.fields["year"].setText("2001")
+    st.conn.execute("UPDATE tracks SET identity_json=? WHERE id=?", (json.dumps({"album": "New album"}), tid))
+    st.conn.commit()
+    monkeypatch.setattr(metadata, "read_file_extras", lambda path: (None, "[00:01.00] Found meanwhile"))
+    lib.reload()
+    monkeypatch.setattr(library_page, "_RefreshWorker", _HeldSave)
+    lib.apply(lookup=False)
+    QApplication.restoreOverrideCursor()
+    assert _HeldSave.last.manual == {"year": "2001"} and _HeldSave.last.lyrics is None
+
+
+def test_a_save_that_ends_after_you_open_another_song_leaves_that_song_open(window, qapp, monkeypatch):
+    from mynaphone.gui import library_page
+    lib = window.library
+    lib.reload()
+    lib.table.selectRow(0)
+    qapp.processEvents()
+    saving = lib.current_id
+    monkeypatch.setattr(library_page, "_RefreshWorker", _HeldSave)
+    lib.apply(lookup=True)
+    lib.table.selectRow(1)
+    qapp.processEvents()
+    other = lib.current_id
+    lib.fields["year"].setText("1999")
+    lib._done(saving, {"missing": []})
+    assert lib.current_id == other and lib.fields["year"].text() == "1999"
+    assert not lib.status.text().startswith("Saved")
 
 
 def test_the_cover_note_names_the_save_button(window, monkeypatch, tmp_path):
