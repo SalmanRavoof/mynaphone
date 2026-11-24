@@ -501,7 +501,7 @@ class LibraryPage(QWidget):
         mime = "image/png" if data[:4] == b"\x89PNG" else "image/jpeg"
         self._new_cover = (data, mime)
         self._show_cover(self._new_cover)
-        self.status.setText("Cover chosen. Press Save changes to write it into the file.")
+        self.status.setText("Cover chosen. Press Save to write it into the file.")
 
     def _has_unsaved_changes(self) -> bool:
         """True while the editor has changes you haven't saved, a picked cover included."""

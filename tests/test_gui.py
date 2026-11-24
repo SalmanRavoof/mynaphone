@@ -283,6 +283,16 @@ def test_the_library_editor_keeps_its_saved_line(window, qapp):
     assert lib.status.text() == "Saved. All metadata present."
 
 
+def test_the_cover_note_names_the_save_button(window, monkeypatch, tmp_path):
+    from mynaphone.gui import library_page
+    png = tmp_path / "cover.png"
+    png.write_bytes(b"\x89PNG\r\n\x1a\n")
+    monkeypatch.setattr(library_page.QFileDialog, "getOpenFileName", lambda *a, **k: (str(png), ""))
+    lib = window.library
+    lib.pick_cover()
+    assert f"Press {lib.btn_save.text()} to" in lib.status.text()
+
+
 def test_use_this_folder_with_an_empty_box_keeps_the_library_folder(window, monkeypatch):
     saved = []
     monkeypatch.setattr(window.cfg, "save", lambda *a, **k: saved.append(1))

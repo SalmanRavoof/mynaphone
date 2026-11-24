@@ -155,6 +155,8 @@ All notable changes to Mynaphone are listed here. The format follows
   It now keeps them until you save or open another song.
 - The Library editor never showed "Saved" after a save, since it read the song back and cleared that
   line straight away. The line stays now.
+- Picking a cover in the Library editor showed a note that said to press Save changes. The button is
+  **Save**, and the note says so now.
 - After **Download and build** on the Set up page, the page went on saying ffmpeg and fpcalc were
   missing until you restarted Mynaphone. Mynaphone kept its first answer for each tool, so a tool it
   missed once stayed missing. It now looks again until it finds the tool.

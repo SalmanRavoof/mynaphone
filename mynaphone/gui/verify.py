@@ -1,6 +1,6 @@
 # Copyright (C) 2026 Salman Ravoof
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""Setup checks shown on the Verify tab. Each check returns (status, detail)."""
+"""The checks on the Setup check page. Each one returns a `Result`."""
 from __future__ import annotations
 
 import asyncio
