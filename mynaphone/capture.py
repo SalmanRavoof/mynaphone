@@ -35,6 +35,9 @@ SOUND = 10 ** (-80 / 20)    # -80 dBFS: quieter is what a player sends while it 
 
 @dataclass
 class Take:
+    """One take's audio, kept as the chunks arrive, with a count of the dropouts and device changes while it ran.
+    `t_begin` and `t_end` are monotonic times. A take with `tail_until` set keeps collecting audio past `t_end` until
+    that time."""
     rate: int
     channels: int
     t_begin: float                      # monotonic time the take logically starts
@@ -45,12 +48,14 @@ class Take:
     tail_until: float | None = None     # still collecting audio past t_end until this monotonic time
 
     def audio(self) -> np.ndarray:
+        """All of the take's audio as one array, or an empty array when none has arrived."""
         if not self.chunks:
             return np.zeros((0, self.channels), dtype=np.float32)
         return np.concatenate(self.chunks)
 
     @property
     def seconds(self) -> float:
+        """How many seconds of audio the take has so far."""
         return sum(len(c) for c in self.chunks) / float(self.rate)
 
 
@@ -100,10 +105,13 @@ class _RingCapture:
 
     @property
     def ring_seconds(self) -> float:
+        """How many seconds of audio the ring buffer has now. It keeps about the last `preroll` seconds."""
         with self._lock:
             return self._ring_seconds
 
     def begin_take(self, t_begin: float) -> Take:
+        """Start a take at `t_begin`, a monotonic time that can be in the past. The take opens with the ring buffer's
+        audio from that time on, so a late track-change event loses nothing."""
         with self._lock:
             take = Take(rate=self.rate, channels=self.channels, t_begin=t_begin)
             for t_chunk, chunk in self._ring:
@@ -127,10 +135,12 @@ class _RingCapture:
 
     @property
     def recording(self) -> bool:
+        """True while a take is under way."""
         return self._take is not None
 
     @property
     def healthy(self) -> bool:
+        """Always True here. ProcessCapture overrides it to say whether its helper is capturing."""
         return True
 
 
@@ -242,6 +252,10 @@ def root_pid(process_name: str, current: int | None = None, table: list[tuple[in
 
 
 class ProcessCapture(_RingCapture):
+    """Records one app's audio and nothing else. The helper `tools/mynaphone-capture.exe` gets the audio from
+    Windows' process loopback, and ProcessCapture keeps a helper attached to the app's main process. It waits while
+    the app is closed, and when the helper stops or that process changes, it starts a new one. The recorder runs one
+    ProcessCapture for each source app."""
     def __init__(self, process_name: str, rate: int = 48000, preroll_seconds: float = 3.0):
         super().__init__(preroll_seconds)
         self.process_name = process_name
@@ -256,9 +270,13 @@ class ProcessCapture(_RingCapture):
 
     @staticmethod
     def available() -> bool:
+        """True when the capture helper is in place. `setup-tools` builds it, and without it the recorder falls back
+        to whole-device capture."""
         return HELPER.exists()
 
     def start(self) -> None:
+        """Start following the app and capturing its audio, in a background thread. Raises RuntimeError when the
+        helper is missing."""
         if not HELPER.exists():
             raise RuntimeError(f"capture helper missing: {HELPER}")
         self._stop.clear()
@@ -267,11 +285,13 @@ class ProcessCapture(_RingCapture):
         log.info("per-app capture armed for %s at %d Hz", self.process_name, self.rate)
 
     def stop(self) -> None:
+        """Stop the capture and close the helper's input, then kill the helper if it hasn't exited 2 seconds later."""
         self._stop.set()
         self._kill()
 
     @property
     def healthy(self) -> bool:
+        """True from the helper's READY line until the helper exits."""
         return self._alive
 
     def _kill(self) -> None:
@@ -361,6 +381,10 @@ class ProcessCapture(_RingCapture):
 # ----------------------------------------------------------------------------- whole device
 
 class LoopbackCapture(_RingCapture):
+    """Records everything the output device plays. PyAudioWPatch reads it through WASAPI loopback. With `device` at
+    "default", LoopbackCapture follows Windows' default output and reopens when that changes. Every 5 seconds a
+    monitor also reopens the stream if it has stopped. The recorder uses it in device mode, and when the per-app
+    helper is missing."""
     def __init__(self, device: str = "default", preroll_seconds: float = 3.0):
         super().__init__(preroll_seconds)
         self.device_pref = device
@@ -402,6 +426,7 @@ class LoopbackCapture(_RingCapture):
             return ""
 
     def start(self) -> None:
+        """Open the loopback stream and start the monitor. Raises RuntimeError when no device matches `device`."""
         self._open()
         self._stop.clear()
         self._monitor = threading.Thread(target=self._monitor_loop, name="capture-monitor", daemon=True)
@@ -437,6 +462,7 @@ class LoopbackCapture(_RingCapture):
         self.pa = None
 
     def stop(self) -> None:
+        """Stop the monitor and close the stream."""
         self._stop.set()
         self._close()
 
@@ -471,6 +497,9 @@ class LoopbackCapture(_RingCapture):
 
 
 def list_devices() -> list[str]:
+    """The capture devices as lines of text. The `devices` command prints them, and the device list in Settings reads
+    them. The default output comes first, and every loopback endpoint and WASAPI input device follows with its sample
+    rate."""
     import pyaudiowpatch as pyaudio
     pa = pyaudio.PyAudio()
     out = []

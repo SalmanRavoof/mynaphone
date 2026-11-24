@@ -54,6 +54,7 @@ plugins:
           paths: [.]
           options:
             docstring_style: google
+            inherited_members: true
             members_order: source
             show_source: false
 
