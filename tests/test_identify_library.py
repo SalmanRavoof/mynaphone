@@ -127,6 +127,23 @@ def test_find_looks_again_for_a_program_it_missed(tmp_path, monkeypatch):
     assert tools.find("mynaphone-test-tool") == str(exe)
 
 
+def test_find_follows_a_program_that_setup_tools_moves(tmp_path, monkeypatch):
+    """setup-tools unpacks each download in tools/dl before it moves it into place, and --force deletes the old copy
+    first."""
+    monkeypatch.setattr(tools, "TOOLS", tmp_path)
+    monkeypatch.setattr(tools.shutil, "which", lambda name: None)
+    unpacked = tmp_path / "dl" / "build" / "bin" / "mynaphone-moving-tool.exe"
+    unpacked.parent.mkdir(parents=True)
+    unpacked.write_bytes(b"")
+    assert tools.find("mynaphone-moving-tool") is None
+    placed = tmp_path / "ffmpeg" / "bin" / unpacked.name
+    placed.parent.mkdir(parents=True)
+    unpacked.replace(placed)
+    assert tools.find("mynaphone-moving-tool") == str(placed)
+    placed.unlink()
+    assert tools.find("mynaphone-moving-tool") is None
+
+
 def test_missing_fields_and_manual_overrides():
     i = Identity(title="T", artist="A", album="B", album_artist="A", year=2001, track_number=1, track_total=10,
                  disc_number=1, composers=["C"], lyricists=["L"], genres=["pop"], isrc="x", label="lab",

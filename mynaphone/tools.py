@@ -3,6 +3,7 @@
 """Locate ffmpeg and fpcalc: the project's tools folder first, then PATH."""
 from __future__ import annotations
 
+import os
 import shutil
 from pathlib import Path
 
@@ -12,13 +13,15 @@ _found: dict[str, str] = {}
 
 
 def find(name: str) -> str | None:
-    """The path of the program `name` anywhere under the project's `tools` folder, or else on `PATH`. It remembers
-    only the paths it finds, so it's None until one of them has it."""
-    if name in _found:
-        return _found[name]
+    """The path of the program `name` anywhere under the project's `tools` folder, or else on `PATH`. It's None
+    until one of them has it. It remembers a path it finds until the file there is gone, and it skips `tools/dl`,
+    where setup-tools unpacks a download before it moves it into place."""
+    path = _found.get(name)
+    if path and os.path.isfile(path):
+        return path
     exe = f"{name}.exe"
-    path = next((str(p) for p in sorted(TOOLS.rglob(exe))), None) if TOOLS.exists() else None
-    path = path or shutil.which(name)
+    found = [p for p in sorted(TOOLS.rglob(exe)) if TOOLS / "dl" not in p.parents] if TOOLS.exists() else []
+    path = str(found[0]) if found else shutil.which(name)
     if path:
         _found[name] = path
     return path
