@@ -148,6 +148,11 @@ All notable changes to Mynaphone are listed here. The format follows
 - The USB export never copied the playlist files, and the docs said it did. It now copies the M3U8
   files in the library's `Playlists` folder too. With **Remove songs from the drive that are no longer
   in the library** ticked, it also removes the playlists the library no longer has.
+- When the post-processor filed or updated a song while you were editing one on the Library page, the
+  editor read your song back from the index and lost your unsaved changes and any cover you'd picked.
+  It now keeps them until you save or open another song.
+- The Library editor never showed "Saved" after a save, since it read the song back and cleared that
+  line straight away. The line stays now.
 - After **Download and build** on the Set up page, the page went on saying ffmpeg and fpcalc were
   missing until you restarted Mynaphone. Mynaphone kept its first answer for each tool, so a tool it
   missed once stayed missing. It now looks again until it finds the tool.

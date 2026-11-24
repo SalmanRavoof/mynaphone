@@ -249,6 +249,40 @@ def test_the_library_editor_shows_a_films_album_name(window, qapp):
     assert lib._manual_from_form() == {"track_number": "4"}
 
 
+def test_a_filed_song_leaves_unsaved_changes_in_the_library_editor(window, qapp):
+    """The window refills the Library page each time the post-processor files or updates a song. The editor keeps
+    what you typed and a cover you picked, and reads the song again once nothing is waiting to be saved."""
+    import json
+    lib = window.library
+    lib.reload()
+    lib.table.selectRow(0)
+    qapp.processEvents()
+    tid = lib.current_id
+    album = lib.fields["album"]
+    album.setText("Typed, not saved")
+    lib.reload()
+    assert album.text() == "Typed, not saved"
+    lib._load(tid)
+    lib._new_cover = (b"\x89PNG", "image/png")
+    lib.reload()
+    assert lib._new_cover is not None
+    lib._load(tid)
+    st = Store(window.cfg.paths.db_path)
+    st.conn.execute("UPDATE tracks SET identity_json=? WHERE id=?", (json.dumps({"album": "From the index"}), tid))
+    st.conn.commit()
+    lib.reload()
+    assert album.text() == "From the index"
+
+
+def test_the_library_editor_keeps_its_saved_line(window, qapp):
+    lib = window.library
+    lib.reload()
+    lib.table.selectRow(0)
+    qapp.processEvents()
+    lib._done(lib.current_id, {"missing": []})
+    assert lib.status.text() == "Saved. All metadata present."
+
+
 def test_use_this_folder_with_an_empty_box_keeps_the_library_folder(window, monkeypatch):
     saved = []
     monkeypatch.setattr(window.cfg, "save", lambda *a, **k: saved.append(1))

@@ -127,6 +127,7 @@ class LibraryPage(QWidget):
         self.current_album: str | None = None   # the album shown, by the Spotify id it's counted against
         self.worker: _RefreshWorker | None = None
         self._new_cover: tuple[bytes, str] | None = None
+        self._loaded_lyrics = ""                # the open song's lyrics as the editor read them
 
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -334,11 +335,12 @@ class LibraryPage(QWidget):
 
     @Slot()
     def reload(self) -> None:
-        """Refill the song list from the index, or the album list in the Albums view. It runs when the Needs
-        attention box changes and when the post-processor files or updates a song."""
+        """Refill the song list from the index, or the album list in the Albums view. The editor reloads too, unless
+        it has changes you haven't saved."""
         if self.showing_albums():
             self.reload_albums(read=False)
             return
+        editing = self._has_unsaved_changes()
         try:
             st = Store(self.win.cfg.paths.db_path)
             rows = st.library_rows(only_incomplete=self.only_incomplete.isChecked())
@@ -376,7 +378,7 @@ class LibraryPage(QWidget):
         self._filter()
         self.table.fit()
         QTimer.singleShot(0, self.table.fit)
-        if keep is not None and keep in self.rows:
+        if keep is not None and keep in self.rows and not editing:
             self._load(keep)
 
     def reload_albums(self, read: bool = True) -> None:
@@ -473,6 +475,7 @@ class LibraryPage(QWidget):
         cover, lyrics = metadata.read_file_extras(Path(r["file_path"]))
         self._show_cover(cover)
         self.lyrics.setPlainText(lyrics)
+        self._loaded_lyrics = self.lyrics.toPlainText()     # as the box shows them, line ends and all
         self.status.setText("")
         self._set_editor_enabled(True)
 
@@ -499,6 +502,16 @@ class LibraryPage(QWidget):
         self._new_cover = (data, mime)
         self._show_cover(self._new_cover)
         self.status.setText("Cover chosen. Press Save changes to write it into the file.")
+
+    def _has_unsaved_changes(self) -> bool:
+        """True while the editor has changes you haven't saved, a picked cover included."""
+        r = self.rows.get(self.current_id if self.current_id is not None else -1)
+        if not r:
+            return False
+        manual = json.loads(r.get("manual_json") or "{}")
+        saved = {k: v for k, v in manual.items() if k in self.fields}
+        return (self._new_cover is not None or self._manual_from_form() != saved
+                or self.lyrics.toPlainText().strip() != (self._loaded_lyrics or "").strip())
 
     def _manual_from_form(self) -> dict:
         r = self.rows.get(self.current_id or -1, {})
@@ -549,11 +562,13 @@ class LibraryPage(QWidget):
         QApplication.restoreOverrideCursor()
         miss = res.get("missing", [])
         note = res.get("note", "")
+        self._new_cover = None
+        self.reload()
+        if tid in self.rows:
+            self._load(tid)                     # the saved song, as the index has it now
         self.status.setText(("Saved. " if not note else f"Saved ({note}). ") +
                             ("Still missing: " + ", ".join(metadata.LABELS.get(x, x) for x in miss) if miss
                              else "All metadata present."))
-        self._new_cover = None
-        self.reload()
         self._set_editor_enabled(True)
 
     @Slot(int, str)
