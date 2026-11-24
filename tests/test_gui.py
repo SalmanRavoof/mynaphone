@@ -292,6 +292,19 @@ def test_use_this_folder_with_an_empty_box_keeps_the_library_folder(window, monk
     assert window.cfg.paths.library_dir == before and saved == []
 
 
+def test_a_cancelled_export_says_so(qapp, tmp_path):
+    from mynaphone import export
+    from mynaphone.gui.export_dialog import ExportDialog, _Worker
+    d = ExportDialog(tmp_path / "library")
+    d.worker = _Worker(export.ExportPlan(), d)
+    d._done(3, 0)
+    assert d.summary.text().startswith("Done. Copied 3 files")
+    d.worker.stop()
+    d._done(2, 0)
+    assert d.summary.text().startswith("Cancelled. Copied 2 files")
+    d.deleteLater()
+
+
 def test_activity_rows_keep_one_line_with_hover_text(window):
     t = window.activity.table
     window.activity.add_row("09:00", "X " * 80, "discard", ("short", "the whole reason"))

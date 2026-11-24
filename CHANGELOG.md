@@ -148,6 +148,8 @@ All notable changes to Mynaphone are listed here. The format follows
 - The USB export never copied the playlist files, and the docs said it did. It now copies the M3U8
   files in the library's `Playlists` folder too. With **Remove songs from the drive that are no longer
   in the library** ticked, it also removes the playlists the library no longer has.
+- A cancelled export said "Done" like one that finished. It now says "Cancelled", with how many files
+  it copied before it stopped.
 - When the post-processor filed or updated a song while you were editing one on the Library page, the
   editor read your song back from the index and lost your unsaved changes and any cover you'd picked.
   It now keeps them until you save or open another song.

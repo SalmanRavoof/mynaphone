@@ -193,7 +193,9 @@ class ExportDialog(QDialog):
     @Slot(int, int)
     def _done(self, copied: int, removed: int) -> None:
         self.current.setText("")
-        self.summary.setText(f"Done. Copied {copied} files" + (f", removed {removed}" if removed else "")
+        cancelled = self.worker is not None and self.worker._stop
+        self.summary.setText(("Cancelled. " if cancelled else "Done. ") + f"Copied {copied} files"
+                             + (f", removed {removed}" if removed else "")
                              + ". Safely eject the drive before unplugging it.")
         self._reset()
 
