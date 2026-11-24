@@ -249,6 +249,15 @@ def test_the_library_editor_shows_a_films_album_name(window, qapp):
     assert lib._manual_from_form() == {"track_number": "4"}
 
 
+def test_use_this_folder_with_an_empty_box_keeps_the_library_folder(window, monkeypatch):
+    saved = []
+    monkeypatch.setattr(window.cfg, "save", lambda *a, **k: saved.append(1))
+    before = window.cfg.paths.library_dir
+    window.firstrun.folder.setText("   ")
+    window.firstrun.save_folder()
+    assert window.cfg.paths.library_dir == before and saved == []
+
+
 def test_activity_rows_keep_one_line_with_hover_text(window):
     t = window.activity.table
     window.activity.add_row("09:00", "X " * 80, "discard", ("short", "the whole reason"))

@@ -151,6 +151,9 @@ All notable changes to Mynaphone are listed here. The format follows
 - After **Download and build** on the Set up page, the page went on saying ffmpeg and fpcalc were
   missing until you restarted Mynaphone. Mynaphone kept its first answer for each tool, so a tool it
   missed once stayed missing. It now looks again until it finds the tool.
+- With its box empty, **Use this folder** on the Set up page saved `.` as the library folder, so new
+  songs would have gone to whatever folder Mynaphone ran from. It now does nothing until the box has a
+  folder.
 - With the Spotify bridge off, asking for your playlists or an album's songs said it was turned off
   in Settings. The Settings page has no switch for it, so the message now names `config.toml`.
 - Recording a playlist played its last missing song again, for one more try, while Mynaphone was

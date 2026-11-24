@@ -315,9 +315,10 @@ class SetupPage(QScrollArea):
     def save_folder(self) -> None:
         """When you press Use this folder, create the folder in the box if it's missing and write it to `library_dir`
         in `config.toml`. The Settings page's Library box shows it too."""
-        p = Path(self.folder.text().strip())
-        if not str(p):
+        text = self.folder.text().strip()
+        if not text:
             return
+        p = Path(text)
         p.mkdir(parents=True, exist_ok=True)
         self.win.cfg.paths.library_dir = p
         self.win.cfg.save()
